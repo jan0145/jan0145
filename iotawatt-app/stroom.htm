@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stroom">
+<meta name="theme-color" content="#f4f4f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="stroom.png">
+<title>Stroom</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f1;
+  --card: #fcfcfb;
+  --line: #e4e3df;
+  --grid: #ecebe7;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-3: #8a8984;
+  --use: #2a78d6;      /* verbruik */
+  --sun: #eb6834;      /* zonnepanelen */
+  --use-soft: rgba(42, 120, 214, .16);
+  --good: #008300;
+  --bad: #e34948;
+  --track: #ecebe7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211;
+    --card: #1a1a19;
+    --line: #2c2c2a;
+    --grid: #262624;
+    --text: #ffffff;
+    --text-2: #c3c2b7;
+    --text-3: #8f8e86;
+    --use: #3987e5;
+    --sun: #d95926;
+    --use-soft: rgba(57, 135, 229, .22);
+    --good: #3fa63f;
+    --bad: #e66767;
+    --track: #2a2a28;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --card: #1a1a19; --line: #2c2c2a; --grid: #262624;
+  --text: #ffffff; --text-2: #c3c2b7; --text-3: #8f8e86;
+  --use: #3987e5; --sun: #d95926; --use-soft: rgba(57, 135, 229, .22);
+  --good: #3fa63f; --bad: #e66767; --track: #2a2a28;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+main { max-width: 560px; margin: 0 auto; padding: 8px 16px 32px; }
+.num { font-variant-numeric: tabular-nums; }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0 8px;
+}
+header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em; }
+.status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-3); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+.dot.ok { background: var(--good); }
+.dot.err { background: var(--bad); }
+.iconbtn {
+  border: 0; background: var(--card); color: var(--text-2);
+  width: 40px; height: 40px; border-radius: 12px; font-size: 20px;
+  box-shadow: 0 0 0 1px var(--line) inset; cursor: pointer;
+}
+.hdr-right { display: flex; align-items: center; gap: 12px; }
+
+.banner {
+  background: var(--card); border-radius: 14px; padding: 12px 14px; margin: 8px 0;
+  box-shadow: 0 0 0 1px var(--line) inset; font-size: 14px; color: var(--text-2);
+}
+.banner strong { color: var(--text); }
+.banner[hidden] { display: none; }
+
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 16px; }
+.tile {
+  background: var(--card); border-radius: 16px; padding: 12px;
+  box-shadow: 0 0 0 1px var(--line) inset; min-width: 0;
+}
+.tile .lbl { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+.tile .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.tile .val { font-size: 24px; font-weight: 650; letter-spacing: -.02em; margin-top: 4px; white-space: nowrap; }
+.tile .val small { font-size: 14px; font-weight: 500; color: var(--text-2); margin-left: 2px; }
+.tile .sub { font-size: 12px; line-height: 1.3; color: var(--text-3); margin-top: 2px; }
+
+.card {
+  background: var(--card); border-radius: 18px; padding: 14px 16px;
+  box-shadow: 0 0 0 1px var(--line) inset; margin-bottom: 16px;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
+.card-head h2 { font-size: 17px; margin: 0; font-weight: 650; }
+
+.seg { display: inline-flex; background: var(--track); border-radius: 10px; padding: 2px; }
+.seg button {
+  border: 0; background: transparent; color: var(--text-2); font: inherit; font-size: 14px;
+  padding: 5px 12px; border-radius: 8px; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+.rows { list-style: none; margin: 0; padding: 0; }
+.row { padding: 10px 0; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.row-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-name .tag { font-size: 11px; font-weight: 500; color: var(--text-3); margin-left: 6px; }
+.row-val { font-weight: 600; white-space: nowrap; }
+.row-val .pct { color: var(--text-3); font-weight: 500; font-size: 13px; margin-left: 6px; }
+.bar { height: 6px; background: var(--track); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 3px; background: var(--use); transition: width .4s ease; }
+.row.sun .bar > i { background: var(--sun); }
+.empty { color: var(--text-3); font-size: 14px; padding: 8px 0; }
+
+.legend { display: flex; gap: 14px; font-size: 13px; color: var(--text-2); margin-bottom: 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.chart-wrap { position: relative; touch-action: pan-y; }
+.chart-wrap svg { display: block; width: 100%; height: 200px; overflow: visible; }
+.chart-wrap .axis { font-size: 11px; fill: var(--text-3); }
+.tip {
+  position: absolute; top: 0; pointer-events: none; background: var(--text); color: var(--card);
+  font-size: 12px; padding: 6px 8px; border-radius: 8px; white-space: nowrap; transform: translateX(-50%);
+  opacity: 0; transition: opacity .1s;
+}
+.tip.on { opacity: 1; }
+.tip b { font-weight: 650; }
+
+/* instellingen */
+.sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 11; max-height: 92vh; overflow: auto;
+  background: var(--bg); border-radius: 18px 18px 0 0;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+}
+.sheet[hidden], .sheet-bg[hidden] { display: none; }
+.sheet-inner { max-width: 560px; margin: 0 auto; }
+.sheet h2 { margin: 0; font-size: 20px; }
+.sheet h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin: 20px 0 8px; font-weight: 600; }
+.sheet p.help { font-size: 13px; color: var(--text-3); margin: 6px 0 0; }
+.field { display: block; width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--card); color: var(--text); }
+.srow { background: var(--card); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; box-shadow: 0 0 0 1px var(--line) inset; }
+.srow .sid { font-size: 12px; color: var(--text-3); margin-bottom: 6px; }
+.srow .grid { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; }
+.srow select, .srow input { font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text); min-width: 0; }
+.btns { display: flex; gap: 8px; margin-top: 20px; }
+.btn { flex: 1; font: inherit; font-weight: 600; padding: 12px; border-radius: 12px; border: 0; cursor: pointer;
+  background: var(--track); color: var(--text); }
+.btn.primary { background: var(--use); color: #fff; }
+
+@media (max-width: 360px) {
+  .tile .val { font-size: 20px; }
+  .srow .grid { grid-template-columns: 1fr 1fr; }
+  .srow .grid input { grid-column: 1 / -1; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Stroom</h1>
+    <div class="hdr-right">
+      <div class="status"><span class="dot" id="dot"></span><span id="updated" class="num">laden…</span></div>
+      <button class="iconbtn" id="openSettings" aria-label="Instellingen">⚙︎</button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <section class="tiles" aria-label="Nu">
+    <div class="tile">
+      <div class="lbl"><span class="sw" style="background:var(--use)"></span>Verbruik</div>
+      <div class="val num" id="tUse">–</div>
+      <div class="sub num" id="tUseSub">&nbsp;</div>
+    </div>
+    <div class="tile">
+      <div class="lbl"><span class="sw" style="background:var(--sun)"></span>Zon</div>
+      <div class="val num" id="tSun">–</div>
+      <div class="sub num" id="tSunSub">&nbsp;</div>
+    </div>
+    <div class="tile">
+      <div class="lbl" id="tNetLbl">Net</div>
+      <div class="val num" id="tNet">–</div>
+      <div class="sub" id="tNetSub">&nbsp;</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Waar gaat het naartoe?</h2>
+      <div class="seg" role="group" aria-label="Periode">
+        <button id="modeNow" aria-pressed="true">Nu</button>
+        <button id="modeDay" aria-pressed="false">Vandaag</button>
+      </div>
+    </div>
+    <ul class="rows" id="rows"><li class="empty">Laden…</li></ul>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Vandaag</h2></div>
+    <div class="legend">
+      <span><i style="background:var(--use)"></i>Verbruik</span>
+      <span><i style="background:var(--sun)"></i>Zon</span>
+    </div>
+    <div class="chart-wrap" id="chartWrap">
+      <svg id="chart" role="img" aria-label="Verbruik en zonne-opbrengst vandaag"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+  </section>
+</main>
+
+<div class="sheet-bg" id="sheetBg" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-inner">
+    <h2 id="sheetTitle">Instellingen</h2>
+
+    <h3>IoTaWatt-adres</h3>
+    <input class="field" id="hostInput" placeholder="leeg = dit apparaat (aanbevolen)" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="help">Laat leeg als deze pagina op de IoTaWatt zelf staat (bv. <code>http://iotawatt.local/stroom.htm</code>). Typ <code>demo</code> om met voorbeeldgegevens te testen.</p>
+
+    <h3>Kanalen</h3>
+    <p class="help" style="margin:0 0 8px">Geef elk kanaal een naam en een rol. <b>Zon</b> telt als opwek, <b>Hoofdaansluiting</b> is een meting op de netkabel (optioneel). Zet <b>×3</b> bij een driefasig toestel waarvan je maar één fase meet: het verbruik wordt dan geschat als 3 × die fase.</p>
+    <div id="seriesList"></div>
+
+    <div class="btns">
+      <button class="btn" id="cancelSettings">Annuleer</button>
+      <button class="btn primary" id="saveSettings">Bewaar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const STORE_KEY = 'stroom.config.v1';
+const LIVE_MS = 5000;
+const DAY_MS = 60000;
+
+const ROLES = {
+  load:  'Verbruik',
+  solar: 'Zon',
+  mains: 'Hoofdaansluiting',
+  hide:  'Verbergen',
+};
+
+const $ = (id) => document.getElementById(id);
+const nf0 = new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const nf2 = new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+let config = loadConfig();
+let seriesNames = [];        // alle Watts-reeksen van de IoTaWatt
+let live = null;             // { t, values: {naam: watt} }
+let today = null;            // { naam: Wh }
+let dayRows = [];            // [{ t, use, sun }]
+let mode = 'now';
+let liveTimer = null, dayTimer = null;
+
+/* ---------- configuratie ---------- */
+
+function loadConfig() {
+  try {
+    const c = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (c && typeof c === 'object') return { host: c.host || '', series: c.series || {} };
+  } catch (e) { /* geen opslag beschikbaar */ }
+  const demo = new URLSearchParams(location.search).has('demo');
+  return { host: demo ? 'demo' : '', series: {} };
+}
+
+function saveConfig() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(config)); } catch (e) { /* negeren */ }
+}
+
+// Gok een rol aan de hand van de naam die in de IoTaWatt is ingesteld.
+function guess(name) {
+  const n = name.toLowerCase();
+  if (/zon|solar|pv|panel|omvormer|inverter/.test(n)) return { role: 'solar', mult: 1 };
+  if (/warmtepomp|heat.?pump|^wp(_|\b|$)|_wp$/.test(n)) return { role: 'load', mult: 3 };
+  if (/^(mains?|grid|net|hoofd|totaal|total)/.test(n)) return { role: 'mains', mult: 1 };
+  return { role: 'load', mult: 1 };
+}
+
+function seriesCfg(name) {
+  if (!config.series[name]) config.series[name] = { label: '', ...guess(name) };
+  return config.series[name];
+}
+const labelOf = (name) => seriesCfg(name).label || name.replace(/_/g, ' ');
+const isHeatPumpLike = (name) => seriesCfg(name).mult > 1;
+
+/* ---------- IoTaWatt-API ---------- */
+
+function base() {
+  const h = (config.host || '').trim().replace(/\/+$/, '');
+  if (!h) return '';
+  return /^https?:\/\//.test(h) ? h : 'http://' + h;
+}
+
+async function api(path) {
+  if ((config.host || '').trim().toLowerCase() === 'demo') return Demo.answer(path);
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(base() + path, { signal: ctrl.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+const select = (cols) => '[' + cols.join(',') + ']';
+
+async function loadSeries() {
+  const res = await api('/query?show=series');
+  seriesNames = (res.series || [])
+    .filter((s) => /watt/i.test(s.unit || ''))
+    .map((s) => s.name);
+  seriesNames.forEach(seriesCfg);
+}
+
+async function loadLive() {
+  if (!seriesNames.length) return;
+  const cols = ['time.utc.unix', ...seriesNames.map((n) => n + '.watts')];
+  const rows = await api('/query?select=' + select(cols) + '&begin=s-30s&end=s&group=5s&format=json');
+  // neem de laatste rij die echt waarden bevat
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (r.slice(1).some((v) => v !== null)) {
+      const values = {};
+      seriesNames.forEach((n, j) => { values[n] = r[j + 1]; });
+      live = { t: r[0], values };
+      return;
+    }
+  }
+}
+
+async function loadToday() {
+  if (!seriesNames.length) return;
+  const whCols = seriesNames.map((n) => n + '.wh');
+  const tot = await api('/query?select=' + select(whCols) + '&begin=d&end=s&group=all&format=json');
+  today = {};
+  seriesNames.forEach((n, j) => { today[n] = tot.length ? tot[tot.length - 1][j] : null; });
+
+  const cols = ['time.utc.unix', ...seriesNames.map((n) => n + '.watts')];
+  const rows = await api('/query?select=' + select(cols) + '&begin=d&end=s&group=5m&format=json');
+  dayRows = rows.map((r) => {
+    const values = {};
+    seriesNames.forEach((n, j) => { values[n] = r[j + 1]; });
+    const s = summarize(values);
+    return { t: r[0], use: s.hasData ? s.use : null, sun: s.hasData ? s.sun : null };
+  });
+}
+
+/* ---------- rekenen ---------- */
+
+// Zet ruwe waarden (W of Wh) om in een overzicht volgens de ingestelde rollen.
+function summarize(values) {
+  let loads = [], sun = 0, mains = 0, hasMains = false, hasData = false;
+  for (const n of seriesNames) {
+    const c = seriesCfg(n);
+    const raw = values[n];
+    if (raw === null || raw === undefined || c.role === 'hide') continue;
+    hasData = true;
+    const v = raw * (c.mult || 1);
+    if (c.role === 'solar') sun += Math.abs(v);
+    else if (c.role === 'mains') { mains += v; hasMains = true; }
+    else loads.push({ name: n, value: Math.max(0, v) });
+  }
+  const measured = loads.reduce((a, b) => a + b.value, 0);
+  // Met hoofdmeting: huisverbruik = net + zon. Zonder: som van de gemeten groepen.
+  const use = hasMains ? Math.max(measured, mains + sun) : measured;
+  const other = hasMains ? Math.max(0, use - measured) : 0;
+  return { loads, sun, mains, hasMains, use, other, measured, hasData };
+}
+
+function fmtPower(w) {
+  if (w === null || w === undefined || !isFinite(w)) return { v: '–', u: '' };
+  const a = Math.abs(w);
+  if (a < 1000) return { v: nf0.format(w), u: 'W' };
+  return { v: (a < 10000 ? nf2 : nf1).format(w / 1000), u: 'kW' };
+}
+function fmtEnergy(wh) {
+  if (wh === null || wh === undefined || !isFinite(wh)) return { v: '–', u: '' };
+  if (Math.abs(wh) < 1000) return { v: nf0.format(wh), u: 'Wh' };
+  return { v: nf1.format(wh / 1000), u: 'kWh' };
+}
+const txt = (f) => f.u ? f.v + ' ' + f.u : f.v;
+const html = (f) => f.u ? f.v + '<small>' + f.u + '</small>' : f.v;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------- weergave ---------- */
+
+function renderTiles() {
+  if (!live) return;
+  const s = summarize(live.values);
+  $('tUse').innerHTML = html(fmtPower(s.use));
+  $('tSun').innerHTML = html(fmtPower(s.sun));
+  $('tSun').style.opacity = s.sun < 5 ? .5 : 1;
+
+  if (today) {
+    const d = summarize(today);
+    $('tUseSub').textContent = txt(fmtEnergy(d.use)) + ' vandaag';
+    $('tSunSub').textContent = txt(fmtEnergy(d.sun)) + ' vandaag';
+  }
+
+  if (s.hasMains) {
+    $('tNetLbl').textContent = s.mains < 0 ? 'Teruglevering' : 'Van het net';
+    $('tNet').innerHTML = html(fmtPower(Math.abs(s.mains)));
+    $('tNet').style.color = s.mains < 0 ? 'var(--good)' : '';
+    $('tNetSub').textContent = s.mains < 0 ? 'naar het net' : 'afname';
+  } else {
+    // Geen meting op de netkabel: schatting op basis van gemeten groepen.
+    const bal = s.sun - s.use;
+    $('tNetLbl').textContent = bal >= 0 ? 'Overschot' : 'Tekort';
+    $('tNet').innerHTML = html(fmtPower(Math.abs(bal)));
+    $('tNet').style.color = bal >= 0 ? 'var(--good)' : '';
+    $('tNetSub').textContent = s.use > 0 ? Math.round(Math.min(1, s.sun / s.use) * 100) + '% uit zon (schatting)' : 'schatting';
+  }
+
+  const ago = Math.max(0, Math.round(Date.now() / 1000 - live.t));
+  $('updated').textContent = ago < 60 ? 'live' : new Date(live.t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderRows() {
+  const src = mode === 'now' ? live && live.values : today;
+  const fmt = mode === 'now' ? fmtPower : fmtEnergy;
+  const ul = $('rows');
+  if (!src) { ul.innerHTML = '<li class="empty">Nog geen gegevens…</li>'; return; }
+
+  const s = summarize(src);
+  const items = s.loads.map((l) => ({ name: labelOf(l.name), value: l.value, tag: isHeatPumpLike(l.name) ? '×' + seriesCfg(l.name).mult + ' geschat' : '' }));
+  if (s.hasMains && s.other > 0) items.push({ name: 'Overig (niet gemeten)', value: s.other, tag: '' });
+  items.sort((a, b) => b.value - a.value);
+
+  const total = s.use || 1;
+  let out = items.map((it) => {
+    const pct = Math.round(it.value / total * 100);
+    return `<li class="row">
+      <div class="row-top">
+        <span class="row-name">${esc(it.name)}${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ''}</span>
+        <span class="row-val num">${txt(fmt(it.value))}<span class="pct">${pct}%</span></span>
+      </div>
+      <div class="bar"><i style="width:${Math.min(100, it.value / total * 100)}%"></i></div>
+    </li>`;
+  }).join('');
+
+  // Zonnepanelen apart onderaan, ten opzichte van het verbruik
+  const sunRows = seriesNames.filter((n) => seriesCfg(n).role === 'solar' && src[n] !== null && src[n] !== undefined);
+  out += sunRows.map((n) => {
+    const v = Math.abs(src[n] * (seriesCfg(n).mult || 1));
+    return `<li class="row sun">
+      <div class="row-top">
+        <span class="row-name">☀︎ ${esc(labelOf(n))}</span>
+        <span class="row-val num">${txt(fmt(v))}</span>
+      </div>
+      <div class="bar"><i style="width:${Math.min(100, v / Math.max(total, s.sun || 1) * 100)}%"></i></div>
+    </li>`;
+  }).join('');
+
+  ul.innerHTML = out || '<li class="empty">Geen kanalen ingesteld. Tik op ⚙︎.</li>';
+}
+
+/* Grafiek: verbruik (vlak) en zon (lijn) over de hele dag, één y-as. */
+function renderChart() {
+  const svg = $('chart');
+  const W = svg.clientWidth || 340, H = 200;
+  const m = { l: 40, r: 8, t: 8, b: 22 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const t0 = start.getTime() / 1000, t1 = t0 + 86400;
+  const pts = dayRows.filter((r) => r.use !== null);
+  const maxV = Math.max(500, ...pts.map((r) => Math.max(r.use, r.sun))) * 1.1;
+  const step = niceStep(maxV / 4);
+  const yMax = Math.ceil(maxV / step) * step;
+  const x = (t) => m.l + (t - t0) / (t1 - t0) * iw;
+  const y = (v) => m.t + ih - v / yMax * ih;
+
+  let g = '';
+  for (let v = 0; v <= yMax + 1e-9; v += step) {
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
+    g += `<text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v >= 1000 ? nf1.format(v / 1000).replace(',0', '') + 'k' : nf0.format(v)}</text>`;
+  }
+  for (let h = 0; h <= 24; h += 6) {
+    const tx = x(t0 + h * 3600);
+    g += `<text class="axis num" x="${tx}" y="${H - 4}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${String(h).padStart(2, '0')}:00</text>`;
+  }
+
+  if (pts.length > 1) {
+    const line = (key) => pts.map((r, i) => (i ? 'L' : 'M') + x(r.t).toFixed(1) + ',' + y(r[key]).toFixed(1)).join('');
+    const area = line('use') + `L${x(pts[pts.length - 1].t).toFixed(1)},${y(0)}L${x(pts[0].t).toFixed(1)},${y(0)}Z`;
+    g += `<path d="${area}" fill="var(--use-soft)"/>`;
+    g += `<path d="${line('use')}" fill="none" stroke="var(--use)" stroke-width="2" stroke-linejoin="round"/>`;
+    g += `<path d="${line('sun')}" fill="none" stroke="var(--sun)" stroke-width="2" stroke-linejoin="round"/>`;
+  }
+  g += `<line id="xh" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="var(--text-3)" stroke-width="1" visibility="hidden"/>`;
+  g += `<circle id="dUse" r="4" fill="var(--use)" stroke="var(--card)" stroke-width="2" visibility="hidden"/>`;
+  g += `<circle id="dSun" r="4" fill="var(--sun)" stroke="var(--card)" stroke-width="2" visibility="hidden"/>`;
+  svg.innerHTML = g;
+  svg._scale = { x, y, pts, m, iw };
+}
+
+function niceStep(raw) {
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+}
+
+function chartHover(ev) {
+  const svg = $('chart'), sc = svg._scale;
+  if (!sc || sc.pts.length < 2) return;
+  const rect = svg.getBoundingClientRect();
+  const px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
+  let best = sc.pts[0], bd = Infinity;
+  for (const r of sc.pts) { const d = Math.abs(sc.x(r.t) - px); if (d < bd) { bd = d; best = r; } }
+  const cx = sc.x(best.t);
+  const xh = $('xh'); xh.setAttribute('x1', cx); xh.setAttribute('x2', cx); xh.setAttribute('visibility', 'visible');
+  const du = $('dUse'); du.setAttribute('cx', cx); du.setAttribute('cy', sc.y(best.use)); du.setAttribute('visibility', 'visible');
+  const ds = $('dSun'); ds.setAttribute('cx', cx); ds.setAttribute('cy', sc.y(best.sun)); ds.setAttribute('visibility', 'visible');
+  const tip = $('tip');
+  const time = new Date(best.t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  tip.innerHTML = `${time} · Verbruik <b>${txt(fmtPower(best.use))}</b> · Zon <b>${txt(fmtPower(best.sun))}</b>`;
+  tip.classList.add('on');
+  const half = tip.offsetWidth / 2;
+  tip.style.left = Math.min(rect.width - half, Math.max(half, cx)) + 'px';
+  tip.style.top = '-30px';
+}
+function chartLeave() {
+  $('tip').classList.remove('on');
+  ['xh', 'dUse', 'dSun'].forEach((id) => { const el = $(id); if (el) el.setAttribute('visibility', 'hidden'); });
+}
+
+function showError(e) {
+  $('dot').className = 'dot err';
+  $('updated').textContent = 'offline';
+  const b = $('banner');
+  b.hidden = false;
+  b.innerHTML = '<strong>IoTaWatt niet bereikbaar.</strong> Ben je thuis op wifi? ' +
+    (base() ? 'Controleer het adres in ⚙︎.' : 'Open deze pagina via de IoTaWatt (bv. http://iotawatt.local/stroom.htm) of vul het adres in bij ⚙︎.') +
+    ` <span style="color:var(--text-3)">(${esc(e.message || e)})</span>`;
+}
+function showOk() {
+  $('dot').className = 'dot ok';
+  $('banner').hidden = true;
+}
+
+/* ---------- verversen ---------- */
+
+async function tickLive() {
+  try {
+    if (!seriesNames.length) await loadSeries();
+    await loadLive();
+    showOk();
+    renderTiles();
+    if (mode === 'now') renderRows();
+  } catch (e) { showError(e); }
+}
+async function tickDay() {
+  try {
+    if (!seriesNames.length) await loadSeries();
+    await loadToday();
+    renderTiles();
+    if (mode === 'day') renderRows();
+    renderChart();
+  } catch (e) { showError(e); }
+}
+
+function start() {
+  stop();
+  tickLive().then(tickDay);
+  liveTimer = setInterval(tickLive, LIVE_MS);
+  dayTimer = setInterval(tickDay, DAY_MS);
+}
+function stop() { clearInterval(liveTimer); clearInterval(dayTimer); }
+
+function setMode(m) {
+  mode = m;
+  $('modeNow').setAttribute('aria-pressed', m === 'now');
+  $('modeDay').setAttribute('aria-pressed', m === 'day');
+  renderRows();
+}
+
+/* ---------- instellingen ---------- */
+
+function openSettings() {
+  $('hostInput').value = config.host || '';
+  const list = $('seriesList');
+  if (!seriesNames.length) {
+    list.innerHTML = '<p class="help">Nog geen kanalen gevonden. Bewaar eerst het juiste adres.</p>';
+  } else {
+    list.innerHTML = seriesNames.map((n, i) => {
+      const c = seriesCfg(n);
+      return `<div class="srow" data-name="${esc(n)}">
+        <div class="sid">${esc(n)}</div>
+        <div class="grid">
+          <input data-k="label" value="${esc(c.label)}" placeholder="${esc(n.replace(/_/g, ' '))}" aria-label="Naam voor ${esc(n)}">
+          <select data-k="role" aria-label="Rol">${Object.entries(ROLES).map(([k, v]) => `<option value="${k}"${c.role === k ? ' selected' : ''}>${v}</option>`).join('')}</select>
+          <select data-k="mult" aria-label="Vermenigvuldiger"><option value="1"${c.mult === 1 ? ' selected' : ''}>×1</option><option value="3"${c.mult === 3 ? ' selected' : ''}>×3</option></select>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  $('sheet').hidden = $('sheetBg').hidden = false;
+}
+function closeSettings() { $('sheet').hidden = $('sheetBg').hidden = true; }
+
+function saveSettings() {
+  const newHost = $('hostInput').value.trim();
+  document.querySelectorAll('#seriesList .srow').forEach((row) => {
+    const n = row.dataset.name;
+    const c = seriesCfg(n);
+    c.label = row.querySelector('[data-k=label]').value.trim();
+    c.role = row.querySelector('[data-k=role]').value;
+    c.mult = Number(row.querySelector('[data-k=mult]').value);
+  });
+  const hostChanged = newHost !== (config.host || '');
+  config.host = newHost;
+  saveConfig();
+  closeSettings();
+  if (hostChanged) { seriesNames = []; live = null; today = null; dayRows = []; start(); }
+  else { renderTiles(); renderRows(); tickDay(); }
+}
+
+/* ---------- demo (voor testen zonder IoTaWatt) ---------- */
+
+const Demo = (() => {
+  const S = ['Verlichting', 'Wasmachine', 'Stopcontacten', 'Keuken', 'Zon_1', 'Zon_2', 'Warmtepomp_L1', 'Spanning'];
+  const sunAt = (h) => Math.max(0, Math.sin((h - 7) / 13 * Math.PI)) * 2100;
+  function watts(name, t) {
+    const d = new Date(t * 1000), h = d.getHours() + d.getMinutes() / 60;
+    const n = Math.sin(t / 1500) * .5 + .5;
+    switch (name) {
+      case 'Verlichting': return (h > 18 || h < 7 ? 160 : 25) + n * 20;
+      case 'Wasmachine': return h > 10 && h < 11.5 ? 1900 * n + 150 : 2;
+      case 'Stopcontacten': return 140 + n * 90;
+      case 'Keuken': return (h > 17.5 && h < 19 ? 1700 : 60) + n * 40;
+      case 'Zon_1': return -sunAt(h) * (.9 + n * .1);
+      case 'Zon_2': return -sunAt(h) * .6 * (.9 + n * .1);
+      case 'Warmtepomp_L1': return (h < 8 || h > 20 ? 650 : 280) + n * 120;
+    }
+    return 0;
+  }
+  function answer(path) {
+    const q = new URLSearchParams(path.split('?')[1]);
+    if (q.get('show') === 'series') return S.map((n) => ({ name: n, unit: n === 'Spanning' ? 'Volts' : 'Watts' }))
+      .reduce((o, s) => (o.series.push(s), o), { series: [] });
+    const cols = q.get('select').slice(1, -1).split(',');
+    const now = Math.floor(Date.now() / 1000);
+    const day = new Date(); day.setHours(0, 0, 0, 0);
+    const d0 = day.getTime() / 1000;
+    const val = (c, t) => watts(c.split('.')[0], t);
+    if (q.get('group') === 'all') {
+      return [cols.map((c) => { let wh = 0; for (let t = d0; t < now; t += 300) wh += val(c, t) * Math.min(300, now - t) / 3600; return wh; })];
+    }
+    const stepS = q.get('group') === '5m' ? 300 : 5;
+    const from = q.get('begin') === 'd' ? d0 : now - 30;
+    const rows = [];
+    for (let t = from; t <= now; t += stepS) rows.push(cols.map((c) => c.startsWith('time') ? t : val(c, t)));
+    return rows;
+  }
+  return { answer: async (p) => answer(p) };
+})();
+
+/* ---------- start ---------- */
+
+$('modeNow').onclick = () => setMode('now');
+$('modeDay').onclick = () => setMode('day');
+$('openSettings').onclick = openSettings;
+$('cancelSettings').onclick = closeSettings;
+$('sheetBg').onclick = closeSettings;
+$('saveSettings').onclick = saveSettings;
+const cw = $('chartWrap');
+cw.addEventListener('pointermove', chartHover);
+cw.addEventListener('pointerdown', chartHover);
+cw.addEventListener('pointerleave', chartLeave);
+window.addEventListener('resize', renderChart);
+document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
+
+renderChart();
+start();
+</script>
+</body>
+</html>
