@@ -91,6 +91,8 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .banner[hidden] { display: none; }
 
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 16px; }
+.tiles.four { grid-template-columns: 1fr 1fr; }
+.tile[hidden] { display: none; }
 .tile {
   background: var(--card); border-radius: 16px; padding: 12px;
   box-shadow: 0 0 0 1px var(--line) inset; min-width: 0;
@@ -185,7 +187,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 
   <div class="banner" id="banner" hidden></div>
 
-  <section class="tiles" aria-label="Nu">
+  <section class="tiles" id="tiles" aria-label="Nu">
     <div class="tile">
       <div class="lbl"><span class="sw" style="background:var(--use)"></span>Verbruik</div>
       <div class="val num" id="tUse">–</div>
@@ -200,6 +202,11 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="lbl" id="tNetLbl">Net</div>
       <div class="val num" id="tNet">–</div>
       <div class="sub" id="tNetSub">&nbsp;</div>
+    </div>
+    <div class="tile" id="tBatTile" hidden>
+      <div class="lbl">Batterij</div>
+      <div class="val num" id="tBat">–</div>
+      <div class="sub" id="tBatSub">&nbsp;</div>
     </div>
   </section>
 
@@ -236,6 +243,10 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <input class="field" id="hostInput" placeholder="leeg = dit apparaat (aanbevolen)" autocapitalize="off" autocorrect="off" spellcheck="false">
     <p class="help">Laat leeg als deze pagina op de IoTaWatt zelf staat (bv. <code>http://iotawatt.local/stroom.htm</code>). Typ <code>demo</code> om met voorbeeldgegevens te testen.</p>
 
+    <h3>GoodWe-batterij (optioneel)</h3>
+    <input class="field" id="gwInput" placeholder="bv. http://192.168.1.20:8765" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="help">Adres van de GoodWe-brug op je Synology. Daarmee kent de app het netverbruik over alle drie de fasen en de batterij, en berekent hij zelf wat er niet gemeten wordt. Leeg = uit.</p>
+
     <h3>Kanalen</h3>
     <p class="help" style="margin:0 0 8px">Geef elk kanaal een naam en een rol. <b>Zon</b> telt als opwek, <b>Hoofdaansluiting</b> is een meting op de netkabel (optioneel). Driefasig toestel waarvan je maar één draad meet? Kies <b>×3</b> bij een 3N400V-net (4 draden, met nul) of <b>×1,73</b> bij een 3×230V-net (3 draden, zonder nul).</p>
     <div id="seriesList"></div>
@@ -271,6 +282,8 @@ let seriesNames = [];        // alle Watts-reeksen van de IoTaWatt
 let live = null;             // { t, values: {naam: watt} }
 let today = null;            // { naam: Wh }
 let dayRows = [];            // [{ t, use, sun }]
+let gw = null;               // laatste antwoord van de GoodWe-brug
+let gwError = null;
 let mode = 'now';
 let liveTimer = null, dayTimer = null;
 
@@ -279,10 +292,10 @@ let liveTimer = null, dayTimer = null;
 function loadConfig() {
   try {
     const c = JSON.parse(localStorage.getItem(STORE_KEY));
-    if (c && typeof c === 'object') return { host: c.host || '', series: c.series || {} };
+    if (c && typeof c === 'object') return { host: c.host || '', gw: c.gw || '', series: c.series || {} };
   } catch (e) { /* geen opslag beschikbaar */ }
   const demo = new URLSearchParams(location.search).has('demo');
-  return { host: demo ? 'demo' : '', series: {} };
+  return { host: demo ? 'demo' : '', gw: demo ? 'demo' : '', series: {} };
 }
 
 function saveConfig() {
@@ -330,6 +343,45 @@ async function api(path) {
 
 const select = (cols) => '[' + cols.join(',') + ']';
 
+async function loadGoodWe() {
+  const url = (config.gw || '').trim();
+  if (!url) { gw = null; gwError = null; return; }
+  try {
+    let res;
+    if (url.toLowerCase() === 'demo') res = Demo.goodwe();
+    else {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 6000);
+      try {
+        const base = /^https?:\/\//.test(url) ? url : 'http://' + url;
+        const r = await fetch(base.replace(/\/+$/, '') + '/goodwe.json', { signal: ctrl.signal, cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        res = await r.json();
+      } finally { clearTimeout(to); }
+    }
+    if (!res.ok) throw new Error(res.error || 'geen gegevens');
+    gw = res; gwError = null;
+  } catch (e) {
+    gw = null; gwError = e.message || String(e);
+  }
+}
+
+// Net en batterij uit de GoodWe, in dezelfde eenheid als de IoTaWatt-waarden.
+function gwNow() {
+  return gw && gw.grid_w !== null && gw.battery_w !== null ? { grid: gw.grid_w, battery: gw.battery_w } : null;
+}
+function gwToday() {
+  const k = gw && gw.today_kwh;
+  if (!k || [k.import, k.export, k.battery_charge, k.battery_discharge].some((v) => v === null || v === undefined)) return null;
+  return { grid: (k.import - k.export) * 1000, battery: (k.battery_discharge - k.battery_charge) * 1000 };
+}
+function gwAt(t) {
+  if (!gw || !gw.history) return null;
+  const b = Math.floor(t / 300) * 300;
+  const row = gw.history.find((r) => r[0] === b);
+  return row ? { grid: row[1], battery: row[2] } : null;
+}
+
 async function loadSeries() {
   const res = await api('/query?show=series');
   seriesNames = (res.series || [])
@@ -366,7 +418,7 @@ async function loadToday() {
   dayRows = rows.map((r) => {
     const values = {};
     seriesNames.forEach((n, j) => { values[n] = r[j + 1]; });
-    const s = summarize(values);
+    const s = summarize(values, gwAt(r[0]));
     return { t: r[0], use: s.hasData ? s.use : null, sun: s.hasData ? s.sun : null };
   });
 }
@@ -374,7 +426,8 @@ async function loadToday() {
 /* ---------- rekenen ---------- */
 
 // Zet ruwe waarden (W of Wh) om in een overzicht volgens de ingestelde rollen.
-function summarize(values) {
+// ext = { grid, battery } uit de GoodWe (zelfde eenheid), of null.
+function summarize(values, ext) {
   let loads = [], sun = 0, mains = 0, hasMains = false, hasData = false;
   for (const n of seriesNames) {
     const c = seriesCfg(n);
@@ -387,10 +440,15 @@ function summarize(values) {
     else loads.push({ name: n, value: Math.max(0, v), raw: v });
   }
   const measured = loads.reduce((a, b) => a + b.value, 0);
-  // Met hoofdmeting: huisverbruik = net + zon. Zonder: som van de gemeten groepen.
-  const use = hasMains ? Math.max(measured, mains + sun) : measured;
+  let battery = null;
+  if (ext) {
+    // GoodWe meet het net over alle fasen: huisverbruik = net + zon + batterij (ontladen = +).
+    mains = ext.grid; battery = ext.battery; hasMains = true;
+  }
+  // Met hoofdmeting: huisverbruik = net + zon (+ batterij). Zonder: som van de gemeten groepen.
+  const use = hasMains ? Math.max(measured, mains + sun + (battery || 0)) : measured;
   const other = hasMains ? Math.max(0, use - measured) : 0;
-  return { loads, sun, mains, hasMains, use, other, measured, hasData };
+  return { loads, sun, mains, battery, hasMains, use, other, measured, hasData };
 }
 
 function fmtPower(w) {
@@ -412,13 +470,13 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 function renderTiles() {
   if (!live) return;
-  const s = summarize(live.values);
+  const s = summarize(live.values, gwNow());
   $('tUse').innerHTML = html(fmtPower(s.use));
   $('tSun').innerHTML = html(fmtPower(s.sun));
   $('tSun').style.opacity = s.sun < 5 ? .5 : 1;
 
   if (today) {
-    const d = summarize(today);
+    const d = summarize(today, gwToday());
     $('tUseSub').textContent = txt(fmtEnergy(d.use)) + ' vandaag';
     $('tSunSub').textContent = txt(fmtEnergy(d.sun)) + ' vandaag';
   }
@@ -437,6 +495,15 @@ function renderTiles() {
     $('tNetSub').textContent = s.use > 0 ? Math.round(Math.min(1, s.sun / s.use) * 100) + '% uit zon (schatting)' : 'schatting';
   }
 
+  const bat = gw && gw.battery_w !== null;
+  $('tBatTile').hidden = !bat;
+  $('tiles').classList.toggle('four', bat);
+  if (bat) {
+    const b = gw.battery_w;
+    $('tBat').innerHTML = gw.battery_soc !== null ? nf0.format(gw.battery_soc) + '<small>%</small>' : '–';
+    $('tBatSub').textContent = Math.abs(b) < 20 ? 'in rust' : (b < 0 ? 'laadt ' : 'ontlaadt ') + txt(fmtPower(Math.abs(b)));
+  }
+
   const ago = Math.max(0, Math.round(Date.now() / 1000 - live.t));
   $('updated').textContent = ago < 60 ? 'live' : new Date(live.t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 }
@@ -447,12 +514,12 @@ function renderRows() {
   const ul = $('rows');
   if (!src) { ul.innerHTML = '<li class="empty">Nog geen gegevens…</li>'; return; }
 
-  const s = summarize(src);
+  const s = summarize(src, mode === 'now' ? gwNow() : gwToday());
   const items = s.loads.map((l) => ({
     name: labelOf(l.name), value: l.value, raw: l.raw,
     tag: isHeatPumpLike(l.name) ? '×' + nf2.format(seriesCfg(l.name).mult).replace(/,00$/, '') + ' geschat' : '',
   }));
-  if (s.hasMains && s.other > 0) items.push({ name: 'Overig (niet gemeten)', value: s.other, tag: '' });
+  if (s.hasMains && s.other > 0) items.push({ name: 'Overig (niet gemeten)', value: s.other, tag: s.battery !== null ? 'berekend' : '' });
   items.sort((a, b) => b.value - a.value);
 
   const total = s.use || 1;
@@ -568,7 +635,9 @@ function showError(e) {
 }
 function showOk() {
   $('dot').className = 'dot ok';
-  $('banner').hidden = true;
+  const b = $('banner');
+  b.hidden = !gwError;
+  if (gwError) b.innerHTML = '<strong>GoodWe-brug niet bereikbaar.</strong> De app toont alleen de IoTaWatt-metingen. Controleer het adres in ⚙︎. <span style="color:var(--text-3)">(' + esc(gwError) + ')</span>';
 }
 
 /* ---------- verversen ---------- */
@@ -576,7 +645,7 @@ function showOk() {
 async function tickLive() {
   try {
     if (!seriesNames.length) await loadSeries();
-    await loadLive();
+    await Promise.all([loadLive(), loadGoodWe()]);
     showOk();
     renderTiles();
     if (mode === 'now') renderRows();
@@ -611,6 +680,7 @@ function setMode(m) {
 
 function openSettings() {
   $('hostInput').value = config.host || '';
+  $('gwInput').value = config.gw || '';
   const list = $('seriesList');
   if (!seriesNames.length) {
     list.innerHTML = '<p class="help">Nog geen kanalen gevonden. Bewaar eerst het juiste adres.</p>';
@@ -642,10 +712,11 @@ function saveSettings() {
   });
   const hostChanged = newHost !== (config.host || '');
   config.host = newHost;
+  config.gw = $('gwInput').value.trim();
   saveConfig();
   closeSettings();
   if (hostChanged) { seriesNames = []; live = null; today = null; dayRows = []; start(); }
-  else { renderTiles(); renderRows(); tickDay(); }
+  else { tickLive().then(tickDay); }
 }
 
 /* ---------- demo (voor testen zonder IoTaWatt) ---------- */
@@ -685,7 +756,31 @@ const Demo = (() => {
     for (let t = from; t <= now; t += stepS) rows.push(cols.map((c) => c.startsWith('time') ? t : val(c, t)));
     return rows;
   }
-  return { answer: async (p) => answer(p) };
+  // Nep-GoodWe: batterij vangt het zonne-overschot op, net levert de rest.
+  function house(t) {
+    let w = 150; // niet gemeten verbruik
+    for (const n of S) if (!/^Zon|Spanning/.test(n)) w += Math.max(0, watts(n, t)) * (n === 'Warmtepomp_L1' ? 3 : 1);
+    const sun = -watts('Zon_1', t) - watts('Zon_2', t);
+    const surplus = sun - w;
+    const battery = surplus > 0 ? -Math.min(surplus, 2500) : Math.min(-surplus, 1500) * (new Date(t * 1000).getHours() > 17 ? 1 : 0);
+    return { grid: w - sun - battery, battery };
+  }
+  function goodwe() {
+    const now = Math.floor(Date.now() / 1000);
+    const d0 = new Date().setHours(0, 0, 0, 0) / 1000;
+    const h = house(now);
+    const history = [];
+    let imp = 0, exp = 0, chg = 0, dis = 0;
+    for (let t = d0; t < now; t += 300) {
+      const x = house(t);
+      history.push([t, Math.round(x.grid), Math.round(x.battery)]);
+      imp += Math.max(0, x.grid) / 12000; exp += Math.max(0, -x.grid) / 12000;
+      dis += Math.max(0, x.battery) / 12000; chg += Math.max(0, -x.battery) / 12000;
+    }
+    return { ok: true, ts: now, grid_w: h.grid, battery_w: h.battery, battery_soc: 42, history,
+      today_kwh: { import: imp, export: exp, battery_charge: chg, battery_discharge: dis } };
+  }
+  return { answer: async (p) => answer(p), goodwe };
 })();
 
 /* ---------- start ---------- */

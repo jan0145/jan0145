@@ -1,0 +1,13 @@
+services:
+  goodwe-bridge:
+    image: python:3.12-slim
+    container_name: goodwe-bridge
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      GOODWE_HOST: "192.168.1.100"   # <-- IP-adres van je GoodWe aanpassen
+      GOODWE_PORT: "8899"
+      BRIDGE_PORT: "8765"
+    volumes:
+      - ./bridge.py:/app/bridge.py:ro
+    command: sh -c "pip install --no-cache-dir --quiet goodwe==0.4.10 && python -u /app/bridge.py"
