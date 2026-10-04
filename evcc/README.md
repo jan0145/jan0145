@@ -36,7 +36,7 @@ Je DS214 (DSM 6.2, ARM 32-bit, geen Docker) draait evcc als los programma via de
 - Tab **Task Settings** → *Run command* → *User-defined script*:
 
   ```
-  cd /volume1/homes/docker/evcc && chmod +x evcc && ./evcc --config evcc.yaml > evcc.log 2>&1 &
+  pkill -x evcc; sleep 2; cd /volume1/homes/docker/evcc && chmod +x evcc && HOME=/volume1/homes/docker/evcc ./evcc --config evcc.yaml --database /volume1/homes/docker/evcc/evcc.db > evcc.log 2>&1 &
   ```
 
 - **OK** (bevestig met je wachtwoord).
@@ -52,10 +52,8 @@ Je DS214 (DSM 6.2, ARM 32-bit, geen Docker) draait evcc als los programma via de
 
 ## Opnieuw starten na een wijziging in evcc.yaml
 
-Herstart de Synology, of maak een tweede taak (*Scheduled Task*, niet ingepland) met:
+Selecteer de taak in de Task Scheduler en klik op **Run**: het script stopt eerst de draaiende
+evcc en start hem dan opnieuw.
 
-```
-pkill -x evcc; sleep 2; cd /volume1/homes/docker/evcc && ./evcc --config evcc.yaml > evcc.log 2>&1 &
-```
-
-en klik op **Run** wanneer nodig.
+`HOME=…` en `--database …` zijn nodig omdat de Task Scheduler geen persoonlijke map meegeeft;
+zonder die twee stopt evcc met de fout `database exec: "getent": executable file not found`.
