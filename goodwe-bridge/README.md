@@ -15,6 +15,28 @@ Alles blijft thuis: er gaat niets via de GoodWe-cloud en er zijn geen wachtwoord
 - **Overig (niet gemeten)** = huisverbruik − alle groepen die de IoTaWatt meet. Dit vervangt
   de "rest"-berekening op draad A.
 
+## Installeren op de Synology zonder Container Manager (Taakplanner)
+
+Werkt op elke Synology met DSM 7, ook modellen zonder Container Manager. Het gebruikt de
+Python die al in DSM zit; de GoodWe-bibliotheek zit mee in de map `goodwe/`.
+
+1. **IP-adres van de GoodWe opzoeken** in je router of in de SolarGo-app (bij voorkeur een vast adres geven).
+2. Kopieer de hele map `goodwe-bridge` (met `bridge.py`, `start.sh` en de map `goodwe`) naar de
+   Synology, bv. naar de gedeelde map **homes** → `homes/docker/goodwe-bridge`.
+   Op de Synology zelf heet dat pad dan `/volume1/homes/docker/goodwe-bridge`.
+3. DSM → **Configuratiescherm → Taakplanner → Maken → Getriggerde taak → Door gebruiker gedefinieerd script**.
+   - Tabblad *Algemeen*: taaknaam `GoodWe-brug`, gebruiker **root**, gebeurtenis **Opstarten**.
+   - Tabblad *Taakinstellingen*, bij *Door gebruiker gedefinieerd script*:
+     ```
+     GOODWE_HOST=192.168.0.xxx sh /volume1/homes/docker/goodwe-bridge/start.sh
+     ```
+     (vervang `192.168.0.xxx` door het IP-adres van de **GoodWe**).
+   - OK. DSM vraagt je wachtwoord ter bevestiging.
+4. Selecteer de taak en klik op **Uitvoeren** (zodat je niet hoeft te herstarten).
+5. **Testen:** `http://<IP-van-je-synology>:8765/goodwe.json` → `"ok": true`.
+   Lukt het niet, kijk dan in `bridge.log` in dezelfde map.
+6. Stroom-app → **⚙︎** → bij **GoodWe-batterij**: `http://<IP-van-je-synology>:8765` → Bewaar.
+
 ## Installeren op de Synology (Container Manager)
 
 1. **IP-adres van de GoodWe opzoeken.** Kijk in je router (lijst met verbonden toestellen)
