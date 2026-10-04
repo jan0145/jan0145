@@ -26,6 +26,10 @@
   --use-soft: rgba(42, 120, 214, .16);
   --good: #008300;
   --bad: #e34948;
+  --warn: #b77900;
+  --good-bg: rgba(0, 131, 0, .12);
+  --bad-bg: rgba(227, 73, 72, .13);
+  --warn-bg: rgba(237, 161, 0, .16);
   --track: #ecebe7;
 }
 @media (prefers-color-scheme: dark) {
@@ -43,6 +47,10 @@
     --use-soft: rgba(57, 135, 229, .22);
     --good: #3fa63f;
     --bad: #e66767;
+    --warn: #e0a019;
+    --good-bg: rgba(63, 166, 63, .2);
+    --bad-bg: rgba(230, 103, 103, .2);
+    --warn-bg: rgba(224, 160, 25, .2);
     --track: #2a2a28;
   }
 }
@@ -52,6 +60,7 @@
   --text: #ffffff; --text-2: #c3c2b7; --text-3: #8f8e86;
   --use: #3987e5; --sun: #d95926; --use-soft: rgba(57, 135, 229, .22);
   --good: #3fa63f; --bad: #e66767; --track: #2a2a28;
+  --warn: #e0a019; --good-bg: rgba(63, 166, 63, .2); --bad-bg: rgba(230, 103, 103, .2); --warn-bg: rgba(224, 160, 25, .2);
 }
 
 * { box-sizing: border-box; }
@@ -90,6 +99,23 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .banner strong { color: var(--text); }
 .banner[hidden] { display: none; }
 
+.hero {
+  display: flex; align-items: center; gap: 14px; border-radius: 18px; padding: 14px 16px; margin: 8px 0 8px;
+  background: var(--card); box-shadow: 0 0 0 1px var(--line) inset; border-left: 6px solid var(--text-3);
+}
+.hero .ico { width: 44px; height: 44px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;
+  font-size: 24px; color: #fff; background: var(--text-3); }
+.hero .h-lbl { font-size: 14px; font-weight: 600; color: var(--text-2); }
+.hero .h-val { font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.hero .h-val small { font-size: 18px; font-weight: 500; color: var(--text-2); margin-left: 3px; }
+.hero .h-sub { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+.hero.good { background: var(--good-bg); border-left-color: var(--good); }
+.hero.good .ico { background: var(--good); }
+.hero.bad { background: var(--bad-bg); border-left-color: var(--bad); }
+.hero.bad .ico { background: var(--bad); }
+.hero.warn { background: var(--warn-bg); border-left-color: var(--warn); }
+.hero.warn .ico { background: var(--warn); }
+.tile .sub div + div { margin-top: 1px; }
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 16px; }
 .tiles.four { grid-template-columns: 1fr 1fr; }
 .tile[hidden] { display: none; }
@@ -186,6 +212,15 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
   </header>
 
   <div class="banner" id="banner" hidden></div>
+
+  <section class="hero" id="hero" aria-live="polite">
+    <div class="ico" id="hIco" aria-hidden="true">…</div>
+    <div>
+      <div class="h-lbl" id="hLbl">Laden…</div>
+      <div class="h-val num" id="hVal">–</div>
+      <div class="h-sub" id="hSub">&nbsp;</div>
+    </div>
+  </section>
 
   <section class="tiles" id="tiles" aria-label="Nu">
     <div class="tile">
@@ -500,18 +535,65 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 /* ---------- weergave ---------- */
 
+// Groot blok bovenaan: is er nu zonne-overschot (groen) of halen we van het net (rood)?
+function renderHero(s, ext) {
+  const T = 150; // W, kleine schommelingen negeren
+  let surplus, imp, batDis = 0, toBat = 0;
+  if (ext) {
+    imp = Math.max(0, ext.grid);
+    toBat = Math.max(0, -ext.battery);
+    batDis = Math.max(0, ext.battery);
+    surplus = -ext.grid - ext.battery; // naar net + naar batterij - uit batterij
+  } else if (s.hasMains) {
+    imp = Math.max(0, s.mains); surplus = -s.mains;
+  } else {
+    surplus = s.sun - s.use; imp = Math.max(0, -surplus);
+  }
+  let cls, ico, lbl, val, sub;
+  if (surplus >= T) {
+    cls = 'good'; ico = '✓'; lbl = 'Zonne-overschot'; val = surplus;
+    const exp = Math.max(0, surplus - toBat);
+    sub = (toBat >= 50 ? txt(fmtPower(toBat)) + ' naar de batterij · ' + txt(fmtPower(exp)) + ' naar het net. ' : '')
+      + 'Goed moment om een toestel aan te zetten.';
+  } else if (imp >= T) {
+    cls = 'bad'; ico = '✕'; lbl = 'Je haalt stroom van het net'; val = imp;
+    sub = 'Beter wachten met grote toestellen.';
+  } else if (batDis >= T) {
+    cls = 'warn'; ico = '!'; lbl = 'De batterij vult aan'; val = batDis;
+    sub = 'Geen zonne-overschot: een extra toestel loopt op de batterij.';
+  } else {
+    cls = ''; ico = '='; lbl = 'In evenwicht'; val = Math.abs(surplus);
+    sub = 'Weinig over, weinig tekort.';
+  }
+  if (!ext && !s.hasMains) sub += ' (schatting)';
+  $('hero').className = 'hero ' + cls;
+  $('hIco').textContent = ico;
+  $('hLbl').textContent = lbl;
+  $('hVal').innerHTML = html(fmtPower(val));
+  $('hSub').textContent = sub;
+}
+
 function renderTiles() {
   if (!live) return;
-  const s = summarize(live.values, gwNow());
+  const ext = gwNow();
+  const s = summarize(live.values, ext);
+  renderHero(s, ext);
   $('tUse').innerHTML = html(fmtPower(s.use));
   $('tSun').innerHTML = html(fmtPower(s.sun));
   $('tSun').style.opacity = s.sun < 5 ? .5 : 1;
+  // Verdeling per zonnepaneel-kanaal onder het totaal.
+  const pvs = seriesNames.filter((n) => seriesCfg(n).role === 'solar' && live.values[n] !== null && live.values[n] !== undefined);
+  const split = pvs.length > 1 ? pvs.map((n) => esc(labelOf(n)) + ': ' + txt(fmtPower(Math.abs(live.values[n] * (seriesCfg(n).mult || 1))))) : [];
+  let sunToday = '';
 
   if (today) {
     const d = summarize(today, gwToday());
-    $('tUseSub').textContent = txt(fmtEnergy(d.use)) + ' vandaag';
-    $('tSunSub').textContent = txt(fmtEnergy(d.sun)) + ' vandaag';
+    // Met evcc kennen we het dagtotaal van het net niet: dan is dit enkel de som van de groepen.
+    $('tUseSub').textContent = txt(fmtEnergy(d.use)) + (ext && !gwToday() ? ' vandaag in de groepen' : ' vandaag');
+    sunToday = txt(fmtEnergy(d.sun)) + ' vandaag';
   }
+
+  $('tSunSub').innerHTML = [...split, sunToday].filter(Boolean).map((x) => '<div>' + x + '</div>').join('') || '&nbsp;';
 
   if (s.hasMains) {
     $('tNetLbl').textContent = s.mains < 0 ? 'Teruglevering' : 'Van het net';
