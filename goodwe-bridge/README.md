@@ -17,8 +17,10 @@ Alles blijft thuis: er gaat niets via de GoodWe-cloud en er zijn geen wachtwoord
 
 ## Installeren op de Synology zonder Container Manager (Taakplanner)
 
-Werkt op elke Synology met DSM 7, ook modellen zonder Container Manager. Het gebruikt de
-Python die al in DSM zit; de GoodWe-bibliotheek zit mee in de map `goodwe/`.
+Werkt op elke Synology met DSM 7, ook modellen zonder Container Manager. De GoodWe-bibliotheek
+zit mee in de map `goodwe/`. Je hebt wel Python 3.8 of nieuwer nodig: staat er in `bridge.log`
+"Geen Python … gevonden" of "failed to run python3", installeer dan **Python 3** (bv. "Python 3.9")
+via het **Package Center**. `start.sh` vindt die vanzelf.
 
 1. **IP-adres van de GoodWe opzoeken** in je router of in de SolarGo-app (bij voorkeur een vast adres geven).
 2. Kopieer de hele map `goodwe-bridge` (met `bridge.py`, `start.sh` en de map `goodwe`) naar de
