@@ -1,0 +1,71 @@
+# evcc – alleen uitlezen (read-only)
+#
+# Deze configuratie LEEST de GoodWe (net + batterij) en de zonnepanelen via de IoTaWatt.
+# Er staat bewust geen enkele schrijfopdracht in: de GoodWe wordt niet via het
+# standaard-sjabloon "goodwe-hybrid" gekoppeld (dat kan de batterij en de
+# teruglevering aansturen), maar via losse registers die evcc enkel kan lezen.
+# EVA blijft dus de baas over de batterij.
+#
+# Aanpassen:
+#   192.168.0.GGG  = IP-adres van de GoodWe   (3 keer)
+#   192.168.0.III  = IP-adres van de IoTaWatt (1 keer)
+#   PV1 / PV2      = namen van de zonnepaneel-kanalen in de IoTaWatt
+
+interval: 30s
+log: info
+
+network:
+  port: 7070
+
+meters:
+  # Netmeter van de GoodWe (driefasig). GoodWe telt teruglevering positief,
+  # evcc afname positief: daarom scale -1.
+  - name: grid
+    type: custom
+    power:
+      source: modbus
+      uri: 192.168.0.GGG:502
+      id: 247
+      register:
+        address: 36025 # totaal actief vermogen netmeter
+        type: holding
+        decode: int32
+      scale: -1
+
+  # Batterij: vermogen (+ = ontladen, - = laden) en laadtoestand.
+  - name: battery
+    type: custom
+    power:
+      source: modbus
+      uri: 192.168.0.GGG:502
+      id: 247
+      register:
+        address: 35182 # batterijvermogen
+        type: holding
+        decode: int32
+    soc:
+      source: modbus
+      uri: 192.168.0.GGG:502
+      id: 247
+      register:
+        address: 37007 # laadtoestand %
+        type: holding
+        decode: uint16
+
+  # Zonnepanelen: uit de IoTaWatt (de GoodWe BT heeft zelf geen panelen).
+  # Het teken van elk kanaal wordt genegeerd (absolute waarde).
+  - name: pv
+    type: custom
+    power:
+      source: http
+      uri: "http://192.168.0.III/query?select=[PV1.watts,PV2.watts]&begin=s-10s&end=s&group=all&format=json"
+      jq: "[.[0][] | if . == null then 0 elif . < 0 then -. else . end] | add"
+
+site:
+  title: Thuis
+  meters:
+    grid: grid
+    pv:
+      - pv
+    battery:
+      - battery

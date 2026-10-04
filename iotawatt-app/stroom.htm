@@ -243,9 +243,9 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <input class="field" id="hostInput" placeholder="leeg = dit apparaat (aanbevolen)" autocapitalize="off" autocorrect="off" spellcheck="false">
     <p class="help">Laat leeg als deze pagina op de IoTaWatt zelf staat (bv. <code>http://iotawatt.local/stroom.htm</code>). Typ <code>demo</code> om met voorbeeldgegevens te testen.</p>
 
-    <h3>GoodWe-batterij (optioneel)</h3>
-    <input class="field" id="gwInput" placeholder="bv. http://192.168.1.20:8765" autocapitalize="off" autocorrect="off" spellcheck="false">
-    <p class="help">Adres van de GoodWe-brug op je Synology. Daarmee kent de app het netverbruik over alle drie de fasen en de batterij, en berekent hij zelf wat er niet gemeten wordt. Leeg = uit.</p>
+    <h3>Batterij via evcc of GoodWe-brug (optioneel)</h3>
+    <input class="field" id="gwInput" placeholder="bv. http://192.168.0.159:7070" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="help">Adres van evcc (poort 7070) of van de GoodWe-brug (poort 8765) op je Synology. Daarmee kent de app het netverbruik over alle drie de fasen en de batterij, en berekent hij zelf wat er niet gemeten wordt. Leeg = uit.</p>
 
     <h3>Kanalen</h3>
     <p class="help" style="margin:0 0 8px">Geef elk kanaal een naam en een rol. <b>Zon</b> telt als opwek, <b>Hoofdaansluiting</b> is een meting op de netkabel (optioneel). Driefasig toestel waarvan je maar één draad meet? Kies <b>×3</b> bij een 3N400V-net (4 draden, met nul) of <b>×1,73</b> bij een 3×230V-net (3 draden, zonder nul).</p>
@@ -343,6 +343,28 @@ async function api(path) {
 
 const select = (cols) => '[' + cols.join(',') + ']';
 
+let gwKind = { url: null, kind: null };
+
+async function getJson(url) {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(to); }
+}
+
+// evcc /api/state omzetten naar hetzelfde formaat als de GoodWe-brug.
+// evcc: net + = afname, batterij + = ontladen (zelfde afspraak als de brug).
+function fromEvcc(raw) {
+  const d = raw.result || raw;
+  const grid = d.grid && d.grid.power !== undefined ? d.grid.power : d.gridPower;
+  const bat = d.battery && typeof d.battery === 'object' ? d.battery : { power: d.batteryPower, soc: d.batterySoc };
+  if (grid === undefined || bat.power === undefined) throw new Error('geen net- of batterijgegevens in evcc');
+  return { ok: true, grid_w: grid, battery_w: bat.power, battery_soc: bat.soc === undefined ? null : bat.soc };
+}
+
 async function loadGoodWe() {
   const url = (config.gw || '').trim();
   if (!url) { gw = null; gwError = null; return; }
@@ -350,14 +372,20 @@ async function loadGoodWe() {
     let res;
     if (url.toLowerCase() === 'demo') res = Demo.goodwe();
     else {
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 6000);
-      try {
-        const base = /^https?:\/\//.test(url) ? url : 'http://' + url;
-        const r = await fetch(base.replace(/\/+$/, '') + '/goodwe.json', { signal: ctrl.signal, cache: 'no-store' });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        res = await r.json();
-      } finally { clearTimeout(to); }
+      const base = (/^https?:\/\//.test(url) ? url : 'http://' + url).replace(/\/+$/, '');
+      // Eerst evcc proberen, dan de eigen GoodWe-brug; onthoud wat werkte.
+      if (gwKind.url !== base) gwKind = { url: base, kind: null };
+      const kinds = gwKind.kind ? [gwKind.kind] : ['evcc', 'bridge'];
+      let lastErr;
+      for (const kind of kinds) {
+        try {
+          const raw = await getJson(base + (kind === 'evcc' ? '/api/state' : '/goodwe.json'));
+          res = kind === 'evcc' ? fromEvcc(raw) : raw;
+          gwKind.kind = kind;
+          break;
+        } catch (e) { lastErr = e; }
+      }
+      if (!res) throw lastErr;
     }
     if (!res.ok) throw new Error(res.error || 'geen gegevens');
     gw = res; gwError = null;
@@ -637,7 +665,7 @@ function showOk() {
   $('dot').className = 'dot ok';
   const b = $('banner');
   b.hidden = !gwError;
-  if (gwError) b.innerHTML = '<strong>GoodWe-brug niet bereikbaar.</strong> De app toont alleen de IoTaWatt-metingen. Controleer het adres in ⚙︎. <span style="color:var(--text-3)">(' + esc(gwError) + ')</span>';
+  if (gwError) b.innerHTML = '<strong>evcc / GoodWe-brug niet bereikbaar.</strong> De app toont alleen de IoTaWatt-metingen. Controleer het adres in ⚙︎. <span style="color:var(--text-3)">(' + esc(gwError) + ')</span>';
 }
 
 /* ---------- verversen ---------- */
