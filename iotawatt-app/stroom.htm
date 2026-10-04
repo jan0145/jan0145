@@ -344,12 +344,16 @@ async function api(path) {
 const select = (cols) => '[' + cols.join(',') + ']';
 
 let gwKind = { url: null, kind: null };
+// Alleen de velden die de app nodig heeft (sneller op een trage NAS).
+const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc}';
 
+// Naar een ander apparaat: geen cache-optie meegeven (Safari stuurt dan een extra
+// CORS-voorvraag die evcc niet kent), maar de cache omzeilen met een tijdstempel.
 async function getJson(url) {
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 6000);
+  const to = setTimeout(() => ctrl.abort(), 10000);
   try {
-    const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    const r = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), { signal: ctrl.signal });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return await r.json();
   } finally { clearTimeout(to); }
@@ -379,11 +383,11 @@ async function loadGoodWe() {
       let lastErr;
       for (const kind of kinds) {
         try {
-          const raw = await getJson(base + (kind === 'evcc' ? '/api/state' : '/goodwe.json'));
+          const raw = await getJson(base + (kind === 'evcc' ? '/api/state?jq=' + encodeURIComponent(EVCC_JQ) : '/goodwe.json'));
           res = kind === 'evcc' ? fromEvcc(raw) : raw;
           gwKind.kind = kind;
           break;
-        } catch (e) { lastErr = e; }
+        } catch (e) { lastErr = lastErr || e; }
       }
       if (!res) throw lastErr;
     }
