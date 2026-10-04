@@ -32,9 +32,10 @@ Per kanaal kies je:
 | **Zon** | De lijn van de zonnepanelen. Beide zonnepaneel-kanalen worden opgeteld. Het teken (+/–) maakt niet uit. |
 | **Hoofdaansluiting** | Alleen als je ook de netkabel meet. Dan toont de app afname/teruglevering en een regel "Overig (niet gemeten)". |
 | **Verbergen** | Niet tonen en niet meetellen. |
-| **×3** | Voor de warmtepomp: je meet één van de drie fasen, de app schat het totaal als 3 × die fase. Dat klopt goed als de warmtepomp de fasen gelijk belast. |
+| **×3 / ×1,73** | Voor de warmtepomp als je maar één draad meet. ×3 bij een 3N400V-net (4 draden met nul), ×1,73 (√3) bij een 3×230V-net (3 draden zonder nul). Dat klopt goed als de warmtepomp de fasen gelijk belast. |
 
-De app doet een eerste gok op basis van de namen (bv. "Zon…" → Zon, "Warmtepomp…" → Verbruik ×3).
+De app doet een eerste gok op basis van de namen (bv. "Zon…" → Zon, "Warmtepomp…" → Verbruik ×3, "…total" of "rest" → Verbergen).
+Een groep met een negatieve waarde krijgt een ⚠: dat wijst op een omgekeerde stroomtang of een verkeerde fase-instelling.
 Instellingen worden op de iPhone bewaard.
 
 **Let op:** zonder meting op de hoofdaansluiting is "Verbruik" de som van de groepen die je meet.

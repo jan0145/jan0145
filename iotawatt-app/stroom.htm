@@ -237,7 +237,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <p class="help">Laat leeg als deze pagina op de IoTaWatt zelf staat (bv. <code>http://iotawatt.local/stroom.htm</code>). Typ <code>demo</code> om met voorbeeldgegevens te testen.</p>
 
     <h3>Kanalen</h3>
-    <p class="help" style="margin:0 0 8px">Geef elk kanaal een naam en een rol. <b>Zon</b> telt als opwek, <b>Hoofdaansluiting</b> is een meting op de netkabel (optioneel). Zet <b>×3</b> bij een driefasig toestel waarvan je maar één fase meet: het verbruik wordt dan geschat als 3 × die fase.</p>
+    <p class="help" style="margin:0 0 8px">Geef elk kanaal een naam en een rol. <b>Zon</b> telt als opwek, <b>Hoofdaansluiting</b> is een meting op de netkabel (optioneel). Driefasig toestel waarvan je maar één draad meet? Kies <b>×3</b> bij een 3N400V-net (4 draden, met nul) of <b>×1,73</b> bij een 3×230V-net (3 draden, zonder nul).</p>
     <div id="seriesList"></div>
 
     <div class="btns">
@@ -292,6 +292,8 @@ function saveConfig() {
 // Gok een rol aan de hand van de naam die in de IoTaWatt is ingesteld.
 function guess(name) {
   const n = name.toLowerCase();
+  // Totaal- en rest-kanalen zouden dubbel tellen met de groepen zelf.
+  if (/total|totaal|^rest$|^overig/.test(n)) return { role: 'hide', mult: 1 };
   if (/zon|solar|pv|panel|omvormer|inverter/.test(n)) return { role: 'solar', mult: 1 };
   if (/warmtepomp|heat.?pump|^wp(_|\b|$)|_wp$/.test(n)) return { role: 'load', mult: 3 };
   if (/^(mains?|grid|net|hoofd|totaal|total)/.test(n)) return { role: 'mains', mult: 1 };
@@ -382,7 +384,7 @@ function summarize(values) {
     const v = raw * (c.mult || 1);
     if (c.role === 'solar') sun += Math.abs(v);
     else if (c.role === 'mains') { mains += v; hasMains = true; }
-    else loads.push({ name: n, value: Math.max(0, v) });
+    else loads.push({ name: n, value: Math.max(0, v), raw: v });
   }
   const measured = loads.reduce((a, b) => a + b.value, 0);
   // Met hoofdmeting: huisverbruik = net + zon. Zonder: som van de gemeten groepen.
@@ -446,17 +448,23 @@ function renderRows() {
   if (!src) { ul.innerHTML = '<li class="empty">Nog geen gegevens…</li>'; return; }
 
   const s = summarize(src);
-  const items = s.loads.map((l) => ({ name: labelOf(l.name), value: l.value, tag: isHeatPumpLike(l.name) ? '×' + seriesCfg(l.name).mult + ' geschat' : '' }));
+  const items = s.loads.map((l) => ({
+    name: labelOf(l.name), value: l.value, raw: l.raw,
+    tag: isHeatPumpLike(l.name) ? '×' + nf2.format(seriesCfg(l.name).mult).replace(/,00$/, '') + ' geschat' : '',
+  }));
   if (s.hasMains && s.other > 0) items.push({ name: 'Overig (niet gemeten)', value: s.other, tag: '' });
   items.sort((a, b) => b.value - a.value);
 
   const total = s.use || 1;
   let out = items.map((it) => {
     const pct = Math.round(it.value / total * 100);
+    // Negatief verbruik bestaat niet: wijst op een omgekeerde stroomtang of verkeerde fase.
+    const neg = it.raw !== undefined && it.raw < -5;
+    const tag = neg ? '⚠ negatief, tang/fase nakijken' : it.tag;
     return `<li class="row">
       <div class="row-top">
-        <span class="row-name">${esc(it.name)}${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ''}</span>
-        <span class="row-val num">${txt(fmt(it.value))}<span class="pct">${pct}%</span></span>
+        <span class="row-name">${esc(it.name)}${tag ? `<span class="tag"${neg ? ' style="color:var(--bad)"' : ''}>${esc(tag)}</span>` : ''}</span>
+        <span class="row-val num">${txt(fmt(neg ? it.raw : it.value))}<span class="pct">${pct}%</span></span>
       </div>
       <div class="bar"><i style="width:${Math.min(100, it.value / total * 100)}%"></i></div>
     </li>`;
@@ -614,7 +622,7 @@ function openSettings() {
         <div class="grid">
           <input data-k="label" value="${esc(c.label)}" placeholder="${esc(n.replace(/_/g, ' '))}" aria-label="Naam voor ${esc(n)}">
           <select data-k="role" aria-label="Rol">${Object.entries(ROLES).map(([k, v]) => `<option value="${k}"${c.role === k ? ' selected' : ''}>${v}</option>`).join('')}</select>
-          <select data-k="mult" aria-label="Vermenigvuldiger"><option value="1"${c.mult === 1 ? ' selected' : ''}>×1</option><option value="3"${c.mult === 3 ? ' selected' : ''}>×3</option></select>
+          <select data-k="mult" aria-label="Vermenigvuldiger"><option value="1"${c.mult === 1 ? ' selected' : ''}>×1</option><option value="1.732"${c.mult === 1.732 ? ' selected' : ''}>×1,73</option><option value="3"${c.mult === 3 ? ' selected' : ''}>×3</option></select>
         </div>
       </div>`;
     }).join('');
