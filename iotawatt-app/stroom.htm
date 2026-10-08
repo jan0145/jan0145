@@ -31,6 +31,9 @@
   --bad-bg: rgba(227, 73, 72, .13);
   --warn-bg: rgba(237, 161, 0, .16);
   --track: #ecebe7;
+  /* vaste kleuren per toestel (categorisch, vaste volgorde) */
+  --c0: #2a78d6; --c1: #eb6834; --c2: #1baf7a; --c3: #eda100;
+  --c4: #e87ba4; --c5: #008300; --c6: #4a3aa7; --c7: #e34948;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -52,6 +55,8 @@
     --bad-bg: rgba(230, 103, 103, .2);
     --warn-bg: rgba(224, 160, 25, .2);
     --track: #2a2a28;
+    --c0: #3987e5; --c1: #d95926; --c2: #199e70; --c3: #c98500;
+    --c4: #d55181; --c5: #008300; --c6: #9085e9; --c7: #e66767;
   }
 }
 :root[data-theme="dark"] {
@@ -60,6 +65,8 @@
   --text: #ffffff; --text-2: #c3c2b7; --text-3: #8f8e86;
   --use: #3987e5; --sun: #d95926; --use-soft: rgba(57, 135, 229, .22);
   --good: #3fa63f; --bad: #e66767; --track: #2a2a28;
+  --c0: #3987e5; --c1: #d95926; --c2: #199e70; --c3: #c98500;
+  --c4: #d55181; --c5: #008300; --c6: #9085e9; --c7: #e66767;
   --warn: #e0a019; --good-bg: rgba(63, 166, 63, .2); --bad-bg: rgba(230, 103, 103, .2); --warn-bg: rgba(224, 160, 25, .2);
 }
 
@@ -160,7 +167,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
 .chart-wrap { position: relative; touch-action: pan-y; }
-.chart-wrap svg { display: block; width: 100%; height: 200px; overflow: visible; }
+.chart-wrap svg { display: block; width: 100%; height: 210px; overflow: visible; }
 .chart-wrap .axis { font-size: 11px; fill: var(--text-3); }
 .tip {
   position: absolute; top: 0; pointer-events: none; background: var(--text); color: var(--card);
@@ -169,6 +176,41 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 }
 .tip.on { opacity: 1; }
 .tip b { font-weight: 650; }
+
+/* knop naar toestellen */
+.navcard { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font: inherit; color: inherit;
+  background: var(--card); border: 0; border-radius: 18px; padding: 14px 16px; margin-bottom: 16px;
+  box-shadow: 0 0 0 1px var(--line) inset; cursor: pointer; }
+.navcard .nc-main { flex: 1; min-width: 0; }
+.navcard .nc-title { font-size: 17px; font-weight: 650; }
+.navcard .nc-sub { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chev { font-size: 26px; color: var(--text-3); line-height: 1; }
+
+/* periode-navigatie */
+.pnav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 8px; }
+.pnav span { font-size: 14px; font-weight: 600; color: var(--text-2); text-align: center; flex: 1; }
+.pnav button { border: 0; background: var(--track); color: var(--text); width: 36px; height: 32px; border-radius: 10px;
+  font-size: 18px; cursor: pointer; }
+.pnav button:disabled { opacity: .3; cursor: default; }
+.pnav[hidden], .card[hidden] { display: none; }
+.htot { display: flex; gap: 16px; font-size: 13px; color: var(--text-2); margin-top: 8px; flex-wrap: wrap; }
+.htot b { color: var(--text); font-weight: 650; }
+.chart-wrap .bar-hit { fill: transparent; }
+.seg.wide { display: flex; margin: 4px 0 12px; }
+.seg.wide button { flex: 1; }
+
+/* scherm per toestel */
+.view { position: fixed; inset: 0; z-index: 5; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+.view[hidden] { display: none; }
+.vhead { display: flex; align-items: center; gap: 12px; padding: 12px 0 8px; }
+.vhead h2 { font-size: 24px; margin: 0; letter-spacing: -.02em; }
+.row.tog { cursor: pointer; }
+.row.off .row-name, .row.off .row-val { opacity: .45; }
+.ck { width: 18px; height: 18px; border-radius: 50%; display: inline-block; vertical-align: -3px; margin-right: 8px;
+  box-shadow: 0 0 0 2px var(--text-3) inset; flex: none; }
+.hint { font-size: 12px; color: var(--text-3); margin: -2px 0 6px; }
+.hint.warn { color: var(--bad); }
 
 /* instellingen */
 .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10; }
@@ -245,29 +287,76 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     </div>
   </section>
 
-  <section class="card">
-    <div class="card-head">
-      <h2>Waar gaat het naartoe?</h2>
-      <div class="seg" role="group" aria-label="Periode">
-        <button id="modeNow" aria-pressed="true">Nu</button>
-        <button id="modeDay" aria-pressed="false">Vandaag</button>
-      </div>
+  <button class="navcard" id="openDevices">
+    <div class="nc-main">
+      <div class="nc-title">Per toestel</div>
+      <div class="nc-sub" id="ncSub">Wat verbruikt er nu, en de geschiedenis per toestel</div>
     </div>
-    <ul class="rows" id="rows"><li class="empty">Laden…</li></ul>
-  </section>
+    <span class="chev" aria-hidden="true">›</span>
+  </button>
 
   <section class="card">
-    <div class="card-head"><h2>Vandaag</h2></div>
+    <div class="card-head">
+      <h2>Geschiedenis</h2>
+      <div class="seg" role="group" aria-label="Periode" id="histSeg">
+        <button data-p="day" aria-pressed="true">Dag</button>
+        <button data-p="week" aria-pressed="false">Week</button>
+        <button data-p="month" aria-pressed="false">Maand</button>
+      </div>
+    </div>
+    <div class="pnav">
+      <button id="hPrev" aria-label="Vorige periode">‹</button>
+      <span id="hLabel">Vandaag</span>
+      <button id="hNext" aria-label="Volgende periode">›</button>
+    </div>
     <div class="legend">
       <span><i style="background:var(--use)"></i>Verbruik</span>
       <span><i style="background:var(--sun)"></i>Zon</span>
     </div>
     <div class="chart-wrap" id="chartWrap">
-      <svg id="chart" role="img" aria-label="Verbruik en zonne-opbrengst vandaag"></svg>
+      <svg id="chart" role="img" aria-label="Verbruik en zonne-opbrengst"></svg>
       <div class="tip" id="tip"></div>
     </div>
+    <div class="htot" id="hTot"></div>
   </section>
 </main>
+
+<div class="view" id="devView" hidden role="dialog" aria-label="Per toestel">
+  <main>
+    <div class="vhead">
+      <button class="iconbtn" id="devBack" aria-label="Terug">‹</button>
+      <h2>Per toestel</h2>
+    </div>
+    <div class="seg wide" role="group" aria-label="Periode" id="devSeg">
+      <button data-p="now" aria-pressed="true">Nu</button>
+      <button data-p="day" aria-pressed="false">Dag</button>
+      <button data-p="week" aria-pressed="false">Week</button>
+      <button data-p="month" aria-pressed="false">Maand</button>
+    </div>
+    <div class="pnav" id="dNav" hidden>
+      <button id="dPrev" aria-label="Vorige periode">‹</button>
+      <span id="dLabel"></span>
+      <button id="dNext" aria-label="Volgende periode">›</button>
+    </div>
+    <section class="card" id="dChartCard" hidden>
+      <div class="chart-wrap" id="dChartWrap">
+        <svg id="dchart" role="img" aria-label="Verbruik per toestel"></svg>
+        <div class="tip" id="dtip"></div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <h2 id="dListTitle">Nu</h2>
+        <div class="seg" role="group" aria-label="Sorteren" id="sortSeg">
+          <button data-s="value" aria-pressed="true">Verbruik</button>
+          <button data-s="name" aria-pressed="false">Naam</button>
+        </div>
+      </div>
+      <div class="hint" id="dHint" hidden></div>
+      <ul class="rows" id="dRows"><li class="empty">Laden…</li></ul>
+    </section>
+  </main>
+</div>
 
 <div class="sheet-bg" id="sheetBg" hidden></div>
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -319,7 +408,6 @@ let today = null;            // { naam: Wh }
 let dayRows = [];            // [{ t, use, sun }]
 let gw = null;               // laatste antwoord van de GoodWe-brug
 let gwError = null;
-let mode = 'now';
 let liveTimer = null, dayTimer = null;
 
 /* ---------- configuratie ---------- */
@@ -480,12 +568,17 @@ async function loadToday() {
   today = {};
   seriesNames.forEach((n, j) => { today[n] = tot.length ? tot[tot.length - 1][j] : null; });
 
+  dayRows = await queryDayLine('d', 's', true);
+}
+
+// Verloop van één dag per 5 minuten (watt): verbruik en zon.
+async function queryDayLine(begin, end, withGw) {
   const cols = ['time.utc.unix', ...seriesNames.map((n) => n + '.watts')];
-  const rows = await api('/query?select=' + select(cols) + '&begin=d&end=s&group=5m&format=json');
-  dayRows = rows.map((r) => {
+  const rows = await api('/query?select=' + select(cols) + `&begin=${begin}&end=${end}&group=5m&format=json`);
+  return rows.map((r) => {
     const values = {};
     seriesNames.forEach((n, j) => { values[n] = r[j + 1]; });
-    const s = summarize(values, gwAt(r[0]));
+    const s = summarize(values, withGw ? gwAt(r[0]) : null);
     return { t: r[0], use: s.hasData ? s.use : null, sun: s.hasData ? s.sun : null };
   });
 }
@@ -618,66 +711,316 @@ function renderTiles() {
     $('tBatSub').textContent = Math.abs(b) < 20 ? 'in rust' : (b < 0 ? 'laadt ' : 'ontlaadt ') + txt(fmtPower(Math.abs(b)));
   }
 
+  const top = [...s.loads].sort((a, b) => b.value - a.value).filter((l) => l.value >= 5).slice(0, 3)
+    .map((l) => labelOf(l.name) + ' ' + txt(fmtPower(l.value)));
+  $('ncSub').textContent = top.length ? 'Nu: ' + top.join(' · ') : 'Wat verbruikt er nu, en de geschiedenis per toestel';
+
   const ago = Math.max(0, Math.round(Date.now() / 1000 - live.t));
   $('updated').textContent = ago < 60 ? 'live' : new Date(live.t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 }
 
-function renderRows() {
-  const src = mode === 'now' ? live && live.values : today;
-  const fmt = mode === 'now' ? fmtPower : fmtEnergy;
-  const ul = $('rows');
-  if (!src) { ul.innerHTML = '<li class="empty">Nog geen gegevens…</li>'; return; }
+/* ---------- geschiedenis (uit de IoTaWatt, die alles op zijn SD-kaart bewaart) ---------- */
 
-  const s = summarize(src, mode === 'now' ? gwNow() : gwToday());
-  const items = s.loads.map((l) => ({
-    name: labelOf(l.name), value: l.value, raw: l.raw,
-    tag: isHeatPumpLike(l.name) ? '×' + nf2.format(seriesCfg(l.name).mult).replace(/,00$/, '') + ' geschat' : '',
-  }));
-  if (s.hasMains && s.other > 0) items.push({ name: 'Overig (niet gemeten)', value: s.other, tag: s.battery !== null ? 'berekend' : '' });
-  items.sort((a, b) => b.value - a.value);
+const PALETTE_N = 8;            // 8 vaste toestelkleuren; meer tegelijk is niet leesbaar
+const GROUP = { day: '1h', week: '1d', month: '1d' };
+const hist = { period: 'day', k: 0, rows: [], buckets: [] };
+const dev = { mode: 'now', k: 0, buckets: [], totals: {}, warn: '' };
 
-  const total = s.use || 1;
-  let out = items.map((it) => {
-    const pct = Math.round(it.value / total * 100);
-    // Negatief verbruik bestaat niet: wijst op een omgekeerde stroomtang of verkeerde fase.
-    const neg = it.raw !== undefined && it.raw < -5;
-    const tag = neg ? '⚠ negatief, tang/fase nakijken' : it.tag;
-    return `<li class="row">
-      <div class="row-top">
-        <span class="row-name">${esc(it.name)}${tag ? `<span class="tag"${neg ? ' style="color:var(--bad)"' : ''}>${esc(tag)}</span>` : ''}</span>
-        <span class="row-val num">${txt(fmt(neg ? it.raw : it.value))}<span class="pct">${pct}%</span></span>
-      </div>
-      <div class="bar"><i style="width:${Math.min(100, it.value / total * 100)}%"></i></div>
-    </li>`;
-  }).join('');
+const loadNames = () => seriesNames.filter((n) => seriesCfg(n).role === 'load');
+const solarNames = () => seriesNames.filter((n) => seriesCfg(n).role === 'solar');
+const loadWh = (n, raw) => raw === null || raw === undefined ? null : Math.max(0, raw * (seriesCfg(n).mult || 1));
+const sunWh = (n, raw) => raw === null || raw === undefined ? null : Math.abs(raw * (seriesCfg(n).mult || 1));
 
-  // Zonnepanelen apart onderaan, ten opzichte van het verbruik
-  const sunRows = seriesNames.filter((n) => seriesCfg(n).role === 'solar' && src[n] !== null && src[n] !== undefined);
-  out += sunRows.map((n) => {
-    const v = Math.abs(src[n] * (seriesCfg(n).mult || 1));
-    return `<li class="row sun">
-      <div class="row-top">
-        <span class="row-name">☀︎ ${esc(labelOf(n))}</span>
-        <span class="row-val num">${txt(fmt(v))}</span>
-      </div>
-      <div class="bar"><i style="width:${Math.min(100, v / Math.max(total, s.sun || 1) * 100)}%"></i></div>
-    </li>`;
-  }).join('');
+// IoTaWatt-tijdsaanduiding: 'd' = begin vandaag, 'd-3d' = begin 3 dagen geleden, 'M-1M' = begin vorige maand.
+const rel = (u, n) => n <= 0 ? u : `${u}-${n}${u}`;
+function range(period, k) {
+  if (period === 'day') return { begin: rel('d', k), end: k === 0 ? 's' : rel('d', k - 1) };
+  if (period === 'week') return { begin: rel('d', 6 + 7 * k), end: k === 0 ? 's' : rel('d', 7 * k - 1) };
+  return { begin: rel('M', k), end: k === 0 ? 's' : rel('M', k - 1) };
+}
 
-  ul.innerHTML = out || '<li class="empty">Geen kanalen ingesteld. Tik op ⚙︎.</li>';
+function periodLabel(period, k) {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  const f = (x, o) => x.toLocaleDateString('nl-NL', o);
+  if (period === 'day') {
+    d.setDate(d.getDate() - k);
+    return k === 0 ? 'Vandaag' : k === 1 ? 'Gisteren' : f(d, { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  if (period === 'week') {
+    d.setDate(d.getDate() - 7 * k);
+    const b = new Date(d); b.setDate(b.getDate() - 6);
+    return f(b, { day: 'numeric', month: 'short' }) + ' – ' + (k === 0 ? 'vandaag' : f(d, { day: 'numeric', month: 'short' }));
+  }
+  d.setDate(1); d.setMonth(d.getMonth() - k);
+  const m = f(d, { month: 'long', year: 'numeric' });
+  return m.charAt(0).toUpperCase() + m.slice(1);
+}
+function bucketLabel(period, t) {
+  const d = new Date(t * 1000);
+  if (period === 'day') return String(d.getHours()).padStart(2, '0') + 'u';
+  if (period === 'week') return d.toLocaleDateString('nl-NL', { weekday: 'short' }).replace('.', '');
+  return String(d.getDate());
+}
+function bucketTitle(period, t) {
+  const d = new Date(t * 1000);
+  if (period === 'day') { const h = d.getHours(); return `${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00`; }
+  return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+async function queryWh(period, k, group, names) {
+  if (!names.length) return [];
+  const r = range(period, k);
+  const cols = ['time.utc.unix', ...names.map((n) => n + '.wh')];
+  const rows = await api('/query?select=' + select(cols) + `&begin=${r.begin}&end=${r.end}&group=${group}&format=json`);
+  return rows.map((row) => { const v = {}; names.forEach((n, j) => { v[n] = row[j + 1]; }); return { t: row[0], v }; });
+}
+
+async function loadHist() {
+  if (hist.period === 'day') {
+    if (hist.k === 0) hist.rows = dayRows;
+    else { const r = range('day', hist.k); hist.rows = await queryDayLine(r.begin, r.end, false); }
+    return;
+  }
+  const loads = loadNames(), suns = solarNames();
+  const rows = await queryWh(hist.period, hist.k, '1d', [...loads, ...suns]);
+  hist.buckets = rows.map((r) => {
+    const use = loads.reduce((a, n) => a + (loadWh(n, r.v[n]) || 0), 0);
+    const sun = suns.reduce((a, n) => a + (sunWh(n, r.v[n]) || 0), 0);
+    return { t: r.t, vals: { use, sun } };
+  });
+}
+
+function renderHist() {
+  document.querySelectorAll('#histSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === hist.period));
+  $('hLabel').textContent = periodLabel(hist.period, hist.k);
+  $('hNext').disabled = hist.k === 0;
+  let use = 0, sun = 0;
+  if (hist.period === 'day') {
+    renderChart();
+    hist.rows.forEach((r) => { if (r.use !== null) { use += r.use / 12; sun += r.sun / 12; } }); // 5 min = 1/12 u
+  } else {
+    drawBars($('chart'), hist.buckets, [
+      { key: 'use', name: 'Verbruik', color: 'var(--use)' },
+      { key: 'sun', name: 'Zon', color: 'var(--sun)' },
+    ], { stacked: false, period: hist.period });
+    hist.buckets.forEach((b) => { use += b.vals.use; sun += b.vals.sun; });
+  }
+  $('hTot').innerHTML = `<span>Verbruik <b>${txt(fmtEnergy(use))}</b></span><span>Zon <b>${txt(fmtEnergy(sun))}</b></span>`
+    + (hist.period !== 'day' || hist.k > 0 ? '<span>(gemeten groepen)</span>' : '');
+}
+
+async function changeHist(period, k) {
+  hist.period = period; hist.k = Math.max(0, k);
+  $('hLabel').textContent = periodLabel(hist.period, hist.k);
+  try { await loadHist(); } catch (e) { showError(e); }
+  renderHist();
+}
+
+/* ---------- scherm per toestel ---------- */
+
+function slotOf(n) { return config.slots && config.slots[n] !== undefined ? config.slots[n] : 0; }
+const isVisible = (n) => !!(config.visible && config.visible[n]);
+
+// Een toestel tonen/verbergen in de grafiek. Elk toestel houdt zijn eigen kleur zolang die vrij is.
+function setVisible(n, on) {
+  config.visible = config.visible || {};
+  config.slots = config.slots || {};
+  if (!on) { config.visible[n] = false; return true; }
+  if (isVisible(n)) return true;
+  const shown = Object.keys(config.visible).filter((x) => x !== n && config.visible[x]);
+  if (shown.length >= PALETTE_N) return false;
+  const used = new Set(shown.map((x) => config.slots[x]));
+  if (config.slots[n] === undefined || used.has(config.slots[n])) {
+    config.slots[n] = [...Array(PALETTE_N).keys()].find((i) => !used.has(i));
+  }
+  config.visible[n] = true;
+  return true;
+}
+
+async function loadDev() {
+  if (dev.mode === 'now') return;
+  const names = loadNames();
+  const rows = await queryWh(dev.mode, dev.k, GROUP[dev.mode], names);
+  dev.buckets = rows.map((r) => { const vals = {}; names.forEach((n) => { vals[n] = loadWh(n, r.v[n]); }); return { t: r.t, vals }; });
+  dev.totals = {};
+  names.forEach((n) => { dev.totals[n] = dev.buckets.reduce((a, b) => a + (b.vals[n] || 0), 0); });
+  // eerste keer: de 5 grootste verbruikers tonen
+  if (!config.visible || !Object.keys(config.visible).length) {
+    [...names].sort((a, b) => dev.totals[b] - dev.totals[a]).slice(0, 5).forEach((n) => setVisible(n, true));
+    saveConfig();
+  }
+}
+
+function sortItems(items) {
+  if ((config.sort || 'value') === 'name') items.sort((a, b) => a.label.localeCompare(b.label, 'nl'));
+  else items.sort((a, b) => b.value - a.value);
+  return items;
+}
+
+function rowHtml(it, total, fmt, opts = {}) {
+  const pct = total > 0 ? Math.round(it.value / total * 100) : 0;
+  const neg = it.raw !== undefined && it.raw < -5;
+  const tag = neg ? '⚠ negatief, tang/fase nakijken' : it.tag;
+  const ck = opts.toggle
+    ? `<span class="ck" style="${it.on ? `background:var(--c${it.slot});box-shadow:none` : ''}" aria-hidden="true"></span>` : '';
+  const barColor = opts.toggle ? (it.on ? `background:var(--c${it.slot})` : 'background:var(--text-3)') : '';
+  return `<li class="row${it.sun ? ' sun' : ''}${opts.toggle ? ' tog' : ''}${opts.toggle && !it.on ? ' off' : ''}"${it.name ? ` data-n="${esc(it.name)}"` : ''}${opts.toggle ? ` role="button" aria-pressed="${!!it.on}"` : ''}>
+    <div class="row-top">
+      <span class="row-name">${ck}${it.sun ? '☀︎ ' : ''}${esc(it.label)}${tag ? `<span class="tag"${neg ? ' style="color:var(--bad)"' : ''}>${esc(tag)}</span>` : ''}</span>
+      <span class="row-val num">${txt(fmt(neg ? it.raw : it.value))}${it.sun ? '' : `<span class="pct">${pct}%</span>`}</span>
+    </div>
+    <div class="bar"><i style="width:${Math.min(100, total > 0 ? it.value / total * 100 : 0)}%;${barColor}"></i></div>
+  </li>`;
+}
+
+function renderDev() {
+  if ($('devView').hidden) return;
+  document.querySelectorAll('#devSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === dev.mode));
+  document.querySelectorAll('#sortSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.s === (config.sort || 'value')));
+  const now = dev.mode === 'now';
+  $('dNav').hidden = now;
+  $('dChartCard').hidden = now;
+  $('dLabel').textContent = now ? '' : periodLabel(dev.mode, dev.k);
+  $('dNext').disabled = dev.k === 0;
+  $('dListTitle').textContent = now ? 'Nu' : 'Totaal per toestel';
+  $('dHint').hidden = now;
+  $('dHint').className = 'hint' + (dev.warn ? ' warn' : '');
+  $('dHint').textContent = dev.warn || 'Tik op een toestel om het in de grafiek te tonen of te verbergen (max. 8).';
+  const ul = $('dRows');
+
+  if (now) {
+    if (!live) { ul.innerHTML = '<li class="empty">Nog geen gegevens…</li>'; return; }
+    const s = summarize(live.values, gwNow());
+    const items = s.loads.map((l) => ({
+      label: labelOf(l.name), value: l.value, raw: l.raw,
+      tag: isHeatPumpLike(l.name) ? '×' + nf2.format(seriesCfg(l.name).mult).replace(/,00$/, '') + ' geschat' : '',
+    }));
+    if (s.hasMains && s.other > 0) items.push({ label: 'Overig (niet gemeten)', value: s.other, tag: s.battery !== null ? 'berekend' : '' });
+    const total = s.use || 1;
+    let out = sortItems(items).map((it) => rowHtml(it, total, fmtPower)).join('');
+    const suns = solarNames().filter((n) => live.values[n] !== null && live.values[n] !== undefined)
+      .map((n) => ({ label: labelOf(n), value: sunWh(n, live.values[n]), sun: true }));
+    out += sortItems(suns).map((it) => rowHtml(it, Math.max(total, s.sun || 1), fmtPower)).join('');
+    ul.innerHTML = out || '<li class="empty">Geen kanalen ingesteld. Tik op ⚙︎.</li>';
+    return;
+  }
+
+  const names = loadNames();
+  const total = names.reduce((a, n) => a + (dev.totals[n] || 0), 0);
+  const items = names.map((n) => ({ name: n, label: labelOf(n), value: dev.totals[n] || 0, on: isVisible(n), slot: slotOf(n),
+    tag: isHeatPumpLike(n) ? '×' + nf2.format(seriesCfg(n).mult).replace(/,00$/, '') + ' geschat' : '' }));
+  ul.innerHTML = sortItems(items).map((it) => rowHtml(it, total, fmtEnergy, { toggle: true })).join('')
+    || '<li class="empty">Geen gegevens voor deze periode.</li>';
+
+  const series = names.filter(isVisible).map((n) => ({ key: n, name: labelOf(n), color: `var(--c${slotOf(n)})` }));
+  drawBars($('dchart'), dev.buckets, series, { stacked: true, period: dev.mode });
+}
+
+async function changeDev(mode, k) {
+  dev.mode = mode; dev.k = Math.max(0, k); dev.warn = '';
+  renderDev();
+  try { await loadDev(); } catch (e) { showError(e); }
+  renderDev();
+}
+
+function openDevices() {
+  $('devView').hidden = false;
+  document.body.style.overflow = 'hidden';
+  changeDev(dev.mode, dev.k);
+}
+function closeDevices() {
+  $('devView').hidden = true;
+  document.body.style.overflow = '';
+}
+
+/* Staafgrafiek (gegroepeerd of gestapeld), waarden in Wh, één y-as. */
+function drawBars(svg, buckets, series, opt) {
+  const W = svg.clientWidth || 340, H = 210;
+  const m = { l: 40, r: 8, t: 20, b: 22 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const val = (b, k) => b.vals[k] || 0;
+  const peak = Math.max(0, ...buckets.map((b) => opt.stacked
+    ? series.reduce((a, s) => a + val(b, s.key), 0)
+    : Math.max(0, ...series.map((s) => val(b, s.key)))));
+  const step = niceStep(Math.max(peak, 100) * 1.1 / 4);
+  const yMax = Math.ceil(Math.max(peak, 100) * 1.1 / step) * step;
+  const y = (v) => m.t + ih - v / yMax * ih;
+  const n = Math.max(1, buckets.length), band = iw / n;
+  const kwh = (v) => { const x = v / 1000; return x === 0 ? '0' : (x < 1 ? nf2 : x < 10 ? nf1 : nf0).format(x).replace(/,0+$/, ''); };
+
+  let g = '';
+  for (let v = 0; v <= yMax + 1e-9; v += step) {
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
+    g += `<text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${kwh(v)}</text>`;
+  }
+  g += `<text class="axis" x="0" y="10">kWh</text>`;
+  const every = Math.ceil(n / 8);
+  buckets.forEach((b, i) => {
+    const x0 = m.l + i * band;
+    if (i % every === 0) g += `<text class="axis num" x="${x0 + band / 2}" y="${H - 4}" text-anchor="middle">${bucketLabel(opt.period, b.t)}</text>`;
+    const inner = Math.max(2, band * .72), pad = (band - inner) / 2;
+    if (opt.stacked) {
+      let acc = 0;
+      const vis = series.filter((s) => val(b, s.key) > 0);
+      vis.forEach((s, si) => {
+        const v = val(b, s.key), y1 = y(acc + v), y0 = y(acc);
+        const h = Math.max(0, y0 - y1 - (si < vis.length - 1 ? 1.5 : 0)); // klein spleetje tussen segmenten
+        g += `<rect x="${(x0 + pad).toFixed(1)}" y="${y1.toFixed(1)}" width="${inner.toFixed(1)}" height="${h.toFixed(1)}" rx="${si === vis.length - 1 ? 2 : 0}" fill="${s.color}"/>`;
+        acc += v;
+      });
+    } else {
+      const w = Math.max(1, (inner - 2) / series.length);
+      series.forEach((s, si) => {
+        const v = val(b, s.key);
+        g += `<rect x="${(x0 + pad + si * (w + 2)).toFixed(1)}" y="${y(v).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0, y(0) - y(v)).toFixed(1)}" rx="2" fill="${s.color}"/>`;
+      });
+    }
+  });
+  if (!buckets.length) g += `<text class="axis" x="${m.l + iw / 2}" y="${m.t + ih / 2}" text-anchor="middle">Geen gegevens</text>`;
+  g += `<rect id="${svg.id}-hl" x="0" y="${m.t}" width="${band}" height="${ih}" fill="var(--text)" opacity=".06" visibility="hidden"/>`;
+  svg.innerHTML = g;
+  svg._bars = { buckets, series, m, band, opt, kind: 'bars' };
+  svg._scale = null;
+}
+
+function barsHover(svg, tip, ev) {
+  const sc = svg._bars;
+  if (!sc || !sc.buckets.length) return;
+  const rect = svg.getBoundingClientRect();
+  const px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
+  const i = Math.min(sc.buckets.length - 1, Math.max(0, Math.floor((px - sc.m.l) / sc.band)));
+  const b = sc.buckets[i];
+  const hl = document.getElementById(svg.id + '-hl');
+  hl.setAttribute('x', sc.m.l + i * sc.band); hl.setAttribute('visibility', 'visible');
+  const parts = sc.series.filter((s) => (b.vals[s.key] || 0) > 0 || !sc.opt.stacked)
+    .sort((a, c) => (b.vals[c.key] || 0) - (b.vals[a.key] || 0))
+    .map((s) => `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:4px"></span>${esc(s.name)} <b>${txt(fmtEnergy(b.vals[s.key] || 0))}</b>`);
+  tip.innerHTML = `<div style="margin-bottom:2px">${bucketTitle(sc.opt.period, b.t)}</div>` + (parts.join('<br>') || 'niets');
+  tip.style.whiteSpace = 'normal';
+  tip.classList.add('on');
+  const w = tip.offsetWidth;
+  const cx = sc.m.l + (i + .5) * sc.band;
+  tip.style.left = Math.min(rect.width - w / 2, Math.max(w / 2, cx)) + 'px';
+  tip.style.top = '0px'; // binnen de grafiek, zodat de knoppen erboven bereikbaar blijven
+}
+function barsLeave(svg, tip) {
+  tip.classList.remove('on');
+  const hl = document.getElementById(svg.id + '-hl'); if (hl) hl.setAttribute('visibility', 'hidden');
 }
 
 /* Grafiek: verbruik (vlak) en zon (lijn) over de hele dag, één y-as. */
 function renderChart() {
   const svg = $('chart');
-  const W = svg.clientWidth || 340, H = 200;
+  const W = svg.clientWidth || 340, H = 210;
   const m = { l: 40, r: 8, t: 8, b: 22 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
 
-  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - hist.k);
   const t0 = start.getTime() / 1000, t1 = t0 + 86400;
-  const pts = dayRows.filter((r) => r.use !== null);
+  const pts = (hist.k === 0 ? dayRows : hist.rows).filter((r) => r.use !== null);
+  svg._bars = null;
   const maxV = Math.max(500, ...pts.map((r) => Math.max(r.use, r.sun))) * 1.1;
   const step = niceStep(maxV / 4);
   const yMax = Math.ceil(maxV / step) * step;
@@ -716,7 +1059,9 @@ function niceStep(raw) {
 
 function chartHover(ev) {
   const svg = $('chart'), sc = svg._scale;
+  if (svg._bars) return barsHover(svg, $('tip'), ev);
   if (!sc || sc.pts.length < 2) return;
+  $('tip').style.whiteSpace = 'nowrap';
   const rect = svg.getBoundingClientRect();
   const px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
   let best = sc.pts[0], bd = Infinity;
@@ -734,6 +1079,7 @@ function chartHover(ev) {
   tip.style.top = '-30px';
 }
 function chartLeave() {
+  if ($('chart')._bars) return barsLeave($('chart'), $('tip'));
   $('tip').classList.remove('on');
   ['xh', 'dUse', 'dSun'].forEach((id) => { const el = $(id); if (el) el.setAttribute('visibility', 'hidden'); });
 }
@@ -762,7 +1108,7 @@ async function tickLive() {
     await Promise.all([loadLive(), loadGoodWe()]);
     showOk();
     renderTiles();
-    if (mode === 'now') renderRows();
+    if (dev.mode === 'now') renderDev();
   } catch (e) { showError(e); }
 }
 async function tickDay() {
@@ -770,8 +1116,9 @@ async function tickDay() {
     if (!seriesNames.length) await loadSeries();
     await loadToday();
     renderTiles();
-    if (mode === 'day') renderRows();
-    renderChart();
+    if (hist.k === 0) await loadHist();
+    renderHist();
+    if (!$('devView').hidden && dev.mode !== 'now' && dev.k === 0) { await loadDev(); renderDev(); }
   } catch (e) { showError(e); }
 }
 
@@ -783,12 +1130,6 @@ function start() {
 }
 function stop() { clearInterval(liveTimer); clearInterval(dayTimer); }
 
-function setMode(m) {
-  mode = m;
-  $('modeNow').setAttribute('aria-pressed', m === 'now');
-  $('modeDay').setAttribute('aria-pressed', m === 'day');
-  renderRows();
-}
 
 /* ---------- instellingen ---------- */
 
@@ -829,7 +1170,7 @@ function saveSettings() {
   config.gw = $('gwInput').value.trim();
   saveConfig();
   closeSettings();
-  if (hostChanged) { seriesNames = []; live = null; today = null; dayRows = []; start(); }
+  if (hostChanged) { seriesNames = []; live = null; today = null; dayRows = []; hist.rows = []; hist.buckets = []; start(); }
   else { tickLive().then(tickDay); }
 }
 
@@ -852,22 +1193,51 @@ const Demo = (() => {
     }
     return 0;
   }
+  // IoTaWatt-tijden zoals 's', 's-30s', 'd', 'd-6d', 'M', 'M-1M' omzetten naar unix-seconden.
+  function parseT(spec, now) {
+    const m = /^([sdM])(?:-(\d+)([sdM]))?$/.exec(spec || 's');
+    if (!m) return now;
+    const b = m[1] === 's' ? new Date(now * 1000) : new Date();
+    if (m[1] !== 's') b.setHours(0, 0, 0, 0);
+    if (m[1] === 'M') b.setDate(1);
+    if (m[2]) {
+      const n = +m[2];
+      if (m[3] === 's') b.setTime(b.getTime() - n * 1000);
+      else if (m[3] === 'd') b.setDate(b.getDate() - n);
+      else b.setMonth(b.getMonth() - n);
+    }
+    return Math.floor(b.getTime() / 1000);
+  }
+  function next(t, group) {
+    if (group === '1d') { const d = new Date(t * 1000); d.setDate(d.getDate() + 1); return d.getTime() / 1000; }
+    return t + ({ '5s': 5, '5m': 300, '1h': 3600 }[group] || 300);
+  }
+  // gemiddeld vermogen over [a, b) en energie in Wh
+  function avg(name, a, b) {
+    const st = Math.max(5, Math.min(300, b - a));
+    let sum = 0, n = 0;
+    for (let t = a; t < b; t += st) { sum += watts(name, t); n++; }
+    return n ? sum / n : watts(name, a);
+  }
   function answer(path) {
     const q = new URLSearchParams(path.split('?')[1]);
-    if (q.get('show') === 'series') return S.map((n) => ({ name: n, unit: n === 'Spanning' ? 'Volts' : 'Watts' }))
-      .reduce((o, s) => (o.series.push(s), o), { series: [] });
+    if (q.get('show') === 'series') return { series: S.map((n) => ({ name: n, unit: n === 'Spanning' ? 'Volts' : 'Watts' })) };
     const cols = q.get('select').slice(1, -1).split(',');
     const now = Math.floor(Date.now() / 1000);
-    const day = new Date(); day.setHours(0, 0, 0, 0);
-    const d0 = day.getTime() / 1000;
-    const val = (c, t) => watts(c.split('.')[0], t);
-    if (q.get('group') === 'all') {
-      return [cols.map((c) => { let wh = 0; for (let t = d0; t < now; t += 300) wh += val(c, t) * Math.min(300, now - t) / 3600; return wh; })];
-    }
-    const stepS = q.get('group') === '5m' ? 300 : 5;
-    const from = q.get('begin') === 'd' ? d0 : now - 30;
+    const begin = parseT(q.get('begin'), now), end = Math.min(now, parseT(q.get('end'), now));
+    const group = q.get('group');
+    const cell = (c, a, b) => {
+      if (c.startsWith('time')) return a;
+      const [name, unit] = c.split('.');
+      const w = avg(name, a, b);
+      return unit === 'wh' ? w * (b - a) / 3600 : w;
+    };
+    if (group === 'all') return [cols.map((c) => cell(c, begin, end))];
     const rows = [];
-    for (let t = from; t <= now; t += stepS) rows.push(cols.map((c) => c.startsWith('time') ? t : val(c, t)));
+    for (let t = begin; group === '5s' ? t <= end : t < end; t = next(t, group)) {
+      const b = Math.min(next(t, group), end);
+      rows.push(cols.map((c) => cell(c, t, Math.max(b, t + 5))));
+    }
     return rows;
   }
   // Nep-GoodWe: batterij vangt het zonne-overschot op, net levert de rest.
@@ -899,8 +1269,27 @@ const Demo = (() => {
 
 /* ---------- start ---------- */
 
-$('modeNow').onclick = () => setMode('now');
-$('modeDay').onclick = () => setMode('day');
+document.querySelectorAll('#histSeg button').forEach((b) => { b.onclick = () => changeHist(b.dataset.p, 0); });
+$('hPrev').onclick = () => changeHist(hist.period, hist.k + 1);
+$('hNext').onclick = () => changeHist(hist.period, hist.k - 1);
+$('openDevices').onclick = openDevices;
+$('devBack').onclick = closeDevices;
+document.querySelectorAll('#devSeg button').forEach((b) => { b.onclick = () => changeDev(b.dataset.p, 0); });
+$('dPrev').onclick = () => changeDev(dev.mode, dev.k + 1);
+$('dNext').onclick = () => changeDev(dev.mode, dev.k - 1);
+document.querySelectorAll('#sortSeg button').forEach((b) => { b.onclick = () => { config.sort = b.dataset.s; saveConfig(); renderDev(); }; });
+$('dRows').addEventListener('click', (ev) => {
+  const li = ev.target.closest('li[data-n]');
+  if (!li || dev.mode === 'now') return;
+  const n = li.dataset.n;
+  dev.warn = setVisible(n, !isVisible(n)) ? '' : 'Er staan al 8 toestellen in de grafiek. Verberg er eerst één.';
+  saveConfig();
+  renderDev();
+});
+const dw = $('dChartWrap');
+dw.addEventListener('pointermove', (e) => barsHover($('dchart'), $('dtip'), e));
+dw.addEventListener('pointerdown', (e) => barsHover($('dchart'), $('dtip'), e));
+dw.addEventListener('pointerleave', () => barsLeave($('dchart'), $('dtip')));
 $('openSettings').onclick = openSettings;
 $('cancelSettings').onclick = closeSettings;
 $('sheetBg').onclick = closeSettings;
@@ -909,10 +1298,10 @@ const cw = $('chartWrap');
 cw.addEventListener('pointermove', chartHover);
 cw.addEventListener('pointerdown', chartHover);
 cw.addEventListener('pointerleave', chartLeave);
-window.addEventListener('resize', renderChart);
+window.addEventListener('resize', () => { renderHist(); renderDev(); });
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
 
-renderChart();
+renderHist();
 start();
 </script>
 </body>
