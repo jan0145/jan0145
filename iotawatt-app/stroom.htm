@@ -440,8 +440,13 @@ function seriesCfg(name) {
   if (!config.series[name]) config.series[name] = { label: '', ...guess(name) };
   return config.series[name];
 }
-const labelOf = (name) => seriesCfg(name).label || name.replace(/_/g, ' ');
-const isHeatPumpLike = (name) => seriesCfg(name).mult > 1;
+// 'evcc:laadpaal' = meter die uit evcc komt, geen IoTaWatt-kanaal
+const isEvcc = (name) => name.startsWith('evcc:');
+const labelOf = (name) => {
+  if (isEvcc(name)) { const n = name.slice(5).replace(/_/g, ' '); return (/laad|charge|wallbox/i.test(n) ? '🚗 ' : '') + n.charAt(0).toUpperCase() + n.slice(1); }
+  return seriesCfg(name).label || name.replace(/_/g, ' ');
+};
+const isHeatPumpLike = (name) => !isEvcc(name) && seriesCfg(name).mult > 1;
 
 /* ---------- IoTaWatt-API ---------- */
 
@@ -468,7 +473,7 @@ const select = (cols) => '[' + cols.join(',') + ']';
 
 let gwKind = { url: null, kind: null };
 // Alleen de velden die de app nodig heeft (sneller op een trage NAS).
-const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc}';
+const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext}';
 
 // Naar een ander apparaat: geen cache-optie meegeven (Safari stuurt dan een extra
 // CORS-voorvraag die evcc niet kent), maar de cache omzeilen met een tijdstempel.
@@ -489,7 +494,9 @@ function fromEvcc(raw) {
   const grid = d.grid && d.grid.power !== undefined ? d.grid.power : d.gridPower;
   const bat = d.battery && typeof d.battery === 'object' ? d.battery : { power: d.batteryPower, soc: d.batterySoc };
   if (grid === undefined || bat.power === undefined) throw new Error('geen net- of batterijgegevens in evcc');
-  return { ok: true, grid_w: grid, battery_w: bat.power, battery_soc: bat.soc === undefined ? null : bat.soc };
+  // extra meters (bv. de laadpaal) die evcc alleen uitleest
+  const ext = Array.isArray(d.ext) ? d.ext.filter((m) => m && typeof m.power === 'number').map((m) => ({ name: m.name || 'extra', power: m.power })) : [];
+  return { ok: true, grid_w: grid, battery_w: bat.power, battery_soc: bat.soc === undefined ? null : bat.soc, ext };
 }
 
 async function loadGoodWe() {
@@ -523,7 +530,7 @@ async function loadGoodWe() {
 
 // Net en batterij uit de GoodWe, in dezelfde eenheid als de IoTaWatt-waarden.
 function gwNow() {
-  return gw && gw.grid_w !== null && gw.battery_w !== null ? { grid: gw.grid_w, battery: gw.battery_w } : null;
+  return gw && gw.grid_w !== null && gw.battery_w !== null ? { grid: gw.grid_w, battery: gw.battery_w, ext: gw.ext || [] } : null;
 }
 function gwToday() {
   const k = gw && gw.today_kwh;
@@ -598,6 +605,10 @@ function summarize(values, ext) {
     if (c.role === 'solar') sun += Math.abs(v);
     else if (c.role === 'mains') { mains += v; hasMains = true; }
     else loads.push({ name: n, value: Math.max(0, v), raw: v });
+  }
+  if (ext && ext.ext) {
+    // toestellen die evcc meet (bv. de laadpaal) tellen als gemeten verbruik
+    ext.ext.forEach((m) => loads.push({ name: 'evcc:' + m.name, value: Math.max(0, m.power), raw: m.power }));
   }
   const measured = loads.reduce((a, b) => a + b.value, 0);
   let battery = null;

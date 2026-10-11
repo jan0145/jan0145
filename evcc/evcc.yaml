@@ -9,6 +9,7 @@
 # Aanpassen:
 #   192.168.0.GGG  = IP-adres van de GoodWe   (3 keer)
 #   192.168.0.III  = IP-adres van de IoTaWatt (1 keer)
+#   192.168.0.LLL  = IP-adres van de laadpaal (2 keer)
 #   PV1 / PV2      = namen van de zonnepaneel-kanalen in de IoTaWatt
 
 interval: 30s
@@ -61,6 +62,28 @@ meters:
       uri: "http://192.168.0.III/query?select=[PV1.watts,PV2.watts]&begin=s-10s&end=s&group=all&format=json"
       jq: "[.[0][] | if . == null then 0 elif . < 0 then -. else . end] | add"
 
+  # Laadpaal RAEDIAN NEX via Modbus TCP: alleen uitlezen (laadvermogen en geladen energie).
+  # Bewust GEEN charger/loadpoint: dan zou evcc de laadpaal aansturen.
+  - name: laadpaal
+    type: custom
+    power:
+      source: modbus
+      uri: 192.168.0.LLL:502
+      id: 1
+      register:
+        address: 32796 # 0x801C laadvermogen (W)
+        type: holding
+        decode: uint32
+    energy:
+      source: modbus
+      uri: 192.168.0.LLL:502
+      id: 1
+      register:
+        address: 32798 # 0x801E geladen energie (Wh)
+        type: holding
+        decode: uint32
+      scale: 0.001
+
 site:
   title: Thuis
   meters:
@@ -69,3 +92,5 @@ site:
       - pv
     battery:
       - battery
+    ext:
+      - laadpaal # alleen tonen, telt niet mee in de regeling
