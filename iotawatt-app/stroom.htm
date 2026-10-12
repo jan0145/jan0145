@@ -848,8 +848,10 @@ async function evccHistory(from, to, aggregate, extra = '') {
     return out;
   } catch (e) { return null; } // oudere evcc zonder geschiedenis: gewoon zonder verder
 }
-// netto kWh van een slot: net + = afname, − = teruglevering; batterij + = ontladen, − = laden
+// netto kWh van een slot: net + = afname, − = teruglevering (evcc: energy = afname)
+// batterij + = ontladen, − = laden (evcc: energy = laden, returnEnergy = ontladen)
 const netKwh = (sl) => sl ? sl.e - sl.r : null;
+const batKwh = (sl) => sl ? sl.r - sl.e : null;
 function findSlot(map, t, tol) {
   if (!map) return null;
   if (map[t]) return map[t];
@@ -878,7 +880,7 @@ async function loadHist() {
       const g = ev && findSlot(ev.grid, q, 60), bt = ev && findSlot(ev.battery, q, 60), h = ev && findSlot(ev.home, q, 60);
       return { t: r.t, vals: {
         use: h ? h.e * 4000 : r.use, sun: r.sun,
-        grid: g ? netKwh(g) * 4000 : null, battery: bt ? netKwh(bt) * 4000 : null,
+        grid: g ? netKwh(g) * 4000 : null, battery: bt ? batKwh(bt) * 4000 : null,
       } };
     });
     hist.ev = ev;
@@ -892,7 +894,7 @@ async function loadHist() {
       + evccMeterNames().reduce((a, n) => { const sl = ev && findSlot(ev[n], r.t, 7200); return a + (sl ? sl.e * 1000 : 0); }, 0);
     const sun = suns.reduce((a, n) => a + (sunWh(n, r.v[n]) || 0), 0);
     const g = ev && findSlot(ev.grid, r.t, 7200), bt = ev && findSlot(ev.battery, r.t, 7200), h = ev && findSlot(ev.home, r.t, 7200);
-    return { t: r.t, vals: { use: h ? h.e * 1000 : use, sun, grid: g ? netKwh(g) * 1000 : null, battery: bt ? netKwh(bt) * 1000 : null } };
+    return { t: r.t, vals: { use: h ? h.e * 1000 : use, sun, grid: g ? netKwh(g) * 1000 : null, battery: bt ? batKwh(bt) * 1000 : null } };
   });
   hist.ev = ev;
 }
