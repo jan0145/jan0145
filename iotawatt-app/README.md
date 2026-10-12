@@ -41,6 +41,15 @@ Instellingen worden op de iPhone bewaard.
 **Let op:** zonder meting op de hoofdaansluiting is "Verbruik" de som van de groepen die je meet.
 Het vakje rechtsboven (overschot/tekort) is dan een schatting.
 
+## Geschiedenis
+
+- **Per groep en oudere dagen:** komt uit de IoTaWatt, die alle metingen jarenlang op zijn SD-kaart bewaart.
+- **Net, batterij, echt huisverbruik en de laadpaal:** komen uit **evcc** op de Synology. evcc bewaart
+  per kwartier hoeveel energie er van/naar het net en de batterij ging, wat het huis verbruikte en wat
+  de laadpaal leverde. Die geschiedenis begint op de dag dat evcc (en de laadpaal erin) draait.
+- In de grafiek betekent **negatief**: naar het net (teruglevering) of naar de batterij (laden).
+- **Laadsessies:** de app zoekt in de kwartierwaarden van de laadpaal wanneer de auto laadde en hoeveel.
+
 ## Uitproberen zonder IoTaWatt
 
 Open `stroom.htm?demo` in een browser, of vul `demo` in als adres bij ⚙︎.

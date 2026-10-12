@@ -207,8 +207,13 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .vhead h2 { font-size: 24px; margin: 0; letter-spacing: -.02em; }
 .row.tog { cursor: pointer; }
 .row.off .row-name, .row.off .row-val { opacity: .45; }
-.ck { width: 18px; height: 18px; border-radius: 50%; display: inline-block; vertical-align: -3px; margin-right: 8px;
-  box-shadow: 0 0 0 2px var(--text-3) inset; flex: none; }
+.ck { width: 20px; height: 20px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center;
+  vertical-align: -4px; margin-right: 8px; box-shadow: 0 0 0 2px var(--text-3) inset; flex: none;
+  color: #fff; font-size: 13px; font-weight: 700; line-height: 1; }
+.legend-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.legend-row .legend { margin-bottom: 0; flex-wrap: wrap; }
+.seg.small button { padding: 3px 10px; font-size: 13px; }
+.seg[hidden] { display: none; }
 .hint { font-size: 12px; color: var(--text-3); margin: -2px 0 6px; }
 .hint.warn { color: var(--bad); }
 
@@ -309,15 +314,28 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <span id="hLabel">Vandaag</span>
       <button id="hNext" aria-label="Volgende periode">›</button>
     </div>
-    <div class="legend">
-      <span><i style="background:var(--use)"></i>Verbruik</span>
-      <span><i style="background:var(--sun)"></i>Zon</span>
+    <div class="legend-row">
+      <div class="legend" id="hLegend">
+        <span><i style="background:var(--use)"></i>Verbruik</span>
+        <span><i style="background:var(--sun)"></i>Zon</span>
+      </div>
+      <div class="seg small" role="group" aria-label="Soort grafiek" id="hKind" hidden>
+        <button data-k="bars" aria-pressed="true" aria-label="Staven">▮▮</button>
+        <button data-k="lines" aria-pressed="false" aria-label="Lijnen">〰</button>
+      </div>
     </div>
     <div class="chart-wrap" id="chartWrap">
       <svg id="chart" role="img" aria-label="Verbruik en zonne-opbrengst"></svg>
       <div class="tip" id="tip"></div>
     </div>
     <div class="htot" id="hTot"></div>
+    <p class="hint" style="margin-top:6px">Negatief = naar het net of naar de batterij.</p>
+  </section>
+
+  <section class="card" id="sessCard" hidden>
+    <div class="card-head"><h2>🚗 Laadsessies</h2></div>
+    <div class="hint" id="sessTot"></div>
+    <ul class="rows" id="sessRows"></ul>
   </section>
 </main>
 
@@ -339,6 +357,12 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <button id="dNext" aria-label="Volgende periode">›</button>
     </div>
     <section class="card" id="dChartCard" hidden>
+      <div class="legend-row" style="justify-content:flex-end">
+        <div class="seg small" role="group" aria-label="Soort grafiek" id="dKind">
+          <button data-k="bars" aria-pressed="true" aria-label="Staven">▮▮</button>
+          <button data-k="lines" aria-pressed="false" aria-label="Lijnen">〰</button>
+        </div>
+      </div>
       <div class="chart-wrap" id="dChartWrap">
         <svg id="dchart" role="img" aria-label="Verbruik per toestel"></svg>
         <div class="tip" id="dtip"></div>
@@ -734,7 +758,7 @@ function renderTiles() {
 
 const PALETTE_N = 8;            // 8 vaste toestelkleuren; meer tegelijk is niet leesbaar
 const GROUP = { day: '1h', week: '1d', month: '1d' };
-const hist = { period: 'day', k: 0, rows: [], buckets: [] };
+const hist = { period: 'day', k: 0, buckets: [], ev: null };
 const dev = { mode: 'now', k: 0, buckets: [], totals: {}, warn: '' };
 
 const loadNames = () => seriesNames.filter((n) => seriesCfg(n).role === 'load');
@@ -786,38 +810,123 @@ async function queryWh(period, k, group, names) {
   return rows.map((row) => { const v = {}; names.forEach((n, j) => { v[n] = row[j + 1]; }); return { t: row[0], v }; });
 }
 
+/* ---------- eigen geschiedenis uit evcc (op de Synology, per kwartier bewaard) ---------- */
+
+// evcc slaat per kwartier de energie op van net, zon, batterij, huis en extra meters (laadpaal).
+// Dat is de geschiedenis die we zelf bijhouden; de IoTaWatt vult de groepen en oudere dagen aan.
+const evccBase = () => gwKind.kind === 'evcc' && gwKind.url ? gwKind.url : null;
+
+function unixRange(period, k) {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  let from, to;
+  if (period === 'day') { d.setDate(d.getDate() - k); from = new Date(d); to = new Date(d); to.setDate(to.getDate() + 1); }
+  else if (period === 'week') { d.setDate(d.getDate() - 7 * k - 6); from = new Date(d); to = new Date(d); to.setDate(to.getDate() + 7); }
+  else { d.setDate(1); d.setMonth(d.getMonth() - k); from = new Date(d); to = new Date(d); to.setMonth(to.getMonth() + 1); }
+  return [from.getTime() / 1000, Math.min(to.getTime() / 1000, Date.now() / 1000)];
+}
+const isoZ = (u) => new Date(u * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+
+// Antwoord: { 'grid': {t: {e, r}}, 'battery': …, 'home': …, 'pv': …, 'evcc:laadpaal': … } (kWh per slot)
+async function evccHistory(from, to, aggregate, extra = '') {
+  const b = evccBase();
+  if (!b) return null;
+  try {
+    let res = await getJson(`${b}/api/history/energy?from=${isoZ(from)}&to=${isoZ(to)}&aggregate=${aggregate}${extra}`);
+    if (res && res.result) res = res.result;
+    if (!Array.isArray(res)) return {};
+    const out = {};
+    res.forEach((ser) => {
+      const key = ser.group === 'meter' || ser.group === 'consumer' ? 'evcc:' + (ser.title || ser.group) : ser.group;
+      const map = out[key] = out[key] || {};
+      (ser.data || []).forEach((sl) => {
+        const t = Math.round(new Date(sl.start).getTime() / 1000);
+        const cur = map[t] || { e: 0, r: 0 };
+        cur.e += sl.energy || 0; cur.r += sl.returnEnergy || 0;
+        map[t] = cur;
+      });
+    });
+    return out;
+  } catch (e) { return null; } // oudere evcc zonder geschiedenis: gewoon zonder verder
+}
+// netto kWh van een slot: net + = afname, − = teruglevering; batterij + = ontladen, − = laden
+const netKwh = (sl) => sl ? sl.e - sl.r : null;
+function findSlot(map, t, tol) {
+  if (!map) return null;
+  if (map[t]) return map[t];
+  for (const k in map) if (Math.abs(k - t) <= tol) return map[k];
+  return null;
+}
+const evccMeterNames = () => (gw && gw.ext ? gw.ext.map((m) => 'evcc:' + m.name) : []);
+
+const MAIN_SERIES = [
+  { key: 'use', name: 'Verbruik', color: 'var(--use)' },
+  { key: 'sun', name: 'Zon', color: 'var(--sun)' },
+  { key: 'grid', name: 'Net', color: 'var(--c6)' },
+  { key: 'battery', name: 'Batterij', color: 'var(--c2)' },
+];
+
 async function loadHist() {
+  const [from, to] = unixRange(hist.period, hist.k);
   if (hist.period === 'day') {
-    if (hist.k === 0) hist.rows = dayRows;
-    else { const r = range('day', hist.k); hist.rows = await queryDayLine(r.begin, r.end, false); }
+    let rows;
+    if (hist.k === 0) rows = dayRows;
+    else { const r = range('day', hist.k); rows = await queryDayLine(r.begin, r.end, false); }
+    const ev = await evccHistory(from, to, '15m');
+    // 5-minutenpunten van de IoTaWatt (W); net/batterij/huis uit evcc per kwartier (kWh → gemiddeld W)
+    hist.buckets = rows.filter((r) => r.use !== null).map((r) => {
+      const q = Math.floor(r.t / 900) * 900;
+      const g = ev && findSlot(ev.grid, q, 60), bt = ev && findSlot(ev.battery, q, 60), h = ev && findSlot(ev.home, q, 60);
+      return { t: r.t, vals: {
+        use: h ? h.e * 4000 : r.use, sun: r.sun,
+        grid: g ? netKwh(g) * 4000 : null, battery: bt ? netKwh(bt) * 4000 : null,
+      } };
+    });
+    hist.ev = ev;
     return;
   }
   const loads = loadNames(), suns = solarNames();
   const rows = await queryWh(hist.period, hist.k, '1d', [...loads, ...suns]);
+  const ev = await evccHistory(from, to, 'day');
   hist.buckets = rows.map((r) => {
-    const use = loads.reduce((a, n) => a + (loadWh(n, r.v[n]) || 0), 0);
+    const use = loads.reduce((a, n) => a + (loadWh(n, r.v[n]) || 0), 0)
+      + evccMeterNames().reduce((a, n) => { const sl = ev && findSlot(ev[n], r.t, 7200); return a + (sl ? sl.e * 1000 : 0); }, 0);
     const sun = suns.reduce((a, n) => a + (sunWh(n, r.v[n]) || 0), 0);
-    return { t: r.t, vals: { use, sun } };
+    const g = ev && findSlot(ev.grid, r.t, 7200), bt = ev && findSlot(ev.battery, r.t, 7200), h = ev && findSlot(ev.home, r.t, 7200);
+    return { t: r.t, vals: { use: h ? h.e * 1000 : use, sun, grid: g ? netKwh(g) * 1000 : null, battery: bt ? netKwh(bt) * 1000 : null } };
   });
+  hist.ev = ev;
 }
 
 function renderHist() {
   document.querySelectorAll('#histSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === hist.period));
+  document.querySelectorAll('#hKind button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.k === chartKind()));
+  $('hKind').hidden = hist.period === 'day';
   $('hLabel').textContent = periodLabel(hist.period, hist.k);
   $('hNext').disabled = hist.k === 0;
-  let use = 0, sun = 0;
-  if (hist.period === 'day') {
-    renderChart();
-    hist.rows.forEach((r) => { if (r.use !== null) { use += r.use / 12; sun += r.sun / 12; } }); // 5 min = 1/12 u
-  } else {
-    drawBars($('chart'), hist.buckets, [
-      { key: 'use', name: 'Verbruik', color: 'var(--use)' },
-      { key: 'sun', name: 'Zon', color: 'var(--sun)' },
-    ], { stacked: false, period: hist.period });
-    hist.buckets.forEach((b) => { use += b.vals.use; sun += b.vals.sun; });
-  }
-  $('hTot').innerHTML = `<span>Verbruik <b>${txt(fmtEnergy(use))}</b></span><span>Zon <b>${txt(fmtEnergy(sun))}</b></span>`
-    + (hist.period !== 'day' || hist.k > 0 ? '<span>(gemeten groepen)</span>' : '');
+  const day = hist.period === 'day';
+  const has = (k) => hist.buckets.some((b) => typeof b.vals[k] === 'number');
+  const series = MAIN_SERIES.filter((s) => s.key === 'use' || s.key === 'sun' || has(s.key));
+  $('hLegend').innerHTML = series.map((s) => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
+  drawChart($('chart'), hist.buckets, series, day
+    ? { kind: 'lines', unit: 'W', period: 'day', t0: unixRange('day', hist.k)[0], area: 'use' }
+    : { kind: chartKind(), unit: 'Wh', period: hist.period });
+
+  // totalen (kWh); bij de dag: W-punten omrekenen naar energie
+  const f = day ? (b, i) => {
+    const nx = hist.buckets[i + 1]; const dt = Math.min(nx ? nx.t - b.t : 300, 900); return dt / 3600;
+  } : () => 1;
+  let use = 0, sun = 0, imp = 0, exp = 0, dis = 0, chg = 0;
+  hist.buckets.forEach((b, i) => {
+    const w = f(b, i), v = b.vals;
+    use += (v.use || 0) * w; sun += (v.sun || 0) * w;
+    if (typeof v.grid === 'number') { if (v.grid > 0) imp += v.grid * w; else exp -= v.grid * w; }
+    if (typeof v.battery === 'number') { if (v.battery > 0) dis += v.battery * w; else chg -= v.battery * w; }
+  });
+  const E = (x) => `<b>${txt(fmtEnergy(x))}</b>`;
+  $('hTot').innerHTML = `<span>Verbruik ${E(use)}</span><span>Zon ${E(sun)}</span>`
+    + (has('grid') ? `<span>Van net ${E(imp)}</span><span>Naar net ${E(exp)}</span>` : '')
+    + (has('battery') ? `<span>Batterij laden ${E(chg)}</span><span>ontladen ${E(dis)}</span>` : '')
+    + (has('grid') ? '' : '<span>(gemeten groepen)</span>');
 }
 
 async function changeHist(period, k) {
@@ -825,6 +934,38 @@ async function changeHist(period, k) {
   $('hLabel').textContent = periodLabel(hist.period, hist.k);
   try { await loadHist(); } catch (e) { showError(e); }
   renderHist();
+}
+
+const chartKind = () => config.chartKind === 'lines' ? 'lines' : 'bars';
+
+/* ---------- laadsessies van de auto (uit de evcc-geschiedenis van de laadpaal) ---------- */
+
+async function loadSessions() {
+  const names = evccMeterNames().filter((n) => /laad|charge|wallbox/i.test(n));
+  const card = $('sessCard');
+  if (!names.length || !evccBase()) { card.hidden = true; return; }
+  const to = Date.now() / 1000, from = to - 31 * 86400;
+  const ev = await evccHistory(from, to, '15m', '&group=meter');
+  if (!ev) { card.hidden = true; return; }
+  const map = ev[names[0]] || {};
+  const slots = Object.keys(map).map(Number).sort((a, b) => a - b).map((t) => ({ t, kwh: map[t].e }));
+  const sessions = [];
+  let cur = null;
+  slots.forEach((sl) => {
+    if (sl.kwh < 0.02) return;                              // minder dan 20 Wh in een kwartier = niet aan het laden
+    if (cur && sl.t - cur.end <= 1800) { cur.end = sl.t + 900; cur.kwh += sl.kwh; }
+    else { cur = { start: sl.t, end: sl.t + 900, kwh: sl.kwh }; sessions.push(cur); }
+  });
+  const list = sessions.filter((x) => x.kwh >= 0.3).reverse().slice(0, 12);
+  card.hidden = false;
+  const fmtT = (t) => new Date(t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  const fmtD = (t) => new Date(t * 1000).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+  const tot = list.reduce((a, x) => a + x.kwh, 0);
+  $('sessRows').innerHTML = list.length ? list.map((x) => `<li class="row"><div class="row-top">
+      <span class="row-name">${fmtD(x.start)} <span class="tag">${fmtT(x.start)}–${fmtT(x.end)}</span></span>
+      <span class="row-val num">${txt(fmtEnergy(x.kwh * 1000))}</span></div></li>`).join('')
+    : '<li class="empty">Nog geen laadsessies opgeslagen. evcc houdt ze bij vanaf het moment dat de laadpaal is toegevoegd.</li>';
+  $('sessTot').textContent = list.length ? `${list.length} sessies · ${txt(fmtEnergy(tot * 1000))} (laatste 31 dagen)` : '';
 }
 
 /* ---------- scherm per toestel ---------- */
@@ -848,11 +989,20 @@ function setVisible(n, on) {
   return true;
 }
 
+const devNames = () => [...loadNames(), ...evccMeterNames()];
+
 async function loadDev() {
   if (dev.mode === 'now') return;
-  const names = loadNames();
-  const rows = await queryWh(dev.mode, dev.k, GROUP[dev.mode], names);
-  dev.buckets = rows.map((r) => { const vals = {}; names.forEach((n) => { vals[n] = loadWh(n, r.v[n]); }); return { t: r.t, vals }; });
+  const names = devNames(), loads = loadNames(), evNames = evccMeterNames();
+  const rows = await queryWh(dev.mode, dev.k, GROUP[dev.mode], loads);
+  const [from, to] = unixRange(dev.mode, dev.k);
+  const ev = evNames.length ? await evccHistory(from, to, dev.mode === 'day' ? 'hour' : 'day', '&group=meter') : null;
+  dev.buckets = rows.map((r) => {
+    const vals = {};
+    loads.forEach((n) => { vals[n] = loadWh(n, r.v[n]); });
+    evNames.forEach((n) => { const sl = ev && findSlot(ev[n], r.t, dev.mode === 'day' ? 600 : 7200); vals[n] = sl ? sl.e * 1000 : (ev ? 0 : null); });
+    return { t: r.t, vals };
+  });
   dev.totals = {};
   names.forEach((n) => { dev.totals[n] = dev.buckets.reduce((a, b) => a + (b.vals[n] || 0), 0); });
   // eerste keer: de 5 grootste verbruikers tonen
@@ -873,7 +1023,7 @@ function rowHtml(it, total, fmt, opts = {}) {
   const neg = it.raw !== undefined && it.raw < -5;
   const tag = neg ? '⚠ negatief, tang/fase nakijken' : it.tag;
   const ck = opts.toggle
-    ? `<span class="ck" style="${it.on ? `background:var(--c${it.slot});box-shadow:none` : ''}" aria-hidden="true"></span>` : '';
+    ? `<span class="ck${it.on ? ' on' : ''}" style="${it.on ? `background:var(--c${it.slot});box-shadow:none` : ''}" aria-hidden="true">${it.on ? '✓' : ''}</span>` : '';
   const barColor = opts.toggle ? (it.on ? `background:var(--c${it.slot})` : 'background:var(--text-3)') : '';
   return `<li class="row${it.sun ? ' sun' : ''}${opts.toggle ? ' tog' : ''}${opts.toggle && !it.on ? ' off' : ''}"${it.name ? ` data-n="${esc(it.name)}"` : ''}${opts.toggle ? ` role="button" aria-pressed="${!!it.on}"` : ''}>
     <div class="row-top">
@@ -896,7 +1046,8 @@ function renderDev() {
   $('dListTitle').textContent = now ? 'Nu' : 'Totaal per toestel';
   $('dHint').hidden = now;
   $('dHint').className = 'hint' + (dev.warn ? ' warn' : '');
-  $('dHint').textContent = dev.warn || 'Tik op een toestel om het in de grafiek te tonen of te verbergen (max. 8).';
+  $('dHint').textContent = dev.warn || 'Vink een toestel aan om het in de grafiek te tonen (max. 8 tegelijk).';
+  $('dKind').hidden = now;
   const ul = $('dRows');
 
   if (now) {
@@ -916,7 +1067,7 @@ function renderDev() {
     return;
   }
 
-  const names = loadNames();
+  const names = devNames();
   const total = names.reduce((a, n) => a + (dev.totals[n] || 0), 0);
   const items = names.map((n) => ({ name: n, label: labelOf(n), value: dev.totals[n] || 0, on: isVisible(n), slot: slotOf(n),
     tag: isHeatPumpLike(n) ? '×' + nf2.format(seriesCfg(n).mult).replace(/,00$/, '') + ' geschat' : '' }));
@@ -924,7 +1075,8 @@ function renderDev() {
     || '<li class="empty">Geen gegevens voor deze periode.</li>';
 
   const series = names.filter(isVisible).map((n) => ({ key: n, name: labelOf(n), color: `var(--c${slotOf(n)})` }));
-  drawBars($('dchart'), dev.buckets, series, { stacked: true, period: dev.mode });
+  document.querySelectorAll('#dKind button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.k === chartKind()));
+  drawChart($('dchart'), dev.buckets, series, { kind: chartKind(), stacked: true, unit: 'Wh', period: dev.mode });
 }
 
 async function changeDev(mode, k) {
@@ -944,155 +1096,132 @@ function closeDevices() {
   document.body.style.overflow = '';
 }
 
-/* Staafgrafiek (gegroepeerd of gestapeld), waarden in Wh, één y-as. */
-function drawBars(svg, buckets, series, opt) {
+/* Grafiek met staven (gegroepeerd of gestapeld) of lijnen, één y-as, ook negatieve waarden.
+   buckets: [{ t, vals: { key: waarde } }]  series: [{ key, name, color }]
+   opt: { kind: 'bars'|'lines', stacked, unit: 'Wh'|'W', period, t0 (tijd-as voor één dag), area } */
+function drawChart(svg, buckets, series, opt) {
   const W = svg.clientWidth || 340, H = 210;
-  const m = { l: 40, r: 8, t: 20, b: 22 };
+  const m = { l: 42, r: 8, t: 20, b: 22 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const val = (b, k) => b.vals[k] || 0;
-  const peak = Math.max(0, ...buckets.map((b) => opt.stacked
-    ? series.reduce((a, s) => a + val(b, s.key), 0)
-    : Math.max(0, ...series.map((s) => val(b, s.key)))));
-  const step = niceStep(Math.max(peak, 100) * 1.1 / 4);
-  const yMax = Math.ceil(Math.max(peak, 100) * 1.1 / step) * step;
-  const y = (v) => m.t + ih - v / yMax * ih;
+  const val = (b, k) => { const v = b.vals[k]; return typeof v === 'number' && isFinite(v) ? v : null; };
+  const stacked = opt.kind === 'bars' && opt.stacked;
+  let hi = 0, lo = 0;
+  buckets.forEach((b) => {
+    if (stacked) {
+      let p = 0, n = 0; series.forEach((s) => { const v = val(b, s.key) || 0; if (v > 0) p += v; else n += v; });
+      hi = Math.max(hi, p); lo = Math.min(lo, n);
+    } else series.forEach((s) => { const v = val(b, s.key); if (v !== null) { hi = Math.max(hi, v); lo = Math.min(lo, v); } });
+  });
+  const floor = opt.unit === 'W' ? 500 : 100;
+  const step = niceStep(Math.max(hi - lo, floor) * 1.1 / 4);
+  const yMax = Math.max(step, Math.ceil(hi * 1.05 / step) * step);
+  const yMin = lo < 0 ? Math.floor(lo * 1.05 / step) * step : 0;
+  const y = (v) => m.t + (yMax - v) / (yMax - yMin) * ih;
   const n = Math.max(1, buckets.length), band = iw / n;
-  const kwh = (v) => { const x = v / 1000; return x === 0 ? '0' : (x < 1 ? nf2 : x < 10 ? nf1 : nf0).format(x).replace(/,0+$/, ''); };
+  const timeAxis = opt.t0 !== undefined;
+  const xt = (t) => m.l + (t - opt.t0) / 86400 * iw;
+  const xc = (i) => timeAxis ? xt(buckets[i].t) : m.l + (i + .5) * band;
+  const lab = opt.unit === 'W'
+    ? (v) => Math.abs(v) >= 1000 ? nf1.format(v / 1000).replace(',0', '') + 'k' : nf0.format(v)
+    : (v) => { const x = v / 1000; return x === 0 ? '0' : (Math.abs(x) < 1 ? nf2 : Math.abs(x) < 10 ? nf1 : nf0).format(x).replace(/,0+$/, ''); };
 
   let g = '';
-  for (let v = 0; v <= yMax + 1e-9; v += step) {
-    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
-    g += `<text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${kwh(v)}</text>`;
+  for (let v = yMin; v <= yMax + 1e-9; v += step) {
+    const zero = Math.abs(v) < 1e-9;
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${zero ? 'var(--text-3)' : 'var(--grid)'}" stroke-width="1"/>`;
+    g += `<text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${lab(v)}</text>`;
   }
-  g += `<text class="axis" x="0" y="10">kWh</text>`;
-  const every = Math.ceil(n / 8);
-  buckets.forEach((b, i) => {
-    const x0 = m.l + i * band;
-    if (i % every === 0) g += `<text class="axis num" x="${x0 + band / 2}" y="${H - 4}" text-anchor="middle">${bucketLabel(opt.period, b.t)}</text>`;
-    const inner = Math.max(2, band * .72), pad = (band - inner) / 2;
-    if (opt.stacked) {
-      let acc = 0;
-      const vis = series.filter((s) => val(b, s.key) > 0);
-      vis.forEach((s, si) => {
-        const v = val(b, s.key), y1 = y(acc + v), y0 = y(acc);
-        const h = Math.max(0, y0 - y1 - (si < vis.length - 1 ? 1.5 : 0)); // klein spleetje tussen segmenten
-        g += `<rect x="${(x0 + pad).toFixed(1)}" y="${y1.toFixed(1)}" width="${inner.toFixed(1)}" height="${h.toFixed(1)}" rx="${si === vis.length - 1 ? 2 : 0}" fill="${s.color}"/>`;
-        acc += v;
-      });
-    } else {
-      const w = Math.max(1, (inner - 2) / series.length);
-      series.forEach((s, si) => {
-        const v = val(b, s.key);
-        g += `<rect x="${(x0 + pad + si * (w + 2)).toFixed(1)}" y="${y(v).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0, y(0) - y(v)).toFixed(1)}" rx="2" fill="${s.color}"/>`;
-      });
+  g += `<text class="axis" x="0" y="10">${opt.unit === 'W' ? 'W' : 'kWh'}</text>`;
+  if (timeAxis) {
+    for (let h = 0; h <= 24; h += 6) {
+      g += `<text class="axis num" x="${xt(opt.t0 + h * 3600)}" y="${H - 4}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${String(h).padStart(2, '0')}:00</text>`;
     }
-  });
+  } else {
+    const every = Math.ceil(n / 8);
+    buckets.forEach((b, i) => { if (i % every === 0) g += `<text class="axis num" x="${xc(i)}" y="${H - 4}" text-anchor="middle">${bucketLabel(opt.period, b.t)}</text>`; });
+  }
+
+  if (opt.kind === 'bars') {
+    buckets.forEach((b, i) => {
+      const x0 = m.l + i * band, inner = Math.max(2, band * .72), pad = (band - inner) / 2;
+      if (stacked) {
+        let up = 0, down = 0;
+        series.forEach((s) => {
+          const v = val(b, s.key) || 0; if (!v) return;
+          const a = v > 0 ? up : down, z = a + v;
+          if (v > 0) up = z; else down = z;
+          const y1 = Math.min(y(a), y(z)), h = Math.max(0, Math.abs(y(a) - y(z)) - 1.5);
+          g += `<rect x="${(x0 + pad).toFixed(1)}" y="${(v > 0 ? y1 + 1.5 : y1).toFixed(1)}" width="${inner.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${s.color}"/>`;
+        });
+      } else {
+        const w = Math.max(1, (inner - 2 * (series.length - 1)) / series.length);
+        series.forEach((s, si) => {
+          const v = val(b, s.key); if (v === null) return;
+          g += `<rect x="${(x0 + pad + si * (w + 2)).toFixed(1)}" y="${Math.min(y(0), y(v)).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.abs(y(0) - y(v)).toFixed(1)}" rx="1.5" fill="${s.color}"/>`;
+        });
+      }
+    });
+  } else {
+    series.forEach((s) => {
+      let d = '', pen = false;
+      buckets.forEach((b, i) => {
+        const v = val(b, s.key);
+        if (v === null) { pen = false; return; }
+        d += (pen ? 'L' : 'M') + xc(i).toFixed(1) + ',' + y(v).toFixed(1); pen = true;
+      });
+      if (!d) return;
+      if (opt.area === s.key) {
+        const pts = buckets.map((b, i) => [i, val(b, s.key)]).filter(([, v]) => v !== null);
+        g += `<path d="${d}L${xc(pts[pts.length - 1][0]).toFixed(1)},${y(0)}L${xc(pts[0][0]).toFixed(1)},${y(0)}Z" fill="var(--use-soft)"/>`;
+      }
+      g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    });
+  }
   if (!buckets.length) g += `<text class="axis" x="${m.l + iw / 2}" y="${m.t + ih / 2}" text-anchor="middle">Geen gegevens</text>`;
-  g += `<rect id="${svg.id}-hl" x="0" y="${m.t}" width="${band}" height="${ih}" fill="var(--text)" opacity=".06" visibility="hidden"/>`;
+  g += opt.kind === 'bars'
+    ? `<rect id="${svg.id}-hl" x="0" y="${m.t}" width="${band}" height="${ih}" fill="var(--text)" opacity=".06" visibility="hidden"/>`
+    : `<line id="${svg.id}-hl" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="var(--text-3)" stroke-width="1" visibility="hidden"/>`;
   svg.innerHTML = g;
-  svg._bars = { buckets, series, m, band, opt, kind: 'bars' };
-  svg._scale = null;
+  svg._chart = { buckets, series, m, band, opt, xc, y };
 }
 
-function barsHover(svg, tip, ev) {
-  const sc = svg._bars;
+const SIGN_HINT = { grid: ['afname', 'teruglevering'], battery: ['ontladen', 'laden'] };
+function chartPointer(svg, tip, ev) {
+  const sc = svg._chart;
   if (!sc || !sc.buckets.length) return;
   const rect = svg.getBoundingClientRect();
   const px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
-  const i = Math.min(sc.buckets.length - 1, Math.max(0, Math.floor((px - sc.m.l) / sc.band)));
-  const b = sc.buckets[i];
+  let i = 0, bd = Infinity;
+  sc.buckets.forEach((b, j) => { const d = Math.abs(sc.xc(j) - px); if (d < bd) { bd = d; i = j; } });
+  const b = sc.buckets[i], cx = sc.xc(i);
   const hl = document.getElementById(svg.id + '-hl');
-  hl.setAttribute('x', sc.m.l + i * sc.band); hl.setAttribute('visibility', 'visible');
-  const parts = sc.series.filter((s) => (b.vals[s.key] || 0) > 0 || !sc.opt.stacked)
-    .sort((a, c) => (b.vals[c.key] || 0) - (b.vals[a.key] || 0))
-    .map((s) => `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:4px"></span>${esc(s.name)} <b>${txt(fmtEnergy(b.vals[s.key] || 0))}</b>`);
-  tip.innerHTML = `<div style="margin-bottom:2px">${bucketTitle(sc.opt.period, b.t)}</div>` + (parts.join('<br>') || 'niets');
-  tip.style.whiteSpace = 'normal';
+  if (sc.opt.kind === 'bars') hl.setAttribute('x', sc.m.l + i * sc.band); else { hl.setAttribute('x1', cx); hl.setAttribute('x2', cx); }
+  hl.setAttribute('visibility', 'visible');
+  const fmt = sc.opt.unit === 'W' ? fmtPower : fmtEnergy;
+  const title = sc.opt.t0 !== undefined ? new Date(b.t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : bucketTitle(sc.opt.period, b.t);
+  const parts = sc.series.filter((s) => typeof b.vals[s.key] === 'number' && (!sc.opt.stacked || b.vals[s.key]))
+    .sort((a, c) => Math.abs(b.vals[c.key]) - Math.abs(b.vals[a.key]))
+    .map((s) => {
+      const v = b.vals[s.key], h = SIGN_HINT[s.key];
+      return `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:4px"></span>${esc(s.name)} <b>${txt(fmt(v))}</b>${h && Math.abs(v) > 1 ? ` <span style="opacity:.7">${v > 0 ? h[0] : h[1]}</span>` : ''}`;
+    });
+  tip.innerHTML = `<div style="margin-bottom:2px">${title}</div>` + (parts.join('<br>') || 'niets');
+  tip.style.whiteSpace = 'nowrap';
   tip.classList.add('on');
   const w = tip.offsetWidth;
-  const cx = sc.m.l + (i + .5) * sc.band;
   tip.style.left = Math.min(rect.width - w / 2, Math.max(w / 2, cx)) + 'px';
   tip.style.top = '0px'; // binnen de grafiek, zodat de knoppen erboven bereikbaar blijven
 }
-function barsLeave(svg, tip) {
+function chartOut(svg, tip) {
   tip.classList.remove('on');
   const hl = document.getElementById(svg.id + '-hl'); if (hl) hl.setAttribute('visibility', 'hidden');
-}
-
-/* Grafiek: verbruik (vlak) en zon (lijn) over de hele dag, één y-as. */
-function renderChart() {
-  const svg = $('chart');
-  const W = svg.clientWidth || 340, H = 210;
-  const m = { l: 40, r: 8, t: 8, b: 22 };
-  const iw = W - m.l - m.r, ih = H - m.t - m.b;
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-
-  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - hist.k);
-  const t0 = start.getTime() / 1000, t1 = t0 + 86400;
-  const pts = (hist.k === 0 ? dayRows : hist.rows).filter((r) => r.use !== null);
-  svg._bars = null;
-  const maxV = Math.max(500, ...pts.map((r) => Math.max(r.use, r.sun))) * 1.1;
-  const step = niceStep(maxV / 4);
-  const yMax = Math.ceil(maxV / step) * step;
-  const x = (t) => m.l + (t - t0) / (t1 - t0) * iw;
-  const y = (v) => m.t + ih - v / yMax * ih;
-
-  let g = '';
-  for (let v = 0; v <= yMax + 1e-9; v += step) {
-    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
-    g += `<text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v >= 1000 ? nf1.format(v / 1000).replace(',0', '') + 'k' : nf0.format(v)}</text>`;
-  }
-  for (let h = 0; h <= 24; h += 6) {
-    const tx = x(t0 + h * 3600);
-    g += `<text class="axis num" x="${tx}" y="${H - 4}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${String(h).padStart(2, '0')}:00</text>`;
-  }
-
-  if (pts.length > 1) {
-    const line = (key) => pts.map((r, i) => (i ? 'L' : 'M') + x(r.t).toFixed(1) + ',' + y(r[key]).toFixed(1)).join('');
-    const area = line('use') + `L${x(pts[pts.length - 1].t).toFixed(1)},${y(0)}L${x(pts[0].t).toFixed(1)},${y(0)}Z`;
-    g += `<path d="${area}" fill="var(--use-soft)"/>`;
-    g += `<path d="${line('use')}" fill="none" stroke="var(--use)" stroke-width="2" stroke-linejoin="round"/>`;
-    g += `<path d="${line('sun')}" fill="none" stroke="var(--sun)" stroke-width="2" stroke-linejoin="round"/>`;
-  }
-  g += `<line id="xh" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="var(--text-3)" stroke-width="1" visibility="hidden"/>`;
-  g += `<circle id="dUse" r="4" fill="var(--use)" stroke="var(--card)" stroke-width="2" visibility="hidden"/>`;
-  g += `<circle id="dSun" r="4" fill="var(--sun)" stroke="var(--card)" stroke-width="2" visibility="hidden"/>`;
-  svg.innerHTML = g;
-  svg._scale = { x, y, pts, m, iw };
 }
 
 function niceStep(raw) {
   const p = Math.pow(10, Math.floor(Math.log10(raw)));
   const f = raw / p;
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
-}
-
-function chartHover(ev) {
-  const svg = $('chart'), sc = svg._scale;
-  if (svg._bars) return barsHover(svg, $('tip'), ev);
-  if (!sc || sc.pts.length < 2) return;
-  $('tip').style.whiteSpace = 'nowrap';
-  const rect = svg.getBoundingClientRect();
-  const px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
-  let best = sc.pts[0], bd = Infinity;
-  for (const r of sc.pts) { const d = Math.abs(sc.x(r.t) - px); if (d < bd) { bd = d; best = r; } }
-  const cx = sc.x(best.t);
-  const xh = $('xh'); xh.setAttribute('x1', cx); xh.setAttribute('x2', cx); xh.setAttribute('visibility', 'visible');
-  const du = $('dUse'); du.setAttribute('cx', cx); du.setAttribute('cy', sc.y(best.use)); du.setAttribute('visibility', 'visible');
-  const ds = $('dSun'); ds.setAttribute('cx', cx); ds.setAttribute('cy', sc.y(best.sun)); ds.setAttribute('visibility', 'visible');
-  const tip = $('tip');
-  const time = new Date(best.t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
-  tip.innerHTML = `${time} · Verbruik <b>${txt(fmtPower(best.use))}</b> · Zon <b>${txt(fmtPower(best.sun))}</b>`;
-  tip.classList.add('on');
-  const half = tip.offsetWidth / 2;
-  tip.style.left = Math.min(rect.width - half, Math.max(half, cx)) + 'px';
-  tip.style.top = '-30px';
-}
-function chartLeave() {
-  if ($('chart')._bars) return barsLeave($('chart'), $('tip'));
-  $('tip').classList.remove('on');
-  ['xh', 'dUse', 'dSun'].forEach((id) => { const el = $(id); if (el) el.setAttribute('visibility', 'hidden'); });
 }
 
 function showError(e) {
@@ -1129,6 +1258,7 @@ async function tickDay() {
     renderTiles();
     if (hist.k === 0) await loadHist();
     renderHist();
+    loadSessions().catch(() => {});
     if (!$('devView').hidden && dev.mode !== 'now' && dev.k === 0) { await loadDev(); renderDev(); }
   } catch (e) { showError(e); }
 }
@@ -1181,7 +1311,7 @@ function saveSettings() {
   config.gw = $('gwInput').value.trim();
   saveConfig();
   closeSettings();
-  if (hostChanged) { seriesNames = []; live = null; today = null; dayRows = []; hist.rows = []; hist.buckets = []; start(); }
+  if (hostChanged) { seriesNames = []; live = null; today = null; dayRows = []; hist.buckets = []; start(); }
   else { tickLive().then(tickDay); }
 }
 
@@ -1298,17 +1428,20 @@ $('dRows').addEventListener('click', (ev) => {
   renderDev();
 });
 const dw = $('dChartWrap');
-dw.addEventListener('pointermove', (e) => barsHover($('dchart'), $('dtip'), e));
-dw.addEventListener('pointerdown', (e) => barsHover($('dchart'), $('dtip'), e));
-dw.addEventListener('pointerleave', () => barsLeave($('dchart'), $('dtip')));
+dw.addEventListener('pointermove', (e) => chartPointer($('dchart'), $('dtip'), e));
+dw.addEventListener('pointerdown', (e) => chartPointer($('dchart'), $('dtip'), e));
+dw.addEventListener('pointerleave', () => chartOut($('dchart'), $('dtip')));
+document.querySelectorAll('#hKind button, #dKind button').forEach((b) => {
+  b.onclick = () => { config.chartKind = b.dataset.k; saveConfig(); renderHist(); renderDev(); };
+});
 $('openSettings').onclick = openSettings;
 $('cancelSettings').onclick = closeSettings;
 $('sheetBg').onclick = closeSettings;
 $('saveSettings').onclick = saveSettings;
 const cw = $('chartWrap');
-cw.addEventListener('pointermove', chartHover);
-cw.addEventListener('pointerdown', chartHover);
-cw.addEventListener('pointerleave', chartLeave);
+cw.addEventListener('pointermove', (e) => chartPointer($('chart'), $('tip'), e));
+cw.addEventListener('pointerdown', (e) => chartPointer($('chart'), $('tip'), e));
+cw.addEventListener('pointerleave', () => chartOut($('chart'), $('tip')));
 window.addEventListener('resize', () => { renderHist(); renderDev(); });
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
 
