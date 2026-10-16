@@ -510,7 +510,7 @@ const select = (cols) => '[' + cols.join(',') + ']';
 
 let gwKind = { url: null, kind: null };
 // Alleen de velden die de app nodig heeft (sneller op een trage NAS).
-const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext}';
+const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext, loadpoints: [.loadpoints[]? | {title, chargePower, mode, connected, charging}]}';
 
 // Naar een ander apparaat: geen cache-optie meegeven (Safari stuurt dan een extra
 // CORS-voorvraag die evcc niet kent), maar de cache omzeilen met een tijdstempel.
@@ -533,6 +533,10 @@ function fromEvcc(raw) {
   if (grid === undefined || bat.power === undefined) throw new Error('geen net- of batterijgegevens in evcc');
   // extra meters (bv. de laadpaal) die evcc alleen uitleest
   const ext = Array.isArray(d.ext) ? d.ext.filter((m) => m && typeof m.power === 'number').map((m) => ({ name: m.name || 'extra', power: m.power })) : [];
+  // laadpunten die evcc aanstuurt (de laadpaal): hun laadvermogen telt als gemeten verbruik
+  (Array.isArray(d.loadpoints) ? d.loadpoints : []).forEach((lp, i) => {
+    if (lp && typeof lp.chargePower === 'number') ext.push({ name: lp.title || 'Laadpaal ' + (i + 1), power: lp.chargePower, lp: { mode: lp.mode, connected: lp.connected, charging: lp.charging } });
+  });
   return { ok: true, grid_w: grid, battery_w: bat.power, battery_soc: bat.soc === undefined ? null : bat.soc, ext };
 }
 
@@ -851,7 +855,7 @@ async function evccHistory(from, to, aggregate, extra = '') {
     if (!Array.isArray(res)) return {};
     const out = {};
     res.forEach((ser) => {
-      const key = ser.group === 'meter' || ser.group === 'consumer' ? 'evcc:' + (ser.title || ser.group) : ser.group;
+      const key = ['meter', 'consumer', 'loadpoint'].includes(ser.group) ? 'evcc:' + (ser.title || ser.group) : ser.group;
       const map = out[key] = out[key] || {};
       (ser.data || []).forEach((sl) => {
         const t = Math.round(new Date(sl.start).getTime() / 1000);
@@ -962,7 +966,17 @@ async function loadSessions() {
   const card = $('sessCard');
   if (!names.length || !evccBase()) { card.hidden = true; return; }
   const to = Date.now() / 1000, from = to - 31 * 86400;
-  const ev = await evccHistory(from, to, '15m', '&group=meter');
+  // evcc houdt zelf laadsessies bij zodra het de laadpaal aanstuurt (met kWh, duur en prijs)
+  try {
+    let ss = await getJson(evccBase() + '/api/sessions');
+    if (ss && ss.result) ss = ss.result;
+    if (Array.isArray(ss) && ss.length) { renderSessions(ss.map((x) => ({
+      start: new Date(x.created).getTime() / 1000, end: new Date(x.finished).getTime() / 1000,
+      kwh: x.chargedEnergy || 0, price: typeof x.price === 'number' ? x.price : null,
+      solar: typeof x.solarPercentage === 'number' ? x.solarPercentage : null,
+    })).filter((x) => x.start >= from)); return; }
+  } catch (e) { /* oudere evcc of nog geen sessies: afleiden uit de kwartierwaarden */ }
+  const ev = await evccHistory(from, to, '15m');
   if (!ev) { card.hidden = true; return; }
   const map = ev[names[0]] || {};
   const slots = Object.keys(map).map(Number).sort((a, b) => a - b).map((t) => ({ t, kwh: map[t].e }));
@@ -973,14 +987,19 @@ async function loadSessions() {
     if (cur && sl.t - cur.end <= 1800) { cur.end = sl.t + 900; cur.kwh += sl.kwh; }
     else { cur = { start: sl.t, end: sl.t + 900, kwh: sl.kwh }; sessions.push(cur); }
   });
-  const list = sessions.filter((x) => x.kwh >= 0.3).reverse().slice(0, 12);
+  renderSessions(sessions);
+}
+
+function renderSessions(sessions) {
+  const card = $('sessCard');
+  const list = sessions.filter((x) => x.kwh >= 0.3).sort((a, b) => b.start - a.start).slice(0, 12);
   card.hidden = false;
   const fmtT = (t) => new Date(t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
   const fmtD = (t) => new Date(t * 1000).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
   const tot = list.reduce((a, x) => a + x.kwh, 0);
   $('sessRows').innerHTML = list.length ? list.map((x) => `<li class="row"><div class="row-top">
       <span class="row-name">${fmtD(x.start)} <span class="tag">${fmtT(x.start)}–${fmtT(x.end)}</span></span>
-      <span class="row-val num">${txt(fmtEnergy(x.kwh * 1000))}</span></div></li>`).join('')
+      <span class="row-val num">${txt(fmtEnergy(x.kwh * 1000))}${x.price !== null && x.price !== undefined ? `<span class="pct">€ ${nf2.format(x.price)}</span>` : ''}${x.solar ? `<span class="pct">☀︎ ${nf0.format(x.solar)}%</span>` : ''}</span></div></li>`).join('')
     : '<li class="empty">Nog geen laadsessies opgeslagen. evcc houdt ze bij vanaf het moment dat de laadpaal is toegevoegd.</li>';
   $('sessTot').textContent = list.length ? `${list.length} sessies · ${txt(fmtEnergy(tot * 1000))} (laatste 31 dagen)` : '';
 }
@@ -1013,7 +1032,7 @@ async function loadDev() {
   const names = devNames(), loads = loadNames(), evNames = evccMeterNames();
   const rows = await queryWh(dev.mode, dev.k, GROUP[dev.mode], loads);
   const [from, to] = unixRange(dev.mode, dev.k);
-  const ev = evNames.length ? await evccHistory(from, to, dev.mode === 'day' ? 'hour' : 'day', '&group=meter') : null;
+  const ev = evNames.length ? await evccHistory(from, to, dev.mode === 'day' ? 'hour' : 'day') : null;
   dev.buckets = rows.map((r) => {
     const vals = {};
     loads.forEach((n) => { vals[n] = loadWh(n, r.v[n]); });

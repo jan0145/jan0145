@@ -1,8 +1,21 @@
-# evcc op de Synology DS214 – alleen uitlezen
+# evcc op de Synology DS214 – overstap van EVA naar evcc
 
-evcc leest je GoodWe (netmeter + batterij) via Modbus TCP en je zonnepanelen via de
-IoTaWatt. **De configuratie kan niets aansturen**: er staat geen enkele schrijfopdracht in,
-dus EVA blijft de batterij beheren.
+evcc leest je P1-meter (net), je GoodWe (batterij) en je zonnepanelen (via de IoTaWatt).
+We nemen de taken van EVA stap voor stap over:
+
+| Stap | Wat | Status |
+|---|---|---|
+| 1 | **Laadpaal (RAEDIAN) + kwartierpiek begrenzen** | in `evcc.yaml` |
+| 2 | Dynamisch tarief (laden en batterij op goedkope uren) | leverancier nodig |
+| 3 | Batterij (GoodWe) van EVA naar evcc | daarna EVA uitschakelen |
+| 4 | Warmtepomp (Panasonic via HeishaMon): sanitair water op zonne-overschot | wacht op HeishaMon |
+| 5 | SolarEdge rechtstreeks via Modbus TCP | wacht op installateur |
+
+**Stap 1 – kwartierpiek:** de `circuit` "aansluiting" bewaakt het vermogen op de P1-meter.
+Komt het huis + de auto boven `maxPower`, dan verlaagt evcc de laadstroom van de laadpaal
+(en pauzeert het laden als zelfs 6 A te veel is). Kies `maxPower` gelijk aan de kwartierpiek
+die je niet wilt overschrijden. De batterij wordt in stap 1 nog niet aangestuurd: EVA blijft die beheren.
+In het evcc-scherm zet je bij **Laadpaal → ⚙︎** de min. stroom op 6 A en de max. op 16 A.
 
 Je DS214 (DSM 6.2, ARM 32-bit, geen Docker) draait evcc als los programma via de Task Scheduler.
 

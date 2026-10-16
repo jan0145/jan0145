@@ -1,10 +1,10 @@
-# evcc – alleen uitlezen (read-only)
+# evcc-configuratie (overstap EVA → evcc, stap 1)
 #
 # Deze configuratie LEEST de P1-meter (net), de GoodWe (batterij) en de zonnepanelen via de IoTaWatt.
-# Er staat bewust geen enkele schrijfopdracht in: de GoodWe wordt niet via het
-# standaard-sjabloon "goodwe-hybrid" gekoppeld (dat kan de batterij en de
-# teruglevering aansturen), maar via losse registers die evcc enkel kan lezen.
-# EVA blijft dus de baas over de batterij.
+# De GoodWe (batterij) wordt NIET via het standaard-sjabloon "goodwe-hybrid"
+# gekoppeld (dat kan de batterij aansturen), maar via losse registers die evcc
+# enkel kan lezen: EVA blijft voorlopig de baas over de batterij.
+# De laadpaal wordt wel door evcc aangestuurd (onderaan, stap 1).
 #
 # Aanpassen:
 #   192.168.0.GGG  = IP-adres van de GoodWe   (2 keer)
@@ -57,20 +57,6 @@ meters:
       uri: "http://192.168.0.III/query?select=[PV1.watts,PV2.watts]&begin=s-10s&end=s&group=all&format=json"
       jq: "[.[0][] | if . == null then 0 elif . < 0 then -. else . end] | add"
 
-  # Laadpaal RAEDIAN NEX via Modbus TCP: alleen uitlezen (laadvermogen).
-  # Geen energieteller: die van de laadpaal begint per sessie opnieuw; evcc rekent de kWh zelf uit.
-  # Bewust GEEN charger/loadpoint: dan zou evcc de laadpaal aansturen.
-  - name: laadpaal
-    type: custom
-    power:
-      source: modbus
-      uri: 192.168.0.LLL:502
-      id: 1
-      register:
-        address: 32796 # 0x801C laadvermogen (W)
-        type: holding
-        decode: uint32
-
 site:
   title: Thuis
   meters:
@@ -79,5 +65,35 @@ site:
       - pv
     battery:
       - battery
-    ext:
-      - laadpaal # alleen tonen, telt niet mee in de regeling
+
+# ---------------------------------------------------------------------------
+# STAP 1 van de overstap EVA → evcc: de laadpaal + kwartierpiek-grens
+# ---------------------------------------------------------------------------
+
+# Laadpaal RAEDIAN NEX via Modbus TCP. evcc STUURT deze laadpaal aan
+# (starten/stoppen en laadstroom), de batterij blijft voorlopig bij EVA.
+chargers:
+  - name: raedian
+    type: template
+    template: raedian
+    modbus: tcpip
+    host: 192.168.0.LLL
+    port: 502
+    id: 1
+
+# Kwartierpiek beperken: evcc kijkt naar de P1-meter (grid) en laat de auto
+# nooit zo snel laden dat het hele huis samen boven maxPower uitkomt.
+# Het capaciteitstarief rekent met het gemiddelde per kwartier, dus als het
+# vermogen nooit boven de grens gaat, gaat ook je kwartierpiek er niet boven.
+circuits:
+  - name: aansluiting
+    title: Kwartierpiek-grens
+    meter: grid
+    maxPower: 5000 # W  <-- je gewenste maximale kwartierpiek (bv. 4000-6000)
+
+loadpoints:
+  - title: Laadpaal
+    charger: raedian
+    circuit: aansluiting
+    mode: now      # "Snel": laden zodra de auto ingeplugd is, maar binnen de grens
+    # Min. en max. laadstroom (6 A / 16 A) stel je in het evcc-scherm in: Laadpaal → ⚙︎.

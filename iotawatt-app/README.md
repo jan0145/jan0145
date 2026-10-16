@@ -55,7 +55,8 @@ het gemiddelde van het lopende kwartier, je hoogste kwartier van deze maand, en 
   per kwartier hoeveel energie er van/naar het net en de batterij ging, wat het huis verbruikte en wat
   de laadpaal leverde. Die geschiedenis begint op de dag dat evcc (en de laadpaal erin) draait.
 - In de grafiek betekent **negatief**: naar het net (teruglevering) of naar de batterij (laden).
-- **Laadsessies:** de app zoekt in de kwartierwaarden van de laadpaal wanneer de auto laadde en hoeveel.
+- **Laadsessies:** sinds evcc de laadpaal aanstuurt, bewaart evcc elke laadbeurt (kWh, duur, % zon en,
+  met een dynamisch tarief, de prijs). Oudere beurten zoekt de app in de kwartierwaarden van de laadpaal.
 
 ## Uitproberen zonder IoTaWatt
 
