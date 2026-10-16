@@ -126,6 +126,9 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 16px; }
 .tiles.four { grid-template-columns: 1fr 1fr; }
 .tile[hidden] { display: none; }
+.tile.wide { grid-column: 1 / -1; }
+.tile.peak-warn { background: var(--warn-bg); }
+.tile.peak-bad { background: var(--bad-bg); }
 .tile {
   background: var(--card); border-radius: 16px; padding: 12px;
   box-shadow: 0 0 0 1px var(--line) inset; min-width: 0;
@@ -290,6 +293,12 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="val num" id="tBat">–</div>
       <div class="sub" id="tBatSub">&nbsp;</div>
     </div>
+    <div class="tile wide" id="tPeakTile" hidden>
+      <div class="lbl" id="tPeakLbl">Kwartierpiek</div>
+      <div class="val num" id="tPeak">–</div>
+      <div class="sub" id="tPeakSub">&nbsp;</div>
+      <div class="bar" id="tPeakBar" style="margin-top:8px"><i></i></div>
+    </div>
   </section>
 
   <button class="navcard" id="openDevices">
@@ -395,6 +404,10 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <input class="field" id="gwInput" placeholder="bv. http://192.168.0.159:7070" autocapitalize="off" autocorrect="off" spellcheck="false">
     <p class="help">Adres van evcc (poort 7070) of van de GoodWe-brug (poort 8765) op je Synology. Daarmee kent de app het netverbruik over alle drie de fasen en de batterij, en berekent hij zelf wat er niet gemeten wordt. Leeg = uit.</p>
 
+    <h3>P1-meter (optioneel)</h3>
+    <input class="field" id="p1Input" placeholder="bv. http://192.168.0.124" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="help">HomeWizard P1-meter met "Lokale API" aan. Geeft het exacte netverbruik en je kwartierpiek (capaciteitstarief). Leeg = uit.</p>
+
     <h3>Kanalen</h3>
     <p class="help" style="margin:0 0 8px">Geef elk kanaal een naam en een rol. <b>Zon</b> telt als opwek, <b>Hoofdaansluiting</b> is een meting op de netkabel (optioneel). Driefasig toestel waarvan je maar één draad meet? Kies <b>×3</b> bij een 3N400V-net (4 draden, met nul) of <b>×1,73</b> bij een 3×230V-net (3 draden, zonder nul).</p>
     <div id="seriesList"></div>
@@ -439,10 +452,10 @@ let liveTimer = null, dayTimer = null;
 function loadConfig() {
   try {
     const c = JSON.parse(localStorage.getItem(STORE_KEY));
-    if (c && typeof c === 'object') return { host: c.host || '', gw: c.gw || '', series: c.series || {} };
+    if (c && typeof c === 'object') return { ...c, host: c.host || '', gw: c.gw || '', p1: c.p1 || '', series: c.series || {} };
   } catch (e) { /* geen opslag beschikbaar */ }
   const demo = new URLSearchParams(location.search).has('demo');
-  return { host: demo ? 'demo' : '', gw: demo ? 'demo' : '', series: {} };
+  return { host: demo ? 'demo' : '', gw: demo ? 'demo' : '', p1: demo ? 'demo' : '', series: {} };
 }
 
 function saveConfig() {
@@ -554,7 +567,9 @@ async function loadGoodWe() {
 
 // Net en batterij uit de GoodWe, in dezelfde eenheid als de IoTaWatt-waarden.
 function gwNow() {
-  return gw && gw.grid_w !== null && gw.battery_w !== null ? { grid: gw.grid_w, battery: gw.battery_w, ext: gw.ext || [] } : null;
+  const p1grid = p1 && typeof p1.power === 'number' ? p1.power : null; // de P1-meter is de officiële netmeting
+  if (gw && gw.grid_w !== null && gw.battery_w !== null) return { grid: p1grid !== null ? p1grid : gw.grid_w, battery: gw.battery_w, ext: gw.ext || [] };
+  return p1grid !== null ? { grid: p1grid, battery: 0, ext: [] } : null;
 }
 function gwToday() {
   const k = gw && gw.today_kwh;
@@ -1244,10 +1259,68 @@ function showOk() {
 
 /* ---------- verversen ---------- */
 
+/* ---------- P1-meter (HomeWizard, lokale API) ---------- */
+
+let p1 = null; // { power, avg, peak, peakTs } of { noData } of { error }
+async function loadP1() {
+  const u = (config.p1 || '').trim();
+  if (!u) { p1 = null; return; }
+  try {
+    const d = u.toLowerCase() === 'demo' ? Demo.p1() : await getJson((/^https?:\/\//.test(u) ? u : 'http://' + u).replace(/\/+$/, '') + '/api/v1/data');
+    if (typeof d.active_power_w !== 'number') { p1 = { noData: true }; return; }
+    p1 = {
+      power: d.active_power_w,                       // + = afname, − = teruglevering
+      avg: typeof d.active_power_average_w === 'number' ? d.active_power_average_w : null,   // gemiddelde lopend kwartier
+      peak: typeof d.montly_power_peak_w === 'number' ? d.montly_power_peak_w : null,        // hoogste kwartier deze maand
+      peakTs: d.montly_power_peak_timestamp || null,
+    };
+  } catch (e) { p1 = { error: e.message || String(e) }; }
+}
+// HomeWizard-tijdstempel jjmmddhhmmss → Date
+function p1Date(ts) {
+  const m = /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(String(ts));
+  return m ? new Date(2000 + +m[1], m[2] - 1, +m[3], +m[4], +m[5]) : null;
+}
+const PEAK_MIN = 2500; // Vlaanderen: het capaciteitstarief rekent minstens 2,5 kW
+
+function renderPeak() {
+  const tile = $('tPeakTile');
+  tile.hidden = !p1;
+  if (!p1) return;
+  tile.className = 'tile wide';
+  const bar = $('tPeakBar').firstElementChild;
+  if (p1.error || p1.noData) {
+    $('tPeakLbl').textContent = 'P1-meter';
+    $('tPeak').textContent = '–';
+    $('tPeakSub').textContent = p1.error ? 'Niet bereikbaar (' + p1.error + ')' : 'Nog geen meetgegevens van de digitale meter. Is de P1-poort geactiveerd bij Fluvius?';
+    bar.style.width = '0';
+    return;
+  }
+  if (p1.avg === null) {
+    $('tPeakLbl').textContent = 'P1-meter';
+    $('tPeak').innerHTML = html(fmtPower(p1.power));
+    $('tPeakSub').textContent = 'Geen kwartierwaarden ontvangen (alleen bij Belgische meters).';
+    bar.style.width = '0';
+    return;
+  }
+  const ref = Math.max(p1.peak || 0, PEAK_MIN);
+  const ratio = p1.avg / ref;
+  const when = p1Date(p1.peakTs);
+  $('tPeakLbl').textContent = 'Kwartierpiek · dit kwartier';
+  $('tPeak').innerHTML = html(fmtPower(p1.avg));
+  $('tPeakSub').textContent = (p1.peak !== null ? 'Maandpiek ' + txt(fmtPower(p1.peak)) : 'Nog geen maandpiek')
+    + (when ? ' · ' + when.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + ' ' + when.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : '')
+    + (ratio >= 1 ? ' · ⚠ nieuwe maandpiek!' : ratio >= 0.85 ? ' · ⚠ dicht bij je maandpiek' : '');
+  if (ratio >= 1) tile.classList.add('peak-bad'); else if (ratio >= 0.85) tile.classList.add('peak-warn');
+  bar.style.width = Math.min(100, ratio * 100) + '%';
+  bar.style.background = ratio >= 1 ? 'var(--bad)' : ratio >= 0.85 ? 'var(--warn)' : 'var(--use)';
+}
+
 async function tickLive() {
   try {
     if (!seriesNames.length) await loadSeries();
-    await Promise.all([loadLive(), loadGoodWe()]);
+    await Promise.all([loadLive(), loadGoodWe(), loadP1()]);
+    renderPeak();
     showOk();
     renderTiles();
     if (dev.mode === 'now') renderDev();
@@ -1279,6 +1352,7 @@ function stop() { clearInterval(liveTimer); clearInterval(dayTimer); }
 function openSettings() {
   $('hostInput').value = config.host || '';
   $('gwInput').value = config.gw || '';
+  $('p1Input').value = config.p1 || '';
   const list = $('seriesList');
   if (!seriesNames.length) {
     list.innerHTML = '<p class="help">Nog geen kanalen gevonden. Bewaar eerst het juiste adres.</p>';
@@ -1311,6 +1385,7 @@ function saveSettings() {
   const hostChanged = newHost !== (config.host || '');
   config.host = newHost;
   config.gw = $('gwInput').value.trim();
+  config.p1 = $('p1Input').value.trim();
   saveConfig();
   closeSettings();
   if (hostChanged) { seriesNames = []; live = null; today = null; dayRows = []; hist.buckets = []; start(); }
@@ -1407,7 +1482,12 @@ const Demo = (() => {
     return { ok: true, ts: now, grid_w: h.grid, battery_w: h.battery, battery_soc: 42, history,
       today_kwh: { import: imp, export: exp, battery_charge: chg, battery_discharge: dis } };
   }
-  return { answer: async (p) => answer(p), goodwe };
+  function p1demo() {
+    const h = house(Math.floor(Date.now() / 1000));
+    return { active_power_w: Math.round(h.grid), active_power_average_w: Math.max(0, Math.round(h.grid * .9)),
+      montly_power_peak_w: 3870, montly_power_peak_timestamp: 261003181500 };
+  }
+  return { answer: async (p) => answer(p), goodwe, p1: p1demo };
 })();
 
 /* ---------- start ---------- */

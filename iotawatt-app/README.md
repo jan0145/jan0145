@@ -41,6 +41,13 @@ Instellingen worden op de iPhone bewaard.
 **Let op:** zonder meting op de hoofdaansluiting is "Verbruik" de som van de groepen die je meet.
 Het vakje rechtsboven (overschot/tekort) is dan een schatting.
 
+## P1-meter en kwartierpiek
+
+Vul bij ⚙︎ het adres van je **HomeWizard P1-meter** in (bv. `http://192.168.0.124`, met "Lokale API" aan).
+De app gebruikt dan de P1-meter als officiële netmeting en toont een tegel **Kwartierpiek**:
+het gemiddelde van het lopende kwartier, je hoogste kwartier van deze maand, en een waarschuwing
+(oranje vanaf 85 %, rood boven je maandpiek; minimum 2,5 kW zoals het capaciteitstarief).
+
 ## Geschiedenis
 
 - **Per groep en oudere dagen:** komt uit de IoTaWatt, die alle metingen jarenlang op zijn SD-kaart bewaart.
