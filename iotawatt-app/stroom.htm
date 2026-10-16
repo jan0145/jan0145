@@ -445,6 +445,7 @@ let today = null;            // { naam: Wh }
 let dayRows = [];            // [{ t, use, sun }]
 let gw = null;               // laatste antwoord van de GoodWe-brug
 let gwError = null;
+let gwOkAt = 0;
 let liveTimer = null, dayTimer = null;
 
 /* ---------- configuratie ---------- */
@@ -528,16 +529,19 @@ async function getJson(url) {
 // evcc: net + = afname, batterij + = ontladen (zelfde afspraak als de brug).
 function fromEvcc(raw) {
   const d = raw.result || raw;
-  const grid = d.grid && d.grid.power !== undefined ? d.grid.power : d.gridPower;
+  const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
+  const grid = num(d.grid && typeof d.grid === 'object' ? d.grid.power : d.gridPower) ?? num(d.gridPower);
   const bat = d.battery && typeof d.battery === 'object' ? d.battery : { power: d.batteryPower, soc: d.batterySoc };
-  if (grid === undefined || bat.power === undefined) throw new Error('geen net- of batterijgegevens in evcc');
+  const batW = num(bat.power) ?? num(d.batteryPower), soc = num(bat.soc) ?? num(d.batterySoc);
+  // Eén meter die even hapert (bv. de P1-meter) mag de batterij niet doen verdwijnen.
+  if (grid === null && batW === null) throw new Error('geen net- of batterijgegevens in evcc');
   // extra meters (bv. de laadpaal) die evcc alleen uitleest
   const ext = Array.isArray(d.ext) ? d.ext.filter((m) => m && typeof m.power === 'number').map((m) => ({ name: m.name || 'extra', power: m.power })) : [];
   // laadpunten die evcc aanstuurt (de laadpaal): hun laadvermogen telt als gemeten verbruik
   (Array.isArray(d.loadpoints) ? d.loadpoints : []).forEach((lp, i) => {
     if (lp && typeof lp.chargePower === 'number') ext.push({ name: lp.title || 'Laadpaal ' + (i + 1), power: lp.chargePower, lp: { mode: lp.mode, connected: lp.connected, charging: lp.charging } });
   });
-  return { ok: true, grid_w: grid, battery_w: bat.power, battery_soc: bat.soc === undefined ? null : bat.soc, ext };
+  return { ok: true, grid_w: grid, battery_w: batW, battery_soc: soc, ext };
 }
 
 async function loadGoodWe() {
@@ -563,8 +567,10 @@ async function loadGoodWe() {
       if (!res) throw lastErr;
     }
     if (!res.ok) throw new Error(res.error || 'geen gegevens');
-    gw = res; gwError = null;
+    gw = res; gwError = null; gwOkAt = Date.now();
   } catch (e) {
+    // Eén gemiste meting (evcc of de Synology even traag): de laatste waarden nog 1 minuut tonen.
+    if (gw && Date.now() - gwOkAt < 60000) return;
     gw = null; gwError = e.message || String(e);
   }
 }
@@ -572,7 +578,7 @@ async function loadGoodWe() {
 // Net en batterij uit de GoodWe, in dezelfde eenheid als de IoTaWatt-waarden.
 function gwNow() {
   const p1grid = p1 && typeof p1.power === 'number' ? p1.power : null; // de P1-meter is de officiële netmeting
-  if (gw && gw.grid_w !== null && gw.battery_w !== null) return { grid: p1grid !== null ? p1grid : gw.grid_w, battery: gw.battery_w, ext: gw.ext || [] };
+  if (gw && (gw.grid_w !== null || p1grid !== null)) return { grid: p1grid !== null ? p1grid : gw.grid_w, battery: gw.battery_w || 0, ext: gw.ext || [] };
   return p1grid !== null ? { grid: p1grid, battery: 0, ext: [] } : null;
 }
 function gwToday() {
@@ -756,10 +762,14 @@ function renderTiles() {
     $('tNetSub').textContent = s.use > 0 ? Math.round(Math.min(1, s.sun / s.use) * 100) + '% uit zon (schatting)' : 'schatting';
   }
 
-  const bat = gw && gw.battery_w !== null;
+  // De batterij-tegel blijft staan zodra evcc is ingesteld; zonder gegevens zegt hij waarom.
+  const bat = !!(config.gw || '').trim();
   $('tBatTile').hidden = !bat;
   $('tiles').classList.toggle('four', bat);
-  if (bat) {
+  if (bat && (!gw || gw.battery_w === null)) {
+    $('tBat').innerHTML = gw && gw.battery_soc !== null ? nf0.format(gw.battery_soc) + '<small>%</small>' : '–';
+    $('tBatSub').textContent = gw ? 'geen vermogen van evcc' : 'evcc niet bereikbaar';
+  } else if (bat) {
     const b = gw.battery_w;
     $('tBat').innerHTML = gw.battery_soc !== null ? nf0.format(gw.battery_soc) + '<small>%</small>' : '–';
     $('tBatSub').textContent = Math.abs(b) < 20 ? 'in rust' : (b < 0 ? 'laadt ' : 'ontlaadt ') + txt(fmtPower(Math.abs(b)));
