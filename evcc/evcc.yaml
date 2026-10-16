@@ -1,15 +1,16 @@
 # evcc – alleen uitlezen (read-only)
 #
-# Deze configuratie LEEST de GoodWe (net + batterij) en de zonnepanelen via de IoTaWatt.
+# Deze configuratie LEEST de P1-meter (net), de GoodWe (batterij) en de zonnepanelen via de IoTaWatt.
 # Er staat bewust geen enkele schrijfopdracht in: de GoodWe wordt niet via het
 # standaard-sjabloon "goodwe-hybrid" gekoppeld (dat kan de batterij en de
 # teruglevering aansturen), maar via losse registers die evcc enkel kan lezen.
 # EVA blijft dus de baas over de batterij.
 #
 # Aanpassen:
-#   192.168.0.GGG  = IP-adres van de GoodWe   (3 keer)
+#   192.168.0.GGG  = IP-adres van de GoodWe   (2 keer)
 #   192.168.0.III  = IP-adres van de IoTaWatt (1 keer)
 #   192.168.0.LLL  = IP-adres van de laadpaal (1 keer)
+#   192.168.0.PPP  = IP-adres van de HomeWizard P1-meter (1 keer)
 #   PV1 / PV2      = namen van de zonnepaneel-kanalen in de IoTaWatt
 
 interval: 30s
@@ -19,19 +20,13 @@ network:
   port: 7070
 
 meters:
-  # Netmeter van de GoodWe (driefasig). GoodWe telt teruglevering positief,
-  # evcc afname positief: daarom scale -1.
+  # Netmeter: HomeWizard P1-meter op de digitale meter van Fluvius (officiële waarden, alleen lezen).
+  # Lokale API moet aanstaan in de HomeWizard Energy-app.
   - name: grid
-    type: custom
-    power:
-      source: modbus
-      uri: 192.168.0.GGG:502
-      id: 247
-      register:
-        address: 36025 # totaal actief vermogen netmeter
-        type: holding
-        decode: int32
-      scale: -1
+    type: template
+    template: homewizard
+    usage: grid
+    host: 192.168.0.PPP
 
   # Batterij: vermogen (+ = ontladen, - = laden) en laadtoestand.
   - name: battery
