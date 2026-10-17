@@ -1314,10 +1314,19 @@ const PEAK_MIN = 2500; // Vlaanderen: het capaciteitstarief rekent minstens 2,5 
 
 function renderPeak() {
   const tile = $('tPeakTile');
-  tile.hidden = !p1;
-  if (!p1) return;
+  // Zonder P1-adres: de tegel tonen met een hint (elk toestel en elk beginscherm-icoon bewaart zijn eigen instellingen).
+  const hint = !p1 && !(config.p1 || '').trim() && !!(config.gw || '').trim();
+  tile.hidden = !p1 && !hint;
+  if (!p1 && !hint) return;
   tile.className = 'tile wide';
   const bar = $('tPeakBar').firstElementChild;
+  if (hint) {
+    $('tPeakLbl').textContent = 'Kwartierpiek';
+    $('tPeak').textContent = '–';
+    $('tPeakSub').textContent = 'Vul bij ⚙︎ het adres van je P1-meter in (bv. http://192.168.0.124).';
+    bar.style.width = '0';
+    return;
+  }
   if (p1.error || p1.noData) {
     $('tPeakLbl').textContent = 'P1-meter';
     $('tPeak').textContent = '–';
