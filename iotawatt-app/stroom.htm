@@ -233,6 +233,11 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .kv dt { color: var(--text-2); }
 .kv dd { margin: 0; font-weight: 600; text-align: right; }
 .chart-wrap .ref { font-size: 10px; }
+.setrow { display: flex; align-items: center; gap: 10px; }
+.setrow .pm { width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--track); color: var(--text); font-size: 24px; cursor: pointer; }
+.setrow .setval { font-size: 26px; font-weight: 650; min-width: 84px; text-align: center; }
+.setrow .btn { flex: 1; }
+.setrow .btn:disabled, .setrow .pm:disabled { opacity: .45; cursor: default; }
 
 /* instellingen */
 .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10; }
@@ -316,14 +321,6 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     </div>
   </section>
 
-  <button class="navcard" id="openDevices">
-    <div class="nc-main">
-      <div class="nc-title">Per toestel</div>
-      <div class="nc-sub" id="ncSub">Wat verbruikt er nu, en de geschiedenis per toestel</div>
-    </div>
-    <span class="chev" aria-hidden="true">›</span>
-  </button>
-
   <section class="card">
     <div class="card-head">
       <h2>Geschiedenis</h2>
@@ -359,6 +356,14 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <div class="htot" id="hTot"></div>
     <p class="hint" id="hSignHint" style="margin-top:6px">Negatief = naar het net of naar de batterij.</p>
   </section>
+
+  <button class="navcard" id="openDevices">
+    <div class="nc-main">
+      <div class="nc-title">Per toestel</div>
+      <div class="nc-sub" id="ncSub">Wat verbruikt er nu, en de geschiedenis per toestel</div>
+    </div>
+    <span class="chev" aria-hidden="true">›</span>
+  </button>
   </div>
 
   <div id="tabDetails" hidden>
@@ -387,6 +392,16 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <h2>Warmtepomp</h2>
     </div>
     <section class="card"><div id="hpInfo"></div></section>
+    <section class="card" id="hpSetCard" hidden>
+      <div class="card-head"><h2>Kamertemperatuur</h2></div>
+      <div class="setrow">
+        <button class="pm" id="hpMinus" aria-label="Lager">−</button>
+        <div class="setval num" id="hpSetVal">–</div>
+        <button class="pm" id="hpPlus" aria-label="Hoger">+</button>
+        <button class="btn primary" id="hpSetBtn">Instellen</button>
+      </div>
+      <p class="hint" id="hpSetHint" style="margin-top:8px"></p>
+    </section>
     <div class="seg wide" role="group" aria-label="Periode" id="hpSeg">
       <button data-p="day" aria-pressed="true">Dag</button>
       <button data-p="week" aria-pressed="false">Week</button>
@@ -619,7 +634,7 @@ const select = (cols) => '[' + cols.join(',') + ']';
 
 let gwKind = { url: null, kind: null };
 // Alleen de velden die de app nodig heeft (sneller op een trage NAS).
-const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext, loadpoints: [.loadpoints[]? | {title, chargePower, mode, connected, charging, chargedEnergy, phasesActive, chargeCurrent}], circuits: .circuits}';
+const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext, loadpoints: [.loadpoints[]? | {title, chargePower, mode, connected, charging, chargedEnergy, phasesActive, chargeCurrent, enabled, vehicleSoc, chargerFeatureHeating}], circuits: .circuits}';
 
 // Naar een ander apparaat: geen cache-optie meegeven (Safari stuurt dan een extra
 // CORS-voorvraag die evcc niet kent), maar de cache omzeilen met een tijdstempel.
@@ -652,11 +667,14 @@ function fromEvcc(raw) {
   const limit = d.circuits && typeof d.circuits === 'object'
     ? Object.values(d.circuits).map((c) => c && c.maxPower).find((v) => typeof v === 'number' && v > 0) || null : null;
   // laadpunten die evcc aanstuurt (de laadpaal): hun laadvermogen telt als gemeten verbruik
+  let boiler = null;
   (Array.isArray(d.loadpoints) ? d.loadpoints : []).forEach((lp, i) => {
+    // boiler (warmtepomp, sanitair water): niet als extra verbruik tellen, de IoTaWatt meet de warmtepomp al
+    if (lp && lp.chargerFeatureHeating) { boiler = { title: lp.title, mode: lp.mode, enabled: !!lp.enabled, charging: !!lp.charging, power: lp.chargePower, temp: lp.vehicleSoc }; return; }
     if (lp && typeof lp.chargePower === 'number') ext.push({ name: lp.title || 'Laadpaal ' + (i + 1), power: lp.chargePower,
       lp: { mode: lp.mode, connected: lp.connected, charging: lp.charging, chargedEnergy: lp.chargedEnergy, phases: lp.phasesActive, current: lp.chargeCurrent } });
   });
-  return { ok: true, grid_w: grid, battery_w: batW, battery_soc: soc, ext, limit };
+  return { ok: true, grid_w: grid, battery_w: batW, battery_soc: soc, ext, limit, boiler };
 }
 
 async function loadGoodWe() {
@@ -1552,10 +1570,11 @@ function renderHM() {
   $('tHp').innerHTML = freq > 0 ? html(fmtPower(p.use)) : '–';
   const err = hm.v.Error && hm.v.Error.value && hm.v.Error.value !== 'No error' ? '⚠ fout ' + hm.v.Error.value : '';
   const heaters = (hv('Internal_Heater_State') === 1 || hv('External_Heater_State') === 1) ? '⚠ elektrische bijverwarming aan' : '';
+  const boost = gw && gw.boiler && gw.boiler.enabled ? '☀︎ boiler warmt op met zonne-overschot (doel 60 °C)' : '';
   const lines = [
     freq > 0 && p.use > 0 ? `levert ${txt(fmtPower(p.prod))} warmte · COP ${nf1.format(p.prod / p.use)}` : '',
     `Boiler ${fmtT(hv('DHW_Temp'))} (doel ${fmtT(hv('DHW_Target_Temp'))}) · aanvoer ${fmtT(hv('Main_Outlet_Temp'))} · buiten ${fmtT(hv('Outside_Temp'))}`,
-    err, heaters,
+    boost, err, heaters,
   ].filter(Boolean);
   $('tHpSub').innerHTML = lines.map((l) => '<div>' + esc(l) + '</div>').join('');
 }
@@ -1576,16 +1595,16 @@ function renderHpInfo() {
   const el = $('hpInfo');
   if (!hm || hm.error) { el.innerHTML = `<p class="empty">${hm ? 'HeishaMon niet bereikbaar (' + esc(hm.error) + ')' : 'Vul bij ⚙︎ het adres van de HeishaMon in.'}</p>`; return; }
   const T = (n) => { const x = hv(n); return x === null ? null : nf1.format(x).replace(/,0$/, '') + ' °C'; };
-  const N = (n, u) => { const x = hv(n); return x === null ? null : nf0.format(x) + u; };
   const p = hmPower(), freq = hv('Compressor_Freq') || 0;
   const err = hm.v.Error ? String(hm.v.Error.value) : null;
+  const bo = gw && gw.boiler;
   el.innerHTML = kvHtml([
     ['Nu', [
       ['Toestand', hpDoing()],
       ['Werking', HP_MODE[hv('Operating_Mode_State')] || (hm.v.Operating_Mode_State && hm.v.Operating_Mode_State.text)],
-      ['Compressor', freq ? nf0.format(freq) + ' Hz' : 'uit'],
-      ['Waterdebiet', hv('Pump_Flow') !== null ? nf1.format(hv('Pump_Flow')) + ' l/min' : null],
       ['Elektrische bijverwarming', hv('Internal_Heater_State') === 1 || hv('External_Heater_State') === 1 ? '⚠ aan' : 'uit'],
+      ['Boiler op zonne-overschot', bo ? (bo.mode === 'off' ? 'uit' : bo.enabled ? 'actief (doel 60 °C)' : 'wacht op overschot') : null],
+      ['Foutcode', err && err !== 'No error' ? '⚠ ' + err : null],
     ]],
     ['Vermogen', [
       ['Elektrisch', txt(fmtPower(p.use))],
@@ -1596,12 +1615,62 @@ function renderHpInfo() {
       ['Buiten', T('Outside_Temp')], ['Aanvoer', T('Main_Outlet_Temp')], ['Retour', T('Main_Inlet_Temp')],
       ['Doel aanvoer', T('Main_Target_Temp')], ['Boiler', T('DHW_Temp')], ['Doel boiler', T('DHW_Target_Temp')], ['Kamer', T('Z1_Temp')],
     ]],
-    ['Tellers', [
-      ['Bedrijfsuren', N('Operations_Hours', ' u')], ['Starts compressor', N('Operations_Counter', '')],
-      ['Bijverwarming huis', N('Room_Heater_Operations_Hours', ' u')], ['Bijverwarming boiler', N('DHW_Heater_Operations_Hours', ' u')],
-      ['Foutcode', err === 'No error' ? 'geen' : err],
-    ]],
   ]);
+  renderHpSet();
+}
+
+/* ---------- kamertemperatuur instellen (HeishaMon-commando) ---------- */
+
+const hpSet = { val: null, busy: false, msg: '' };
+const hmBase = () => { const u = (config.hm || '').trim(); return u && u.toLowerCase() !== 'demo' ? (/^https?:\/\//.test(u) ? u : 'http://' + u).replace(/\/+$/, '') : null; };
+// Met een kamerthermostaat is dit de gewenste kamertemperatuur (20 °C of meer);
+// werkt de warmtepomp op stooklijn, dan is het een verschuiving van −5 tot +5.
+function hpSetRange() {
+  const cur = hv('Z1_Heat_Request_Temp');
+  if (cur === null) return null;
+  return cur >= 10 ? { min: 16, max: 26, shift: false, cur } : { min: -5, max: 5, shift: true, cur };
+}
+function renderHpSet() {
+  const r = hm && hm.v ? hpSetRange() : null;
+  $('hpSetCard').hidden = !r;
+  if (!r) return;
+  if (hpSet.val === null) hpSet.val = r.cur;
+  const fmtV = (v) => (r.shift ? (v > 0 ? '+' : '') + nf0.format(v) + ' K' : nf0.format(v) + ' °C');
+  $('hpSetVal').textContent = fmtV(hpSet.val);
+  $('hpMinus').disabled = hpSet.busy || hpSet.val <= r.min;
+  $('hpPlus').disabled = hpSet.busy || hpSet.val >= r.max;
+  $('hpSetBtn').disabled = hpSet.busy || hpSet.val === r.cur || !hmBase();
+  $('hpSetHint').textContent = hpSet.msg || ((r.shift ? 'Verschuiving van de stooklijn. ' : '') + 'Nu ingesteld: ' + fmtV(r.cur) + '.');
+}
+function stepHpSet(d) {
+  const r = hpSetRange(); if (!r) return;
+  hpSet.val = Math.min(r.max, Math.max(r.min, (hpSet.val === null ? r.cur : hpSet.val) + d));
+  hpSet.msg = '';
+  renderHpSet();
+}
+async function sendHpSet() {
+  const r = hpSetRange(), b = hmBase();
+  if (!r || !b || hpSet.val === r.cur) return;
+  const v = hpSet.val;
+  if (!confirm('Kamertemperatuur van de warmtepomp instellen op ' + (r.shift ? (v > 0 ? '+' : '') + v + ' K' : v + ' °C') + '?')) return;
+  hpSet.busy = true; hpSet.msg = 'Versturen…'; renderHpSet();
+  try {
+    // HeishaMon: http://<ip>/command?SetZ1HeatRequestTemperature=<waarde>
+    await fetch(b + '/command?SetZ1HeatRequestTemperature=' + encodeURIComponent(v), { mode: 'no-cors' });
+    hpSet.msg = 'Verstuurd. Even wachten tot de warmtepomp het overneemt…'; renderHpSet();
+    let ok = false;
+    for (let i = 0; i < 6 && !ok; i++) {
+      await new Promise((res) => setTimeout(res, 5000));
+      await loadHM();
+      ok = hv('Z1_Heat_Request_Temp') === v;
+    }
+    hpSet.msg = ok ? '✓ Ingesteld.' : 'De warmtepomp heeft de nieuwe waarde (nog) niet bevestigd. Kijk later opnieuw.';
+  } catch (e) {
+    hpSet.msg = 'Niet gelukt: ' + (e.message || e);
+  }
+  hpSet.busy = false;
+  if (hpSet.msg.startsWith('✓')) hpSet.val = null;
+  renderHpInfo(); renderHM();
 }
 
 // Geschiedenis van de warmtepomp: evcc bewaart verbruik en warmte van de HeishaMon (wp_elektrisch / wp_warmte).
@@ -1730,7 +1799,7 @@ async function changeLp(period, k) {
 
 function openView(id) { $(id).hidden = false; document.body.style.overflow = 'hidden'; }
 function closeView(id) { $(id).hidden = true; document.body.style.overflow = ''; }
-function openHp() { openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); }
+function openHp() { hpSet.val = null; hpSet.msg = ''; openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); }
 function openLp() { openView('lpView'); renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {}); }
 
 function showTab(t) {
@@ -2009,6 +2078,9 @@ const tapTile = (id, fn) => { $(id).onclick = fn; $(id).onkeydown = (e) => { if 
 tapTile('tHpTile', openHp);
 tapTile('tLpTile', openLp);
 $('hpBack').onclick = () => closeView('hpView');
+$('hpMinus').onclick = () => stepHpSet(-1);
+$('hpPlus').onclick = () => stepHpSet(1);
+$('hpSetBtn').onclick = sendHpSet;
 $('lpBack').onclick = () => closeView('lpView');
 document.querySelectorAll('#hpSeg button').forEach((b) => { b.onclick = () => changeHp(b.dataset.p, 0); });
 document.querySelectorAll('#lpSeg button').forEach((b) => { b.onclick = () => changeLp(b.dataset.p, 0); });

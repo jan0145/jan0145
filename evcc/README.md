@@ -7,8 +7,8 @@ We nemen de taken van EVA stap voor stap over:
 |---|---|---|
 | 1 | **Laadpaal (RAEDIAN) + kwartierpiek begrenzen** | in `evcc.yaml` |
 | 2 | Dynamisch tarief (laden en batterij op goedkope uren) | leverancier nodig |
-| 3 | Batterij (GoodWe) van EVA naar evcc | daarna EVA uitschakelen |
-| 4 | Warmtepomp (Panasonic via HeishaMon): sanitair water op zonne-overschot | HeishaMon wordt al uitgelezen (`wp_elektrisch`, `wp_warmte`) |
+| 3 | Batterij (GoodWe) van EVA naar evcc | voorbereid onderaan `evcc.yaml`, nog niet actief |
+| 4 | Warmtepomp (Panasonic via HeishaMon): sanitair water op zonne-overschot | laadpunt **Boiler** (48 → 60 °C) |
 | 5 | SolarEdge rechtstreeks via Modbus TCP | wacht op installateur |
 
 **Stap 1 – kwartierpiek:** de `circuit` "aansluiting" bewaakt het vermogen op de P1-meter.
@@ -16,6 +16,15 @@ Komt het huis + de auto boven `maxPower`, dan verlaagt evcc de laadstroom van de
 (en pauzeert het laden als zelfs 6 A te veel is). Kies `maxPower` gelijk aan de kwartierpiek
 die je niet wilt overschrijden. De batterij wordt in stap 1 nog niet aangestuurd: EVA blijft die beheren.
 In het evcc-scherm zet je bij **Laadpaal → ⚙︎** de min. stroom op 6 A en de max. op 16 A.
+
+**Volgorde bij zonne-overschot:** 1. batterij, 2. auto, 3. boiler.
+- De **batterij** krijgt voorrang via het evcc-scherm: batterij-icoon → *Batterij-instellingen* →
+  schuif "voorrang voor de batterij tot" op bv. 100 %. Dat werkt ook nu EVA de batterij nog beheert,
+  want evcc rekent het laadvermogen van de batterij dan niet mee als overschot.
+- De **auto** (`priority: 2`) en de **boiler** (`priority: 1`) staan in de modus *Zon*. In *Snel* laadt
+  de auto altijd, ook zonder overschot (maar binnen de kwartierpiek-grens).
+- De **boiler** is een schakelaar: bij overschot zet evcc het boilerdoel via de HeishaMon op 60 °C,
+  daarna terug op 48 °C.
 
 Je DS214 (DSM 6.2, ARM 32-bit, geen Docker) draait evcc als los programma via de Task Scheduler.
 

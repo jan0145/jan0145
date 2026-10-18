@@ -55,7 +55,8 @@ het gemiddelde van het lopende kwartier, je hoogste kwartier van deze maand, en 
 Vul bij ⚙︎ het adres van de **HeishaMon** in (bv. `http://192.168.0.254`). De tegel **Warmtepomp** toont
 wat de warmtepomp doet (huis verwarmen, sanitair water, ontdooien, stand-by), zijn elektrisch verbruik en
 geleverde warmte (met COP), en de temperaturen van boiler, aanvoer en buiten. Een foutcode of aanspringende
-elektrische bijverwarming krijgt een ⚠. De app leest alleen; er wordt niets aangestuurd.
+elektrische bijverwarming krijgt een ⚠. In het warmtepompscherm kun je de **kamertemperatuur** instellen
+(HeishaMon-commando `SetZ1HeatRequestTemperature`, met bevestiging). Verder leest de app alleen.
 
 ## Geschiedenis
 
