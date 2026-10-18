@@ -79,3 +79,27 @@ evcc en start hem dan opnieuw.
 
 `HOME=…` en `--database …` zijn nodig omdat de Task Scheduler geen persoonlijke map meegeeft;
 zonder die twee stopt evcc met de fout `database exec: "getent": executable file not found`.
+
+## Piekbewaker: kwartierpiek beperken met de warmtepomp
+
+Volgorde als het kwartier boven de grens dreigt te gaan:
+1. **de auto**: evcc verlaagt of stopt het laden (circuit `aansluiting`, `maxPower`);
+2. **de warmtepomp stiller**: laadt de auto niet (meer) en dreigt het kwartiergemiddelde toch boven de grens
+   te gaan, dan zet `piekbewaker.sh` de warmtepomp via de HeishaMon in stille modus 3 (minder vermogen);
+3. **de warmtepomp uit** (alleen met `STAGE2=1`): als stille modus niet volstaat, maximaal 20 minuten.
+
+Daarna zet het script alles terug zoals het was: bij een nieuw kwartier, of zodra de prognose ruim onder de grens
+blijft. Tussen twee ingrepen zit minstens 3 minuten (spaart de compressor); tijdens ontdooien grijpt het niet in.
+
+Installeren:
+1. Zet `piekbewaker.sh` in `/volume1/homes/docker/evcc/` (vul bovenaan de adressen van P1-meter en HeishaMon in).
+2. Task Scheduler → Create → Triggered Task → User-defined script, User **root**, Event **Boot-up**:
+
+   ```
+   pkill -f piekbewaker.sh; sleep 2; cd /volume1/homes/docker/evcc && ACT=0 sh piekbewaker.sh > /dev/null 2>&1 &
+   ```
+3. Selecteer de taak → **Run**. In `piekbewaker.log` zie je wat het script doet.
+
+`ACT=0` is de **proefperiode**: het script schrijft alleen in het logboek wat het zou doen, zonder iets aan te
+sturen. Ziet dat er een paar dagen goed uit, zet dan `ACT=1` (en eventueel `STAGE2=1`) in de taak en klik **Run**.
+

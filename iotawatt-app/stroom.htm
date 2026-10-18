@@ -1571,10 +1571,11 @@ function renderHM() {
   const err = hm.v.Error && hm.v.Error.value && hm.v.Error.value !== 'No error' ? '⚠ fout ' + hm.v.Error.value : '';
   const heaters = (hv('Internal_Heater_State') === 1 || hv('External_Heater_State') === 1) ? '⚠ elektrische bijverwarming aan' : '';
   const boost = gw && gw.boiler && gw.boiler.enabled ? '☀︎ boiler warmt op met zonne-overschot (doel 60 °C)' : '';
+  const quiet = hv('Quiet_Mode_Level') > 0 ? '🔇 stille modus ' + hv('Quiet_Mode_Level') + ' (minder vermogen)' : '';
   const lines = [
     freq > 0 && p.use > 0 ? `levert ${txt(fmtPower(p.prod))} warmte · COP ${nf1.format(p.prod / p.use)}` : '',
     `Boiler ${fmtT(hv('DHW_Temp'))} (doel ${fmtT(hv('DHW_Target_Temp'))}) · aanvoer ${fmtT(hv('Main_Outlet_Temp'))} · buiten ${fmtT(hv('Outside_Temp'))}`,
-    boost, err, heaters,
+    boost, quiet, err, heaters,
   ].filter(Boolean);
   $('tHpSub').innerHTML = lines.map((l) => '<div>' + esc(l) + '</div>').join('');
 }
@@ -1603,6 +1604,7 @@ function renderHpInfo() {
       ['Toestand', hpDoing()],
       ['Werking', HP_MODE[hv('Operating_Mode_State')] || (hm.v.Operating_Mode_State && hm.v.Operating_Mode_State.text)],
       ['Elektrische bijverwarming', hv('Internal_Heater_State') === 1 || hv('External_Heater_State') === 1 ? '⚠ aan' : 'uit'],
+      ['Stille modus', hv('Quiet_Mode_Level') > 0 ? 'niveau ' + hv('Quiet_Mode_Level') + ' (minder vermogen, bv. voor de kwartierpiek)' : null],
       ['Boiler op zonne-overschot', bo ? (bo.mode === 'off' ? 'uit' : bo.enabled ? 'actief (doel 60 °C)' : 'wacht op overschot') : null],
       ['Foutcode', err && err !== 'No error' ? '⚠ ' + err : null],
     ]],
