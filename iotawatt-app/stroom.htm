@@ -1658,15 +1658,19 @@ async function sendHpSet() {
   hpSet.busy = true; hpSet.msg = 'Versturen…'; renderHpSet();
   try {
     // HeishaMon: http://<ip>/command?SetZ1HeatRequestTemperature=<waarde>
-    await fetch(b + '/command?SetZ1HeatRequestTemperature=' + encodeURIComponent(v), { mode: 'no-cors' });
-    hpSet.msg = 'Verstuurd. Even wachten tot de warmtepomp het overneemt…'; renderHpSet();
+    // Een commando gaat soms verloren: tot 3 keer versturen, telkens 15 s wachten op bevestiging.
     let ok = false;
-    for (let i = 0; i < 6 && !ok; i++) {
-      await new Promise((res) => setTimeout(res, 5000));
-      await loadHM();
-      ok = hv('Z1_Heat_Request_Temp') === v;
+    for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
+      await fetch(b + '/command?SetZ1HeatRequestTemperature=' + encodeURIComponent(v), { mode: 'no-cors' });
+      hpSet.msg = `Verstuurd (poging ${attempt} van 3). Wachten op de warmtepomp…`; renderHpSet();
+      for (let i = 0; i < 3 && !ok; i++) {
+        await new Promise((res) => setTimeout(res, 5000));
+        await loadHM();
+        ok = hv('Z1_Heat_Request_Temp') === v;
+      }
     }
-    hpSet.msg = ok ? '✓ Ingesteld.' : 'De warmtepomp heeft de nieuwe waarde (nog) niet bevestigd. Kijk later opnieuw.';
+    hpSet.msg = ok ? '✓ Ingesteld. Blijft dat niet staan, dan zet iets anders hem terug (weekprogramma of Panasonic-app).'
+      : 'De warmtepomp neemt het commando niet over. Mogelijk werkt het Panasonic-internetdoosje (CZ-TAW1) de HeishaMon tegen.';
   } catch (e) {
     hpSet.msg = 'Niet gelukt: ' + (e.message || e);
   }
