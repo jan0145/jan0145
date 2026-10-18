@@ -3,6 +3,8 @@
 Een eenvoudige web-app (één bestand) die laat zien hoeveel stroom je huis nu verbruikt,
 hoeveel de zonnepanelen opwekken en welke groep het meest verbruikt.
 
+- **Twee tabbladen:** *Status* (overschot/tekort, verbruik, zon, batterij, kwartierpiek, geschiedenis)
+  en *Details* (warmtepomp en laadpaal; tik op een tegel voor alle gegevens en de geschiedenis).
 - **Bovenaan:** verbruik, zonne-opbrengst en overschot/tekort, live (elke 5 seconden).
 - **Waar gaat het naartoe?** Elke groep met een balkje, gesorteerd van groot naar klein.
   Kies **Nu** (watt) of **Vandaag** (kWh sinds middernacht).
@@ -61,6 +63,11 @@ elektrische bijverwarming krijgt een ⚠. De app leest alleen; er wordt niets aa
 - **Net, batterij, echt huisverbruik en de laadpaal:** komen uit **evcc** op de Synology. evcc bewaart
   per kwartier hoeveel energie er van/naar het net en de batterij ging, wat het huis verbruikte en wat
   de laadpaal leverde. Die geschiedenis begint op de dag dat evcc (en de laadpaal erin) draait.
+- **kWh / Kwartierpiek:** met de knop *Kwartierpiek* toont de grafiek per kwartier hoeveel je gemiddeld van het
+  net nam (dag), of het hoogste kwartier per dag (week, maand), met stippellijnen voor de grens van evcc, je
+  maandpiek en het minimum van 2,5 kW.
+- **Warmtepomp:** evcc bewaart verbruik en warmte van de HeishaMon (`wp_elektrisch`, `wp_warmte`); de app toont
+  daaruit het verbruik en de COP per uur of per dag. Oudere dagen: verbruik uit de IoTaWatt, zonder COP.
 - In de grafiek betekent **negatief**: naar het net (teruglevering) of naar de batterij (laden).
 - **Laadsessies:** sinds evcc de laadpaal aanstuurt, bewaart evcc elke laadbeurt (kWh, duur, % zon en,
   met een dynamisch tarief, de prijs). Oudere beurten zoekt de app in de kwartierwaarden van de laadpaal.

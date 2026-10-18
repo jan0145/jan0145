@@ -124,7 +124,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .hero.warn .ico { background: var(--warn); }
 .tile .sub div + div { margin-top: 1px; }
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 16px; }
-.tiles.four { grid-template-columns: 1fr 1fr; }
+.tiles.two { grid-template-columns: 1fr 1fr; }
 .tile[hidden] { display: none; }
 .tile.wide { grid-column: 1 / -1; }
 .tile.peak-warn { background: var(--warn-bg); }
@@ -220,6 +220,20 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .hint { font-size: 12px; color: var(--text-3); margin: -2px 0 6px; }
 .hint.warn { color: var(--bad); }
 
+/* tabbladen en detailschermen */
+.tabs { margin: 4px 0 8px; }
+.tabs button { font-size: 15px; padding: 7px 12px; }
+#tabStatus[hidden], #tabDetails[hidden] { display: none; }
+.tile.tap { position: relative; cursor: pointer; padding-right: 34px; }
+.tile.tap:active { opacity: .7; }
+.tile .tchev { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 26px; color: var(--text-3); line-height: 1; }
+.kvh { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); font-weight: 600; margin: 14px 0 6px; }
+.kvh:first-child { margin-top: 0; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; font-size: 15px; }
+.kv dt { color: var(--text-2); }
+.kv dd { margin: 0; font-weight: 600; text-align: right; }
+.chart-wrap .ref { font-size: 10px; }
+
 /* instellingen */
 .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10; }
 .sheet {
@@ -263,6 +277,12 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 
   <div class="banner" id="banner" hidden></div>
 
+  <div class="seg wide tabs" role="tablist" aria-label="Scherm" id="tabSeg">
+    <button data-t="status" aria-pressed="true">Status</button>
+    <button data-t="details" aria-pressed="false">Details</button>
+  </div>
+
+  <div id="tabStatus">
   <section class="hero" id="hero" aria-live="polite">
     <div class="ico" id="hIco" aria-hidden="true">…</div>
     <div>
@@ -283,11 +303,6 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="val num" id="tSun">–</div>
       <div class="sub num" id="tSunSub">&nbsp;</div>
     </div>
-    <div class="tile">
-      <div class="lbl" id="tNetLbl">Net</div>
-      <div class="val num" id="tNet">–</div>
-      <div class="sub" id="tNetSub">&nbsp;</div>
-    </div>
     <div class="tile" id="tBatTile" hidden>
       <div class="lbl">Batterij</div>
       <div class="val num" id="tBat">–</div>
@@ -298,11 +313,6 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="val num" id="tPeak">–</div>
       <div class="sub" id="tPeakSub">&nbsp;</div>
       <div class="bar" id="tPeakBar" style="margin-top:8px"><i></i></div>
-    </div>
-    <div class="tile wide" id="tHpTile" hidden>
-      <div class="lbl" id="tHpLbl">Warmtepomp</div>
-      <div class="val num" id="tHp">–</div>
-      <div class="sub" id="tHpSub">&nbsp;</div>
     </div>
   </section>
 
@@ -322,6 +332,10 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
         <button data-p="week" aria-pressed="false">Week</button>
         <button data-p="month" aria-pressed="false">Maand</button>
       </div>
+    </div>
+    <div class="seg wide" role="group" aria-label="Wat tonen" id="hMode" style="margin:0 0 8px">
+      <button data-m="kwh" aria-pressed="true">kWh</button>
+      <button data-m="peak" aria-pressed="false">Kwartierpiek</button>
     </div>
     <div class="pnav">
       <button id="hPrev" aria-label="Vorige periode">‹</button>
@@ -343,15 +357,100 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="tip" id="tip"></div>
     </div>
     <div class="htot" id="hTot"></div>
-    <p class="hint" style="margin-top:6px">Negatief = naar het net of naar de batterij.</p>
+    <p class="hint" id="hSignHint" style="margin-top:6px">Negatief = naar het net of naar de batterij.</p>
   </section>
+  </div>
 
-  <section class="card" id="sessCard" hidden>
-    <div class="card-head"><h2>🚗 Laadsessies</h2></div>
-    <div class="hint" id="sessTot"></div>
-    <ul class="rows" id="sessRows"></ul>
-  </section>
+  <div id="tabDetails" hidden>
+    <section class="tiles">
+      <div class="tile wide tap" id="tHpTile" role="button" tabindex="0" hidden>
+        <div class="lbl" id="tHpLbl">Warmtepomp</div>
+        <div class="val num" id="tHp">–</div>
+        <div class="sub" id="tHpSub">&nbsp;</div>
+        <span class="tchev" aria-hidden="true">›</span>
+      </div>
+      <div class="tile wide tap" id="tLpTile" role="button" tabindex="0" hidden>
+        <div class="lbl" id="tLpLbl">Laadpaal</div>
+        <div class="val num" id="tLp">–</div>
+        <div class="sub" id="tLpSub">&nbsp;</div>
+        <span class="tchev" aria-hidden="true">›</span>
+      </div>
+    </section>
+    <p class="empty" id="detEmpty" hidden>Nog geen warmtepomp of laadpaal. Vul bij ⚙︎ het adres van de HeishaMon en van evcc in.</p>
+  </div>
 </main>
+
+<div class="view" id="hpView" hidden role="dialog" aria-label="Warmtepomp">
+  <main>
+    <div class="vhead">
+      <button class="iconbtn" id="hpBack" aria-label="Terug">‹</button>
+      <h2>Warmtepomp</h2>
+    </div>
+    <section class="card"><div id="hpInfo"></div></section>
+    <div class="seg wide" role="group" aria-label="Periode" id="hpSeg">
+      <button data-p="day" aria-pressed="true">Dag</button>
+      <button data-p="week" aria-pressed="false">Week</button>
+      <button data-p="month" aria-pressed="false">Maand</button>
+    </div>
+    <div class="pnav">
+      <button id="hpPrev" aria-label="Vorige periode">‹</button>
+      <span id="hpLabel"></span>
+      <button id="hpNext" aria-label="Volgende periode">›</button>
+    </div>
+    <section class="card">
+      <div class="card-head"><h2>Verbruik en warmte</h2></div>
+      <div class="legend" id="hpLegend"></div>
+      <div class="chart-wrap" id="hpWrap1">
+        <svg id="hpChart1" role="img" aria-label="Elektrisch verbruik en geleverde warmte"></svg>
+        <div class="tip" id="hpTip1"></div>
+      </div>
+      <div class="htot" id="hpTot"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>COP</h2></div>
+      <div class="chart-wrap" id="hpWrap2">
+        <svg id="hpChart2" role="img" aria-label="COP"></svg>
+        <div class="tip" id="hpTip2"></div>
+      </div>
+      <p class="hint" style="margin-top:6px">COP = geleverde warmte ÷ elektrisch verbruik. Volgens de warmtepomp zelf, dus een richtwaarde.</p>
+      <p class="hint" id="hpNote"></p>
+    </section>
+  </main>
+</div>
+
+<div class="view" id="lpView" hidden role="dialog" aria-label="Laadpaal">
+  <main>
+    <div class="vhead">
+      <button class="iconbtn" id="lpBack" aria-label="Terug">‹</button>
+      <h2>Laadpaal</h2>
+    </div>
+    <section class="card"><div id="lpInfo"></div></section>
+    <div class="seg wide" role="group" aria-label="Periode" id="lpSeg">
+      <button data-p="day" aria-pressed="true">Dag</button>
+      <button data-p="week" aria-pressed="false">Week</button>
+      <button data-p="month" aria-pressed="false">Maand</button>
+    </div>
+    <div class="pnav">
+      <button id="lpPrev" aria-label="Vorige periode">‹</button>
+      <span id="lpLabel"></span>
+      <button id="lpNext" aria-label="Volgende periode">›</button>
+    </div>
+    <section class="card">
+      <div class="card-head"><h2 id="lpChartTitle">Laadvermogen</h2></div>
+      <div class="chart-wrap" id="lpWrap">
+        <svg id="lpChart" role="img" aria-label="Geschiedenis van de laadpaal"></svg>
+        <div class="tip" id="lpTip"></div>
+      </div>
+      <div class="htot" id="lpTot"></div>
+      <p class="hint" id="lpNote"></p>
+    </section>
+    <section class="card" id="sessCard" hidden>
+      <div class="card-head"><h2>🚗 Laadsessies</h2></div>
+      <div class="hint" id="sessTot"></div>
+      <ul class="rows" id="sessRows"></ul>
+    </section>
+  </main>
+</div>
 
 <div class="view" id="devView" hidden role="dialog" aria-label="Per toestel">
   <main>
@@ -520,7 +619,7 @@ const select = (cols) => '[' + cols.join(',') + ']';
 
 let gwKind = { url: null, kind: null };
 // Alleen de velden die de app nodig heeft (sneller op een trage NAS).
-const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext, loadpoints: [.loadpoints[]? | {title, chargePower, mode, connected, charging}]}';
+const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext, loadpoints: [.loadpoints[]? | {title, chargePower, mode, connected, charging, chargedEnergy, phasesActive, chargeCurrent}], circuits: .circuits}';
 
 // Naar een ander apparaat: geen cache-optie meegeven (Safari stuurt dan een extra
 // CORS-voorvraag die evcc niet kent), maar de cache omzeilen met een tijdstempel.
@@ -545,12 +644,19 @@ function fromEvcc(raw) {
   // Eén meter die even hapert (bv. de P1-meter) mag de batterij niet doen verdwijnen.
   if (grid === null && batW === null) throw new Error('geen net- of batterijgegevens in evcc');
   // extra meters (bv. de laadpaal) die evcc alleen uitleest
-  const ext = Array.isArray(d.ext) ? d.ext.filter((m) => m && typeof m.power === 'number').map((m) => ({ name: m.name || 'extra', power: m.power })) : [];
+  // wp_… = de warmtepomp via de HeishaMon: die bewaart evcc alleen voor de geschiedenis (COP),
+  // in het verbruik telt de IoTaWatt-meting van de warmtepomp al mee.
+  const ext = Array.isArray(d.ext) ? d.ext.filter((m) => m && typeof m.power === 'number' && !/^wp_/.test(m.name || ''))
+    .map((m) => ({ name: m.name || 'extra', power: m.power })) : [];
+  // kwartierpiek-grens van evcc (circuit maxPower)
+  const limit = d.circuits && typeof d.circuits === 'object'
+    ? Object.values(d.circuits).map((c) => c && c.maxPower).find((v) => typeof v === 'number' && v > 0) || null : null;
   // laadpunten die evcc aanstuurt (de laadpaal): hun laadvermogen telt als gemeten verbruik
   (Array.isArray(d.loadpoints) ? d.loadpoints : []).forEach((lp, i) => {
-    if (lp && typeof lp.chargePower === 'number') ext.push({ name: lp.title || 'Laadpaal ' + (i + 1), power: lp.chargePower, lp: { mode: lp.mode, connected: lp.connected, charging: lp.charging } });
+    if (lp && typeof lp.chargePower === 'number') ext.push({ name: lp.title || 'Laadpaal ' + (i + 1), power: lp.chargePower,
+      lp: { mode: lp.mode, connected: lp.connected, charging: lp.charging, chargedEnergy: lp.chargedEnergy, phases: lp.phasesActive, current: lp.chargeCurrent } });
   });
-  return { ok: true, grid_w: grid, battery_w: batW, battery_soc: soc, ext };
+  return { ok: true, grid_w: grid, battery_w: batW, battery_soc: soc, ext, limit };
 }
 
 async function loadGoodWe() {
@@ -757,24 +863,10 @@ function renderTiles() {
 
   $('tSunSub').innerHTML = [...split, sunToday].filter(Boolean).map((x) => '<div>' + x + '</div>').join('') || '&nbsp;';
 
-  if (s.hasMains) {
-    $('tNetLbl').textContent = s.mains < 0 ? 'Teruglevering' : 'Van het net';
-    $('tNet').innerHTML = html(fmtPower(Math.abs(s.mains)));
-    $('tNet').style.color = s.mains < 0 ? 'var(--good)' : '';
-    $('tNetSub').textContent = s.mains < 0 ? 'naar het net' : 'afname';
-  } else {
-    // Geen meting op de netkabel: schatting op basis van gemeten groepen.
-    const bal = s.sun - s.use;
-    $('tNetLbl').textContent = bal >= 0 ? 'Overschot' : 'Tekort';
-    $('tNet').innerHTML = html(fmtPower(Math.abs(bal)));
-    $('tNet').style.color = bal >= 0 ? 'var(--good)' : '';
-    $('tNetSub').textContent = s.use > 0 ? Math.round(Math.min(1, s.sun / s.use) * 100) + '% uit zon (schatting)' : 'schatting';
-  }
-
   // De batterij-tegel blijft staan zodra evcc is ingesteld; zonder gegevens zegt hij waarom.
   const bat = !!(config.gw || '').trim();
   $('tBatTile').hidden = !bat;
-  $('tiles').classList.toggle('four', bat);
+  $('tiles').classList.toggle('two', !bat);
   if (bat && (!gw || gw.battery_w === null)) {
     $('tBat').innerHTML = gw && gw.battery_soc !== null ? nf0.format(gw.battery_soc) + '<small>%</small>' : '–';
     $('tBatSub').textContent = gw ? 'geen vermogen van evcc' : 'evcc niet bereikbaar';
@@ -796,7 +888,31 @@ function renderTiles() {
 
 const PALETTE_N = 8;            // 8 vaste toestelkleuren; meer tegelijk is niet leesbaar
 const GROUP = { day: '1h', week: '1d', month: '1d' };
-const hist = { period: 'day', k: 0, buckets: [], ev: null };
+const hist = { period: 'day', k: 0, buckets: [], ev: null, note: '' };
+const histMode = () => config.histMode === 'peak' ? 'peak' : 'kwh';
+const hhmm = (t) => new Date(t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+
+// Einde van een periode (lokale tijd), ook als die nog niet voorbij is.
+function periodEnd(period, k) {
+  const d = new Date(unixRange(period, k)[0] * 1000);
+  if (period === 'day') d.setDate(d.getDate() + 1);
+  else if (period === 'week') d.setDate(d.getDate() + 7);
+  else d.setMonth(d.getMonth() + 1);
+  return d.getTime() / 1000;
+}
+// Begin van elk uur (dag) of elke dag (week/maand) tot nu.
+function slotTimes(period, k, full = false) {
+  const from = unixRange(period, k)[0], end = full ? periodEnd(period, k) : Math.min(periodEnd(period, k), Date.now() / 1000);
+  const out = [];
+  for (let t = from; t < end;) {
+    out.push(t);
+    if (period === 'day') t += 3600;
+    else { const d = new Date(t * 1000); d.setDate(d.getDate() + 1); t = d.getTime() / 1000; }
+  }
+  return out;
+}
+// Alle kwartieren van de dag (ook die nog moeten komen, dan zonder waarde), zodat de as altijd 00u–24u is.
+const quarterTimes = (from, end) => { const out = []; for (let t = from; t < end; t += 900) out.push(t); return out; };
 const dev = { mode: 'now', k: 0, buckets: [], totals: {}, warn: '' };
 
 const loadNames = () => seriesNames.filter((n) => seriesCfg(n).role === 'load');
@@ -830,13 +946,14 @@ function periodLabel(period, k) {
 }
 function bucketLabel(period, t) {
   const d = new Date(t * 1000);
-  if (period === 'day') return String(d.getHours()).padStart(2, '0') + 'u';
+  if (period === 'day' || period === 'quarter') return String(d.getHours()).padStart(2, '0') + 'u';
   if (period === 'week') return d.toLocaleDateString('nl-NL', { weekday: 'short' }).replace('.', '');
   return String(d.getDate());
 }
 function bucketTitle(period, t) {
   const d = new Date(t * 1000);
   if (period === 'day') { const h = d.getHours(); return `${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00`; }
+  if (period === 'quarter') return hhmm(t) + '–' + hhmm(t + 900);
   return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
@@ -906,6 +1023,7 @@ const MAIN_SERIES = [
 ];
 
 async function loadHist() {
+  if (histMode() === 'peak') return loadPeakHist();
   const [from, to] = unixRange(hist.period, hist.k);
   if (hist.period === 'day') {
     let rows;
@@ -937,8 +1055,63 @@ async function loadHist() {
   hist.ev = ev;
 }
 
+// Kwartierpiek: gemiddelde afname van het net per kwartier (uit evcc, de P1-meter). Het capaciteitstarief
+// rekent per maand met het hoogste kwartier (minstens 2,5 kW).
+async function loadPeakHist() {
+  const [from, to] = unixRange(hist.period, hist.k);
+  const ev = await evccHistory(from, to, '15m');
+  const g = ev && ev.grid;
+  hist.note = '';
+  if (!g || !Object.keys(g).length) {
+    hist.buckets = [];
+    hist.note = evccBase() ? 'evcc heeft nog geen kwartiergegevens voor deze periode.' : 'De kwartiergeschiedenis komt uit evcc. Vul bij ⚙︎ het evcc-adres in.';
+    return;
+  }
+  const W = (t) => (g[t] ? Math.max(0, g[t].e) * 4000 : null);
+  if (hist.period === 'day') {
+    hist.buckets = quarterTimes(from, periodEnd('day', hist.k)).map((t) => ({ t, vals: { peak: W(t) } }));
+    return;
+  }
+  const keys = Object.keys(g).map(Number);
+  const days = slotTimes(hist.period, hist.k);
+  hist.buckets = days.map((d0, i) => {
+    const nx = new Date(d0 * 1000); nx.setDate(nx.getDate() + 1);
+    const d1 = nx.getTime() / 1000;
+    let best = null, at = null;
+    keys.forEach((t) => { if (t >= d0 && t < d1) { const w = W(t); if (w !== null && (best === null || w > best)) { best = w; at = t; } } });
+    return { t: d0, vals: { peak: best }, note: at ? 'om ' + hhmm(at) + '–' + hhmm(at + 900) : '' };
+  });
+}
+
+function renderPeakHist() {
+  const day = hist.period === 'day';
+  const refs = [];
+  if (gw && gw.limit) refs.push({ v: gw.limit, label: 'grens evcc', color: 'var(--bad)' });
+  if (hist.k === 0 && p1 && typeof p1.peak === 'number' && p1.peak > 0) refs.push({ v: p1.peak, label: 'maandpiek', color: 'var(--warn)' });
+  refs.push({ v: PEAK_MIN, label: 'min. 2,5 kW', color: 'var(--text-3)' });
+  const series = [{ key: 'peak', name: day ? 'Afname dit kwartier' : 'Hoogste kwartier', color: 'var(--c6)' }];
+  $('hLegend').innerHTML = `<span><i style="background:var(--c6)"></i>${day ? 'Gemiddelde afname per kwartier' : 'Hoogste kwartier per dag'}</span>`;
+  drawChart($('chart'), hist.buckets, series, { kind: 'bars', unit: 'W', period: day ? 'quarter' : hist.period, refs, floor: 1000 });
+  let best = null;
+  hist.buckets.forEach((b) => { if (typeof b.vals.peak === 'number' && (!best || b.vals.peak > best.vals.peak)) best = b; });
+  const when = best ? (day ? hhmm(best.t) + '–' + hhmm(best.t + 900) : bucketTitle(hist.period, best.t) + ' ' + best.note) : '';
+  $('hTot').innerHTML = hist.note ? `<span>${esc(hist.note)}</span>`
+    : best ? `<span>Hoogste kwartier <b>${txt(fmtPower(best.vals.peak))}</b> · ${esc(when)}</span>`
+      + (hist.period === 'month' ? `<span>Capaciteitstarief rekent met <b>${txt(fmtPower(Math.max(PEAK_MIN, best.vals.peak)))}</b></span>` : '')
+    : '<span>Nog geen kwartiergegevens.</span>';
+}
+
 function renderHist() {
   document.querySelectorAll('#histSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === hist.period));
+  document.querySelectorAll('#hMode button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.m === histMode()));
+  $('hSignHint').hidden = histMode() === 'peak';
+  if (histMode() === 'peak') {
+    $('hKind').hidden = true;
+    $('hLabel').textContent = periodLabel(hist.period, hist.k);
+    $('hNext').disabled = hist.k === 0;
+    renderPeakHist();
+    return;
+  }
   document.querySelectorAll('#hKind button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.k === chartKind()));
   $('hKind').hidden = hist.period === 'day';
   $('hLabel').textContent = periodLabel(hist.period, hist.k);
@@ -1168,7 +1341,8 @@ function drawChart(svg, buckets, series, opt) {
       hi = Math.max(hi, p); lo = Math.min(lo, n);
     } else series.forEach((s) => { const v = val(b, s.key); if (v !== null) { hi = Math.max(hi, v); lo = Math.min(lo, v); } });
   });
-  const floor = opt.unit === 'W' ? 500 : 100;
+  (opt.refs || []).forEach((r) => { hi = Math.max(hi, r.v); });
+  const floor = opt.floor !== undefined ? opt.floor : opt.unit === 'W' ? 500 : 100;
   const step = niceStep(Math.max(hi - lo, floor) * 1.1 / 4);
   const yMax = Math.max(step, Math.ceil(hi * 1.05 / step) * step);
   const yMin = lo < 0 ? Math.floor(lo * 1.05 / step) * step : 0;
@@ -1177,9 +1351,9 @@ function drawChart(svg, buckets, series, opt) {
   const timeAxis = opt.t0 !== undefined;
   const xt = (t) => m.l + (t - opt.t0) / 86400 * iw;
   const xc = (i) => timeAxis ? xt(buckets[i].t) : m.l + (i + .5) * band;
-  const lab = opt.unit === 'W'
+  const lab = opt.lab || (opt.unit === 'W'
     ? (v) => Math.abs(v) >= 1000 ? nf1.format(v / 1000).replace(',0', '') + 'k' : nf0.format(v)
-    : (v) => { const x = v / 1000; return x === 0 ? '0' : (Math.abs(x) < 1 ? nf2 : Math.abs(x) < 10 ? nf1 : nf0).format(x).replace(/,0+$/, ''); };
+    : (v) => { const x = v / 1000; return x === 0 ? '0' : (Math.abs(x) < 1 ? nf2 : Math.abs(x) < 10 ? nf1 : nf0).format(x).replace(/,0+$/, ''); });
 
   let g = '';
   for (let v = yMin; v <= yMax + 1e-9; v += step) {
@@ -1187,7 +1361,7 @@ function drawChart(svg, buckets, series, opt) {
     g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${zero ? 'var(--text-3)' : 'var(--grid)'}" stroke-width="1"/>`;
     g += `<text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${lab(v)}</text>`;
   }
-  g += `<text class="axis" x="0" y="10">${opt.unit === 'W' ? 'W' : 'kWh'}</text>`;
+  g += `<text class="axis" x="0" y="10">${opt.axis || (opt.unit === 'W' ? 'W' : 'kWh')}</text>`;
   if (timeAxis) {
     for (let h = 0; h <= 24; h += 6) {
       g += `<text class="axis num" x="${xt(opt.t0 + h * 3600)}" y="${H - 4}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${String(h).padStart(2, '0')}:00</text>`;
@@ -1233,6 +1407,12 @@ function drawChart(svg, buckets, series, opt) {
       g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
     });
   }
+  // referentielijnen (bv. kwartierpiek-grens), gestippeld met een label
+  (opt.refs || []).forEach((r, i) => {
+    const yy = y(r.v).toFixed(1);
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}" stroke="${r.color}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    g += `<text class="axis ref" x="${i % 2 ? m.l + 4 : W - m.r - 2}" y="${(y(r.v) - 3).toFixed(1)}" text-anchor="${i % 2 ? 'start' : 'end'}" style="fill:${r.color};paint-order:stroke;stroke:var(--card);stroke-width:3px">${esc(r.label)}</text>`;
+  });
   if (!buckets.length) g += `<text class="axis" x="${m.l + iw / 2}" y="${m.t + ih / 2}" text-anchor="middle">Geen gegevens</text>`;
   g += opt.kind === 'bars'
     ? `<rect id="${svg.id}-hl" x="0" y="${m.t}" width="${band}" height="${ih}" fill="var(--text)" opacity=".06" visibility="hidden"/>`
@@ -1253,7 +1433,7 @@ function chartPointer(svg, tip, ev) {
   const hl = document.getElementById(svg.id + '-hl');
   if (sc.opt.kind === 'bars') hl.setAttribute('x', sc.m.l + i * sc.band); else { hl.setAttribute('x1', cx); hl.setAttribute('x2', cx); }
   hl.setAttribute('visibility', 'visible');
-  const fmt = sc.opt.unit === 'W' ? fmtPower : fmtEnergy;
+  const fmt = sc.opt.fmt || (sc.opt.unit === 'W' ? fmtPower : fmtEnergy);
   const title = sc.opt.t0 !== undefined ? new Date(b.t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : bucketTitle(sc.opt.period, b.t);
   const parts = sc.series.filter((s) => typeof b.vals[s.key] === 'number' && (!sc.opt.stacked || b.vals[s.key]))
     .sort((a, c) => Math.abs(b.vals[c.key]) - Math.abs(b.vals[a.key]))
@@ -1261,7 +1441,7 @@ function chartPointer(svg, tip, ev) {
       const v = b.vals[s.key], h = SIGN_HINT[s.key];
       return `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:4px"></span>${esc(s.name)} <b>${txt(fmt(v))}</b>${h && Math.abs(v) > 1 ? ` <span style="opacity:.7">${v > 0 ? h[0] : h[1]}</span>` : ''}`;
     });
-  tip.innerHTML = `<div style="margin-bottom:2px">${title}</div>` + (parts.join('<br>') || 'niets');
+  tip.innerHTML = `<div style="margin-bottom:2px">${title}</div>` + (parts.join('<br>') || 'niets') + (b.note ? `<div style="opacity:.7">${esc(b.note)}</div>` : '');
   tip.style.whiteSpace = 'nowrap';
   tip.classList.add('on');
   const w = tip.offsetWidth;
@@ -1348,6 +1528,13 @@ function hmPower() {
   const prod = ['Heat_Power_Production', 'Cool_Power_Production', 'DHW_Power_Production'].reduce((a, n) => a + (hv(n) || 0), 0);
   return { use, prod };
 }
+function hpDoing() {
+  const freq = hv('Compressor_Freq') || 0;
+  if (hv('Heatpump_State') !== 1) return 'uit';
+  if (hv('Defrosting_State') === 1) return 'ontdooit';
+  if (freq === 0) return 'stand-by';
+  return hv('ThreeWay_Valve_State') === 1 ? 'warmt sanitair water op' : 'verwarmt het huis';
+}
 function renderHM() {
   const tile = $('tHpTile');
   tile.hidden = !hm;
@@ -1357,14 +1544,9 @@ function renderHM() {
     $('tHpSub').textContent = 'HeishaMon niet bereikbaar (' + hm.error + ')';
     return;
   }
-  const on = hv('Heatpump_State') === 1, freq = hv('Compressor_Freq') || 0;
-  const dhw = hv('ThreeWay_Valve_State') === 1;
+  const freq = hv('Compressor_Freq') || 0;
   const p = hmPower();
-  let doing;
-  if (!on) doing = 'uit';
-  else if (hv('Defrosting_State') === 1) doing = 'ontdooit';
-  else if (freq === 0) doing = 'stand-by';
-  else doing = dhw ? 'warmt sanitair water op' : 'verwarmt het huis';
+  const doing = hpDoing();
   const fmtT = (n) => (n === null ? '–' : nf0.format(n) + ' °C');
   $('tHpLbl').textContent = 'Warmtepomp · ' + doing;
   $('tHp').innerHTML = freq > 0 ? html(fmtPower(p.use)) : '–';
@@ -1376,6 +1558,187 @@ function renderHM() {
     err, heaters,
   ].filter(Boolean);
   $('tHpSub').innerHTML = lines.map((l) => '<div>' + esc(l) + '</div>').join('');
+}
+
+const HP_MODE = { 0: 'verwarmen', 1: 'koelen', 2: 'auto (verwarmen)', 3: 'alleen sanitair water', 4: 'verwarmen + sanitair water',
+  5: 'koelen + sanitair water', 6: 'auto (verwarmen) + sanitair water', 7: 'auto (koelen)', 8: 'auto (koelen) + sanitair water' };
+
+// Lijst "naam: waarde" in groepjes; lege waarden vallen weg.
+function kvHtml(groups) {
+  return groups.map(([h, rows]) => {
+    const r = rows.filter(([, v]) => v !== null && v !== undefined && v !== '');
+    return r.length ? `<div class="kvh">${esc(h)}</div><dl class="kv">${r.map(([k, v]) => `<dt>${esc(k)}</dt><dd class="num">${esc(v)}</dd>`).join('')}</dl>` : '';
+  }).join('');
+}
+
+function renderHpInfo() {
+  if ($('hpView').hidden) return;
+  const el = $('hpInfo');
+  if (!hm || hm.error) { el.innerHTML = `<p class="empty">${hm ? 'HeishaMon niet bereikbaar (' + esc(hm.error) + ')' : 'Vul bij ⚙︎ het adres van de HeishaMon in.'}</p>`; return; }
+  const T = (n) => { const x = hv(n); return x === null ? null : nf1.format(x).replace(/,0$/, '') + ' °C'; };
+  const N = (n, u) => { const x = hv(n); return x === null ? null : nf0.format(x) + u; };
+  const p = hmPower(), freq = hv('Compressor_Freq') || 0;
+  const err = hm.v.Error ? String(hm.v.Error.value) : null;
+  el.innerHTML = kvHtml([
+    ['Nu', [
+      ['Toestand', hpDoing()],
+      ['Werking', HP_MODE[hv('Operating_Mode_State')] || (hm.v.Operating_Mode_State && hm.v.Operating_Mode_State.text)],
+      ['Compressor', freq ? nf0.format(freq) + ' Hz' : 'uit'],
+      ['Waterdebiet', hv('Pump_Flow') !== null ? nf1.format(hv('Pump_Flow')) + ' l/min' : null],
+      ['Elektrische bijverwarming', hv('Internal_Heater_State') === 1 || hv('External_Heater_State') === 1 ? '⚠ aan' : 'uit'],
+    ]],
+    ['Vermogen', [
+      ['Elektrisch', txt(fmtPower(p.use))],
+      ['Warmte', txt(fmtPower(p.prod))],
+      ['COP', freq > 0 && p.use > 0 ? nf1.format(p.prod / p.use) : '–'],
+    ]],
+    ['Temperaturen', [
+      ['Buiten', T('Outside_Temp')], ['Aanvoer', T('Main_Outlet_Temp')], ['Retour', T('Main_Inlet_Temp')],
+      ['Doel aanvoer', T('Main_Target_Temp')], ['Boiler', T('DHW_Temp')], ['Doel boiler', T('DHW_Target_Temp')], ['Kamer', T('Z1_Temp')],
+    ]],
+    ['Tellers', [
+      ['Bedrijfsuren', N('Operations_Hours', ' u')], ['Starts compressor', N('Operations_Counter', '')],
+      ['Bijverwarming huis', N('Room_Heater_Operations_Hours', ' u')], ['Bijverwarming boiler', N('DHW_Heater_Operations_Hours', ' u')],
+      ['Foutcode', err === 'No error' ? 'geen' : err],
+    ]],
+  ]);
+}
+
+// Geschiedenis van de warmtepomp: evcc bewaart verbruik en warmte van de HeishaMon (wp_elektrisch / wp_warmte).
+// Waar evcc nog niets heeft, vult de IoTaWatt het elektrisch verbruik aan (zonder COP).
+const hpv = { period: 'day', k: 0, buckets: [], note: '' };
+const hpIotName = () => loadNames().find((n) => /warmtepomp|heat ?pump|^wp/i.test(n + ' ' + labelOf(n)));
+async function loadHpHist() {
+  const [from, to] = unixRange(hpv.period, hpv.k);
+  const day = hpv.period === 'day', tol = day ? 600 : 7200;
+  const ev = await evccHistory(from, to, day ? 'hour' : 'day');
+  const el = ev && ev['evcc:wp_elektrisch'], ht = ev && ev['evcc:wp_warmte'];
+  const iot = hpIotName();
+  let rows = [];
+  if (iot) { try { rows = await queryWh(hpv.period, hpv.k, GROUP[hpv.period], [iot]); } catch (e) { rows = []; } }
+  let usedIot = false;
+  const nowS = Date.now() / 1000, len = day ? 3600 : 86400;
+  hpv.buckets = slotTimes(hpv.period, hpv.k, day).map((t) => {
+    if (t > nowS) return { t, vals: { elek: null, warmte: null, cop: null } };
+    const e = findSlot(el, t, tol), h = findSlot(ht, t, tol);
+    const r = rows.find((x) => Math.abs(x.t - t) <= tol);
+    let elek = e ? e.e * 1000 : null;
+    if (elek === null && r) {
+      elek = loadWh(iot, r.v[iot]);
+      // het lopende uur/de lopende dag bewaart evcc pas achteraf: dat telt niet als "ontbrekend"
+      if (elek !== null && t + len < nowS - 900) usedIot = true;
+    }
+    return { t, vals: { elek, warmte: h ? h.e * 1000 : null, cop: e && h && e.e > 0.05 ? h.e / e.e : null } };
+  });
+  hpv.note = !el ? (evccBase() ? 'evcc bewaart de warmtepomp nog niet. Zet de nieuwe evcc.yaml (met wp_elektrisch en wp_warmte) op de Synology.'
+    : 'Warmte en COP worden bewaard door evcc. Vul bij ⚙︎ het evcc-adres in.')
+    : usedIot ? 'Waar evcc nog geen gegevens had, komt het verbruik uit de IoTaWatt (zonder warmte en COP).' : '';
+}
+function renderHpView() {
+  if ($('hpView').hidden) return;
+  document.querySelectorAll('#hpSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === hpv.period));
+  $('hpLabel').textContent = periodLabel(hpv.period, hpv.k);
+  $('hpNext').disabled = hpv.k === 0;
+  const S1 = [{ key: 'elek', name: 'Elektrisch', color: 'var(--use)' }, { key: 'warmte', name: 'Warmte', color: 'var(--sun)' }];
+  $('hpLegend').innerHTML = S1.map((x) => `<span><i style="background:${x.color}"></i>${x.name}</span>`).join('');
+  drawChart($('hpChart1'), hpv.buckets, S1, { kind: 'bars', unit: 'Wh', period: hpv.period });
+  drawChart($('hpChart2'), hpv.buckets, [{ key: 'cop', name: 'COP', color: 'var(--c2)' }], {
+    kind: 'bars', unit: 'COP', period: hpv.period, floor: 1, axis: 'COP',
+    lab: (v) => nf1.format(v).replace(/,0$/, ''), fmt: (v) => ({ v: nf1.format(v), u: '' }),
+  });
+  let el = 0, ht = 0, elc = 0;
+  hpv.buckets.forEach((b) => {
+    el += b.vals.elek || 0; ht += b.vals.warmte || 0;
+    if (typeof b.vals.cop === 'number') elc += b.vals.elek || 0;
+  });
+  $('hpTot').innerHTML = `<span>Elektrisch <b>${txt(fmtEnergy(el))}</b></span>` + (ht > 0 ? `<span>Warmte <b>${txt(fmtEnergy(ht))}</b></span>` : '')
+    + (elc > 0 && ht > 0 ? `<span>Gemiddelde COP <b>${nf1.format(ht / elc)}</b></span>` : '');
+  $('hpNote').textContent = hpv.note;
+}
+async function changeHp(period, k) {
+  hpv.period = period; hpv.k = Math.max(0, k);
+  $('hpLabel').textContent = periodLabel(hpv.period, hpv.k);
+  try { await loadHpHist(); } catch (e) { hpv.buckets = []; }
+  renderHpView();
+}
+
+/* ---------- laadpaal (evcc) ---------- */
+
+const LP_MODE = { off: 'Uit', now: 'Snel', minpv: 'Min+Zon', pv: 'Zon', smart: 'Slim' };
+const lpNow = () => (gw && gw.ext ? gw.ext.find((m) => m.lp) : null);
+const lpState = (lp) => (lp.lp.charging && lp.power > 50 ? 'laadt' : lp.lp.connected ? 'auto aangesloten' : 'geen auto');
+function renderLpTile() {
+  const lp = lpNow();
+  $('tLpTile').hidden = !lp;
+  if (lp) {
+    $('tLpLbl').textContent = 'Laadpaal · ' + lpState(lp);
+    $('tLp').innerHTML = html(fmtPower(lp.power));
+    $('tLpSub').textContent = 'Modus ' + (LP_MODE[lp.lp.mode] || lp.lp.mode || '–')
+      + (lp.lp.chargedEnergy > 0 ? ' · deze laadbeurt ' + txt(fmtEnergy(lp.lp.chargedEnergy)) : '');
+  }
+  $('detEmpty').hidden = !!(lp || hm);
+}
+function renderLpInfo() {
+  if ($('lpView').hidden) return;
+  const lp = lpNow(), el = $('lpInfo');
+  if (!lp) { el.innerHTML = '<p class="empty">' + (gw ? 'evcc kent geen laadpaal.' : 'evcc niet bereikbaar. Controleer het adres bij ⚙︎.') + '</p>'; return; }
+  const x = lp.lp;
+  el.innerHTML = kvHtml([['Nu', [
+    ['Toestand', lpState(lp)],
+    ['Modus', LP_MODE[x.mode] || x.mode],
+    ['Laadvermogen', txt(fmtPower(lp.power))],
+    ['Fasen', typeof x.phases === 'number' && x.phases > 0 ? String(x.phases) : null],
+    ['Laadstroom', typeof x.current === 'number' && x.current > 0 ? nf1.format(x.current) + ' A' : null],
+    ['Deze laadbeurt', typeof x.chargedEnergy === 'number' && x.chargedEnergy > 0 ? txt(fmtEnergy(x.chargedEnergy)) : null],
+    ['Kwartierpiek-grens', gw && gw.limit ? txt(fmtPower(gw.limit)) : null],
+  ]]]);
+}
+
+// Geschiedenis van de laadpaal: per kwartier het gemiddelde laadvermogen (dag), of kWh per dag.
+const lpv = { period: 'day', k: 0, buckets: [], note: '' };
+async function loadLpHist() {
+  const lp = lpNow(), key = lp ? 'evcc:' + lp.name : null;
+  const [from, to] = unixRange(lpv.period, lpv.k);
+  const day = lpv.period === 'day';
+  const ev = key ? await evccHistory(from, to, day ? '15m' : 'day') : null;
+  const map = ev && ev[key];
+  lpv.note = !ev ? 'De geschiedenis van de laadpaal komt uit evcc.' : !map ? 'evcc heeft nog geen laadgegevens voor deze periode.' : '';
+  lpv.buckets = day
+    ? quarterTimes(from, periodEnd('day', lpv.k)).map((t) => ({ t, vals: { kw: map && t < Date.now() / 1000 ? (map[t] ? map[t].e * 4000 : 0) : null } }))
+    : slotTimes(lpv.period, lpv.k).map((t) => { const sl = findSlot(map, t, 7200); return { t, vals: { kwh: map ? (sl ? sl.e * 1000 : 0) : null } }; });
+}
+function renderLpView() {
+  if ($('lpView').hidden) return;
+  document.querySelectorAll('#lpSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === lpv.period));
+  $('lpLabel').textContent = periodLabel(lpv.period, lpv.k);
+  $('lpNext').disabled = lpv.k === 0;
+  const day = lpv.period === 'day';
+  $('lpChartTitle').textContent = day ? 'Laadvermogen per kwartier' : 'Geladen per dag';
+  drawChart($('lpChart'), lpv.buckets, [{ key: day ? 'kw' : 'kwh', name: day ? 'Laadvermogen' : 'Geladen', color: 'var(--c2)' }],
+    day ? { kind: 'bars', unit: 'W', period: 'quarter' } : { kind: 'bars', unit: 'Wh', period: lpv.period });
+  const tot = lpv.buckets.reduce((a, b) => a + (day ? (b.vals.kw || 0) / 4 : b.vals.kwh || 0), 0);
+  const max = day ? Math.max(0, ...lpv.buckets.map((b) => b.vals.kw || 0)) : 0;
+  $('lpTot').innerHTML = `<span>Geladen <b>${txt(fmtEnergy(tot))}</b></span>` + (max > 0 ? `<span>Hoogste kwartier <b>${txt(fmtPower(max))}</b></span>` : '');
+  $('lpNote').textContent = lpv.note;
+}
+async function changeLp(period, k) {
+  lpv.period = period; lpv.k = Math.max(0, k);
+  $('lpLabel').textContent = periodLabel(lpv.period, lpv.k);
+  try { await loadLpHist(); } catch (e) { lpv.buckets = []; }
+  renderLpView();
+}
+
+function openView(id) { $(id).hidden = false; document.body.style.overflow = 'hidden'; }
+function closeView(id) { $(id).hidden = true; document.body.style.overflow = ''; }
+function openHp() { openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); }
+function openLp() { openView('lpView'); renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {}); }
+
+function showTab(t) {
+  config.tab = t === 'details' ? 'details' : 'status';
+  $('tabStatus').hidden = config.tab !== 'status';
+  $('tabDetails').hidden = config.tab !== 'details';
+  document.querySelectorAll('#tabSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.t === config.tab));
+  if (config.tab === 'status') renderHist();
 }
 
 const PEAK_MIN = 2500; // Vlaanderen: het capaciteitstarief rekent minstens 2,5 kW
@@ -1428,6 +1791,9 @@ async function tickLive() {
     await Promise.all([loadLive(), loadGoodWe(), loadP1(), loadHM()]);
     renderPeak();
     renderHM();
+    renderLpTile();
+    renderHpInfo();
+    renderLpInfo();
     showOk();
     renderTiles();
     if (dev.mode === 'now') renderDev();
@@ -1442,6 +1808,8 @@ async function tickDay() {
     renderHist();
     loadSessions().catch(() => {});
     if (!$('devView').hidden && dev.mode !== 'now' && dev.k === 0) { await loadDev(); renderDev(); }
+    if (!$('hpView').hidden && hpv.k === 0) { await loadHpHist(); renderHpView(); }
+    if (!$('lpView').hidden && lpv.k === 0) { await loadLpHist(); renderLpView(); }
   } catch (e) { showError(e); }
 }
 
@@ -1633,6 +2001,26 @@ dw.addEventListener('pointerleave', () => chartOut($('dchart'), $('dtip')));
 document.querySelectorAll('#hKind button, #dKind button').forEach((b) => {
   b.onclick = () => { config.chartKind = b.dataset.k; saveConfig(); renderHist(); renderDev(); };
 });
+document.querySelectorAll('#hMode button').forEach((b) => {
+  b.onclick = () => { config.histMode = b.dataset.m; saveConfig(); changeHist(hist.period, hist.k); };
+});
+document.querySelectorAll('#tabSeg button').forEach((b) => { b.onclick = () => { showTab(b.dataset.t); saveConfig(); }; });
+const tapTile = (id, fn) => { $(id).onclick = fn; $(id).onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } }; };
+tapTile('tHpTile', openHp);
+tapTile('tLpTile', openLp);
+$('hpBack').onclick = () => closeView('hpView');
+$('lpBack').onclick = () => closeView('lpView');
+document.querySelectorAll('#hpSeg button').forEach((b) => { b.onclick = () => changeHp(b.dataset.p, 0); });
+document.querySelectorAll('#lpSeg button').forEach((b) => { b.onclick = () => changeLp(b.dataset.p, 0); });
+$('hpPrev').onclick = () => changeHp(hpv.period, hpv.k + 1);
+$('hpNext').onclick = () => changeHp(hpv.period, hpv.k - 1);
+$('lpPrev').onclick = () => changeLp(lpv.period, lpv.k + 1);
+$('lpNext').onclick = () => changeLp(lpv.period, lpv.k - 1);
+[['hpWrap1', 'hpChart1', 'hpTip1'], ['hpWrap2', 'hpChart2', 'hpTip2'], ['lpWrap', 'lpChart', 'lpTip']].forEach(([w, c, t]) => {
+  $(w).addEventListener('pointermove', (e) => chartPointer($(c), $(t), e));
+  $(w).addEventListener('pointerdown', (e) => chartPointer($(c), $(t), e));
+  $(w).addEventListener('pointerleave', () => chartOut($(c), $(t)));
+});
 $('openSettings').onclick = openSettings;
 $('cancelSettings').onclick = closeSettings;
 $('sheetBg').onclick = closeSettings;
@@ -1641,9 +2029,10 @@ const cw = $('chartWrap');
 cw.addEventListener('pointermove', (e) => chartPointer($('chart'), $('tip'), e));
 cw.addEventListener('pointerdown', (e) => chartPointer($('chart'), $('tip'), e));
 cw.addEventListener('pointerleave', () => chartOut($('chart'), $('tip')));
-window.addEventListener('resize', () => { renderHist(); renderDev(); });
+window.addEventListener('resize', () => { renderHist(); renderDev(); renderHpView(); renderLpView(); });
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
 
+showTab(config.tab);
 renderHist();
 start();
 </script>

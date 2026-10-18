@@ -8,7 +8,7 @@ We nemen de taken van EVA stap voor stap over:
 | 1 | **Laadpaal (RAEDIAN) + kwartierpiek begrenzen** | in `evcc.yaml` |
 | 2 | Dynamisch tarief (laden en batterij op goedkope uren) | leverancier nodig |
 | 3 | Batterij (GoodWe) van EVA naar evcc | daarna EVA uitschakelen |
-| 4 | Warmtepomp (Panasonic via HeishaMon): sanitair water op zonne-overschot | wacht op HeishaMon |
+| 4 | Warmtepomp (Panasonic via HeishaMon): sanitair water op zonne-overschot | HeishaMon wordt al uitgelezen (`wp_elektrisch`, `wp_warmte`) |
 | 5 | SolarEdge rechtstreeks via Modbus TCP | wacht op installateur |
 
 **Stap 1 – kwartierpiek:** de `circuit` "aansluiting" bewaakt het vermogen op de P1-meter.
