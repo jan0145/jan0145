@@ -299,6 +299,11 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="sub" id="tPeakSub">&nbsp;</div>
       <div class="bar" id="tPeakBar" style="margin-top:8px"><i></i></div>
     </div>
+    <div class="tile wide" id="tHpTile" hidden>
+      <div class="lbl" id="tHpLbl">Warmtepomp</div>
+      <div class="val num" id="tHp">–</div>
+      <div class="sub" id="tHpSub">&nbsp;</div>
+    </div>
   </section>
 
   <button class="navcard" id="openDevices">
@@ -407,6 +412,10 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <h3>P1-meter (optioneel)</h3>
     <input class="field" id="p1Input" placeholder="bv. http://192.168.0.124" autocapitalize="off" autocorrect="off" spellcheck="false">
     <p class="help">HomeWizard P1-meter met "Lokale API" aan. Geeft het exacte netverbruik en je kwartierpiek (capaciteitstarief). Leeg = uit.</p>
+
+    <h3>Warmtepomp via HeishaMon (optioneel)</h3>
+    <input class="field" id="hmInput" placeholder="bv. http://192.168.0.254" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="help">Adres van de HeishaMon op de Panasonic-warmtepomp. Toont wat de warmtepomp doet, zijn verbruik en de temperaturen. De app leest alleen; er wordt niets aangestuurd. Leeg = uit.</p>
 
     <h3>Kanalen</h3>
     <p class="help" style="margin:0 0 8px">Geef elk kanaal een naam en een rol. <b>Zon</b> telt als opwek, <b>Hoofdaansluiting</b> is een meting op de netkabel (optioneel). Driefasig toestel waarvan je maar één draad meet? Kies <b>×3</b> bij een 3N400V-net (4 draden, met nul) of <b>×1,73</b> bij een 3×230V-net (3 draden, zonder nul).</p>
@@ -1310,6 +1319,65 @@ function p1Date(ts) {
   const m = /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(String(ts));
   return m ? new Date(2000 + +m[1], m[2] - 1, +m[3], +m[4], +m[5]) : null;
 }
+/* ---------- warmtepomp (HeishaMon, alleen uitlezen) ---------- */
+
+let hm = null;
+async function loadHM() {
+  const u = (config.hm || '').trim();
+  if (!u) { hm = null; return; }
+  try {
+    const d = u.toLowerCase() === 'demo' ? Demo.hm() : await getJson((/^https?:\/\//.test(u) ? u : 'http://' + u).replace(/\/+$/, '') + '/json');
+    const v = {};
+    (d.heatpump || []).forEach((x) => { v[x.Name] = { value: x.Value, text: x.Description }; });
+    if (!v.Heatpump_State) { hm = { error: 'geen warmtepompgegevens' }; return; }
+    hm = { v, t: Date.now() };
+  } catch (e) {
+    if (hm && hm.v && Date.now() - hm.t < 60000) return;  // één gemiste meting: laatste waarden houden
+    hm = { error: e.message || String(e) };
+  }
+}
+// Gemeten waarde, of null als de sensor er niet is (HeishaMon geeft dan -78 of -128).
+function hv(name) {
+  const x = hm && hm.v && hm.v[name];
+  const n = x ? Number(x.value) : NaN;
+  return isFinite(n) && n > -70 ? n : null;
+}
+function hmPower() {
+  if (!hm || !hm.v) return null;
+  const use = ['Heat_Power_Consumption', 'Cool_Power_Consumption', 'DHW_Power_Consumption'].reduce((a, n) => a + (hv(n) || 0), 0);
+  const prod = ['Heat_Power_Production', 'Cool_Power_Production', 'DHW_Power_Production'].reduce((a, n) => a + (hv(n) || 0), 0);
+  return { use, prod };
+}
+function renderHM() {
+  const tile = $('tHpTile');
+  tile.hidden = !hm;
+  if (!hm) return;
+  if (hm.error) {
+    $('tHp').textContent = '–';
+    $('tHpSub').textContent = 'HeishaMon niet bereikbaar (' + hm.error + ')';
+    return;
+  }
+  const on = hv('Heatpump_State') === 1, freq = hv('Compressor_Freq') || 0;
+  const dhw = hv('ThreeWay_Valve_State') === 1;
+  const p = hmPower();
+  let doing;
+  if (!on) doing = 'uit';
+  else if (hv('Defrosting_State') === 1) doing = 'ontdooit';
+  else if (freq === 0) doing = 'stand-by';
+  else doing = dhw ? 'warmt sanitair water op' : 'verwarmt het huis';
+  const fmtT = (n) => (n === null ? '–' : nf0.format(n) + ' °C');
+  $('tHpLbl').textContent = 'Warmtepomp · ' + doing;
+  $('tHp').innerHTML = freq > 0 ? html(fmtPower(p.use)) : '–';
+  const err = hm.v.Error && hm.v.Error.value && hm.v.Error.value !== 'No error' ? '⚠ fout ' + hm.v.Error.value : '';
+  const heaters = (hv('Internal_Heater_State') === 1 || hv('External_Heater_State') === 1) ? '⚠ elektrische bijverwarming aan' : '';
+  const lines = [
+    freq > 0 && p.use > 0 ? `levert ${txt(fmtPower(p.prod))} warmte · COP ${nf1.format(p.prod / p.use)}` : '',
+    `Boiler ${fmtT(hv('DHW_Temp'))} (doel ${fmtT(hv('DHW_Target_Temp'))}) · aanvoer ${fmtT(hv('Main_Outlet_Temp'))} · buiten ${fmtT(hv('Outside_Temp'))}`,
+    err, heaters,
+  ].filter(Boolean);
+  $('tHpSub').innerHTML = lines.map((l) => '<div>' + esc(l) + '</div>').join('');
+}
+
 const PEAK_MIN = 2500; // Vlaanderen: het capaciteitstarief rekent minstens 2,5 kW
 
 function renderPeak() {
@@ -1357,8 +1425,9 @@ function renderPeak() {
 async function tickLive() {
   try {
     if (!seriesNames.length) await loadSeries();
-    await Promise.all([loadLive(), loadGoodWe(), loadP1()]);
+    await Promise.all([loadLive(), loadGoodWe(), loadP1(), loadHM()]);
     renderPeak();
+    renderHM();
     showOk();
     renderTiles();
     if (dev.mode === 'now') renderDev();
@@ -1391,6 +1460,7 @@ function openSettings() {
   $('hostInput').value = config.host || '';
   $('gwInput').value = config.gw || '';
   $('p1Input').value = config.p1 || '';
+  $('hmInput').value = config.hm || '';
   const list = $('seriesList');
   if (!seriesNames.length) {
     list.innerHTML = '<p class="help">Nog geen kanalen gevonden. Bewaar eerst het juiste adres.</p>';
@@ -1424,6 +1494,7 @@ function saveSettings() {
   config.host = newHost;
   config.gw = $('gwInput').value.trim();
   config.p1 = $('p1Input').value.trim();
+  config.hm = $('hmInput').value.trim();
   saveConfig();
   closeSettings();
   if (hostChanged) { seriesNames = []; live = null; today = null; dayRows = []; hist.buckets = []; start(); }
@@ -1525,7 +1596,15 @@ const Demo = (() => {
     return { active_power_w: Math.round(h.grid), active_power_average_w: Math.max(0, Math.round(h.grid * .9)),
       montly_power_peak_w: 3870, montly_power_peak_timestamp: 261003181500 };
   }
-  return { answer: async (p) => answer(p), goodwe, p1: p1demo };
+  function hmdemo() {
+    const T = (Name, Value, Description = '') => ({ Name, Value, Description });
+    return { heatpump: [T('Heatpump_State', 1, 'On'), T('Compressor_Freq', 34), T('ThreeWay_Valve_State', 0, 'Room'),
+      T('Defrosting_State', 0), T('Heat_Power_Consumption', 2200), T('Heat_Power_Production', 5800),
+      T('DHW_Power_Consumption', 0), T('DHW_Power_Production', 0), T('DHW_Temp', 46), T('DHW_Target_Temp', 48),
+      T('Main_Outlet_Temp', 38.25), T('Outside_Temp', 11), T('Internal_Heater_State', 0), T('External_Heater_State', 0),
+      T('Error', 'No error')] };
+  }
+  return { answer: async (p) => answer(p), goodwe, p1: p1demo, hm: hmdemo };
 })();
 
 /* ---------- start ---------- */

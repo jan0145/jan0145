@@ -48,6 +48,13 @@ De app gebruikt dan de P1-meter als officiële netmeting en toont een tegel **Kw
 het gemiddelde van het lopende kwartier, je hoogste kwartier van deze maand, en een waarschuwing
 (oranje vanaf 85 %, rood boven je maandpiek; minimum 2,5 kW zoals het capaciteitstarief).
 
+## Warmtepomp (HeishaMon)
+
+Vul bij ⚙︎ het adres van de **HeishaMon** in (bv. `http://192.168.0.254`). De tegel **Warmtepomp** toont
+wat de warmtepomp doet (huis verwarmen, sanitair water, ontdooien, stand-by), zijn elektrisch verbruik en
+geleverde warmte (met COP), en de temperaturen van boiler, aanvoer en buiten. Een foutcode of aanspringende
+elektrische bijverwarming krijgt een ⚠. De app leest alleen; er wordt niets aangestuurd.
+
 ## Geschiedenis
 
 - **Per groep en oudere dagen:** komt uit de IoTaWatt, die alle metingen jarenlang op zijn SD-kaart bewaart.
