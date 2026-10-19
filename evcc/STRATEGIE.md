@@ -3,12 +3,22 @@
 Uitwerking van de strategie (dynamisch tarief, weersverwachting, verwacht verbruik, kwartierpiek) met evcc
 als enige sturing. Per regel: hoe het gebeurt en wat er nog nodig is.
 
+## Cijfers uit de factuur (augustus 2026, Fluvius Imewo)
+
+- Capaciteitstarief: 437,08 € per jaar bij een gemiddelde maandpiek van **8,06 kW** → ≈ 54,2 €/kW/jaar excl. btw,
+  ≈ **65,6 €/kW/jaar incl. 21 % btw** (≈ 5,5 €/kW/maand; de strategie rekende met 4,4).
+  Het tarief gebruikt het gemiddelde van de maandpieken van de laatste 12 maanden: elke kW lagere maandpiek
+  spaart ≈ 66 €/jaar zodra hij een jaar lang meetelt.
+- Per kWh afname bovenop de energieprijs (excl. btw): afnametarief 0,0523 + groene stroom 0,0112 + WKK 0,0035
+  + accijns 0,0142 + bijdrage 0,0019 = **0,0831 €/kWh**. Btw op afname: **21 %**.
+
 ## Wat er al staat
 
 - Kwartierpiek: evcc-circuit `aansluiting` (maxPower) remt de auto; `piekbewaker.sh` zet daarna de warmtepomp
   stiller/uit (proefmodus).
 - Laadpaal via Modbus TCP, boiler (SWW 48 → 60 °C) via HeishaMon, prioriteit auto (2) > boiler (1).
-- Bolt-tarief per kwartier met de exacte formules (afname incl. nettarieven en btw, injectie), klaar voor 1 november.
+- Bolt-tarief per kwartier met de exacte formules (afname incl. nettarieven en 21 % btw, injectie), klaar voor 1 november.
+- Zonneprognose (open-meteo) voor Solis (zuid, 3,2 kWp) en SolarEdge (west, 5,5 kWp).
 - Geschiedenis van alles in evcc; Stroom-app toont kwartierpiek, warmtepomp (COP), laadpaal.
 
 ## De regels
@@ -23,7 +33,7 @@ als enige sturing. Per regel: hoe het gebeurt en wat er nog nodig is.
 | 5 | Winterreserve: min. 50 % SOC 07–18 u | optimizer houdt zelf reserve als hij een avondpiek verwacht; anders kleine aanvulling op de piekbewaker (batterij "vasthouden" onder 50 % tussen 07 en 18 u) | stap 3 |
 | 6 | Ontladen in de duurste kwartieren | optimizer (rekent met prijs, prognose en verbruiksprofiel) | stap 3 + keuze optimizer |
 | 7 | Injectie afregelen bij negatieve injectieprijs, ná auto/batterij/SWW | evcc-exportgrens + SolarEdge-afregeling (sjabloon `solaredge`); Solis enkel via contactor | Modbus TCP SolarEdge (installateur), contactor Solis |
-| 8 | Dimmen/booster uit alleen tegen de piek | piekbewaker (stille modus → uit); SG-ready via optionele print of HeishaMon | zie vragen |
+| 8 | Dimmen/booster uit alleen tegen de piek | piekbewaker (stille modus → uit); SG-ready via optionele print of HeishaMon | geen CZ-NS4P aanwezig (HeishaMon: Optional_PCB uit); HeishaMon kan de optionele print nabootsen |
 
 ## De optimizer van evcc
 
@@ -41,6 +51,6 @@ ontladen blokkeren) plus een eigen regelaar voor reserve en ontladen in de duurs
 
 1. Nu: batterij-voorrang laag (regel 1), piekbewaker in proefmodus laten lopen.
 2. 1 november: Bolt-tarief aan; auto met laadplan.
-3. HeishaMon actief (zonder CZ-TAW1) → boiler, kamertemperatuur en piekbewaker echt laten werken.
+3. ✅ HeishaMon actief (CZ-TAW1 eruit, commando's werken) → boiler, kamertemperatuur en piekbewaker.
 4. EVA uit, batterij onder evcc (stap 3) → regels 3b, 5, 6; keuze optimizer.
 5. SolarEdge Modbus → injectie afregelen (regel 7).

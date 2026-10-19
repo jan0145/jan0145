@@ -155,28 +155,51 @@ loadpoints:
     mode: pv       # "Zon": boiler naar 60 °C als er genoeg zonne-overschot is
     priority: 1
 
+# Tarieven en zonneprognose.
+# De zonneprognose (open-meteo.com, gratis) staat al aan; evcc leert zelf bij uit wat de panelen
+# echt opbrengen, en vangt zo ook de schaduw van de bomen deels op.
+# az: 0 = zuid, 90 = west, -90 = oost.  dec: hellingshoek van het dak (35° = schatting, NAKIJKEN).
+tariffs:
+  currency: EUR
+  solar:
+    - type: template # Solis, zuid, 3,2 kWp (schaduw van bomen vanaf september na 13 u)
+      template: open-meteo
+      lat: 50.97
+      lon: 3.99
+      az: 0
+      dec: 35
+      kwp: 3.2
+    - type: template # SolarEdge, west, 5,5 kWp
+      template: open-meteo
+      lat: 50.97
+      lon: 3.99
+      az: 90
+      dec: 35
+      kwp: 5.5
+
 # Stap 2 – dynamisch tarief van Bolt, per kwartier (pas vanaf 1 november!).
-# Op 1 november: haal het #-teken weg voor de regels van "tariffs:" tot en met de laatste "formula" en Run de taak.
+# Op 1 november: haal het #-teken weg voor de 10 regels van "grid:" tot en met de laatste "formula"
+# (de inspringing van 2 spaties behouden) en Run de taak.
 # De beursprijs (EPEX België, per kwartier) komt van energy-charts.info; "price" is in €/kWh.
-# Bolt:  afname   = 0,1145 × EPEX(€/MWh) + 1,645 c€/kWh  →  1.145 × price + 0.01645   (excl. btw)
+# Bolt:  afname   = 0,1145 × EPEX(€/MWh) + 1,645 c€/kWh  →  1.145 × price + 0.01645
 #        injectie = 0,094  × EPEX(€/MWh) − 1,133 c€/kWh  →  0.94  × price − 0.01133
-# Afname krijgt 6 % btw, injectie niet: daarom × 1.06 bij afname, zodat evcc ze eerlijk vergelijkt.
 # Jaar 1: 9 c€/kWh korting op afname → "- 0.09" (vanaf jaar 2 weglaten, of Ecopower-formule invullen).
-# + 0.10 = nettarieven en heffingen per kWh afname (Fluvius Antwerpen, ±10 c€; NAKIJKEN op je factuur).
-#   Die horen erbij: zonder zou afname met de korting goedkoper lijken dan injectie, en zou evcc
-#   ten onrechte "winst" zien in laden uit het net en terugleveren.
-# tariffs:
-#   currency: EUR
-#   grid:
-#     type: template
-#     template: energy-charts-api
-#     bzn: BE
-#     formula: (1.145 * price + 0.01645 - 0.09 + 0.10) * 1.06
-#   feedin:
-#     type: template
-#     template: energy-charts-api
-#     bzn: BE
-#     formula: 0.94 * price - 0.01133
+# + 0.0831 = per kWh afname, excl. btw, uit je factuur (Fluvius Imewo, augustus 2026):
+#   afnametarief 0,052289 + groene stroom 0,011179 + WKK 0,003479 + accijns 0,01421 + bijdrage 0,001926
+#   (rekent Bolt groene stroom en WKK al in zijn 1,645 c€, dan wordt dit 0.0684).
+# × 1.21 = 21 % btw op afname (zo op je factuur); injectie zonder btw.
+# Zonder de nettarieven zou afname met de korting goedkoper lijken dan injectie, en zou evcc
+# ten onrechte "winst" zien in laden uit het net en terugleveren.
+#  grid:
+#    type: template
+#    template: energy-charts-api
+#    bzn: BE
+#    formula: (1.145 * price + 0.01645 - 0.09 + 0.0831) * 1.21
+#  feedin:
+#    type: template
+#    template: energy-charts-api
+#    bzn: BE
+#    formula: 0.94 * price - 0.01133
 
 # ---------------------------------------------------------------------------
 # STAP 3 (VOORBEREIDING, NOG NIET ACTIVEREN): de batterij van EVA naar evcc
