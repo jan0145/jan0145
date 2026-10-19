@@ -158,28 +158,28 @@ loadpoints:
 # Tarieven en zonneprognose.
 # De zonneprognose (open-meteo.com, gratis) staat al aan; evcc leert zelf bij uit wat de panelen
 # echt opbrengen, en vangt zo ook de schaduw van de bomen deels op.
-# az: 0 = zuid, 90 = west, -90 = oost.  dec: hellingshoek van het dak (35° = schatting, NAKIJKEN).
+# az: 0 = zuid, 90 = west, -90 = oost.  dec: hellingshoek van de panelen.
 tariffs:
   currency: EUR
   solar:
-    - type: template # Solis, zuid, 3,2 kWp (schaduw van bomen vanaf september na 13 u)
+    - type: template # Solis, zuid, 3,2 kWp, plat dak 15° (schaduw van bomen vanaf september na 13 u)
       template: open-meteo
       lat: 50.97
       lon: 3.99
       az: 0
-      dec: 35
+      dec: 15
       kwp: 3.2
-    - type: template # SolarEdge, west, 5,5 kWp
+    - type: template # SolarEdge, west, 5,5 kWp, 45°
       template: open-meteo
       lat: 50.97
       lon: 3.99
       az: 90
-      dec: 35
+      dec: 45
       kwp: 5.5
 
-# Stap 2 – dynamisch tarief van Bolt, per kwartier (pas vanaf 1 november!).
-# Op 1 november: haal het #-teken weg voor de 10 regels van "grid:" tot en met de laatste "formula"
-# (de inspringing van 2 spaties behouden) en Run de taak.
+# Stap 2 – dynamisch tarief van Bolt, per kwartier. Staat al aan, ook al begint Bolt pas op 1 november:
+# zo plant evcc nu al met kwartierprijzen. Tot dan zijn de bedragen in evcc (bv. kosten per laadbeurt)
+# een simulatie; je betaalt nog het tarief van Mega.
 # De beursprijs (EPEX België, per kwartier) komt van energy-charts.info; "price" is in €/kWh.
 # Bolt:  afname   = 0,1145 × EPEX(€/MWh) + 1,645 c€/kWh  →  1.145 × price + 0.01645
 #        injectie = 0,094  × EPEX(€/MWh) − 1,133 c€/kWh  →  0.94  × price − 0.01133
@@ -190,16 +190,16 @@ tariffs:
 # × 1.21 = 21 % btw op afname (zo op je factuur); injectie zonder btw.
 # Zonder de nettarieven zou afname met de korting goedkoper lijken dan injectie, en zou evcc
 # ten onrechte "winst" zien in laden uit het net en terugleveren.
-#  grid:
-#    type: template
-#    template: energy-charts-api
-#    bzn: BE
-#    formula: (1.145 * price + 0.01645 - 0.09 + 0.0831) * 1.21
-#  feedin:
-#    type: template
-#    template: energy-charts-api
-#    bzn: BE
-#    formula: 0.94 * price - 0.01133
+  grid:
+    type: template
+    template: energy-charts-api
+    bzn: BE
+    formula: (1.145 * price + 0.01645 - 0.09 + 0.0831) * 1.21
+  feedin:
+    type: template
+    template: energy-charts-api
+    bzn: BE
+    formula: 0.94 * price - 0.01133
 
 # ---------------------------------------------------------------------------
 # STAP 3 (VOORBEREIDING, NOG NIET ACTIVEREN): de batterij van EVA naar evcc
@@ -209,7 +209,7 @@ tariffs:
 # Dan: vervang hierboven de meter "battery" (type custom) door dit blok (zonder #-tekens):
 #
 #  - name: battery
-#    type: template
+    type: template
 #    template: goodwe-hybrid
 #    usage: battery
 #    modbus: tcpip

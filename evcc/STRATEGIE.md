@@ -17,7 +17,8 @@ als enige sturing. Per regel: hoe het gebeurt en wat er nog nodig is.
 - Kwartierpiek: evcc-circuit `aansluiting` (maxPower) remt de auto; `piekbewaker.sh` zet daarna de warmtepomp
   stiller/uit (proefmodus).
 - Laadpaal via Modbus TCP, boiler (SWW 48 → 60 °C) via HeishaMon, prioriteit auto (2) > boiler (1).
-- Bolt-tarief per kwartier met de exacte formules (afname incl. nettarieven en 21 % btw, injectie), klaar voor 1 november.
+- Bolt-tarief per kwartier met de exacte formules (afname incl. nettarieven en 21 % btw, injectie), staat al aan
+  zodat evcc nu al plant (tot 1 november zijn de bedragen een simulatie).
 - Zonneprognose (open-meteo) voor Solis (zuid, 3,2 kWp) en SolarEdge (west, 5,5 kWp).
 - Geschiedenis van alles in evcc; Stroom-app toont kwartierpiek, warmtepomp (COP), laadpaal.
 
@@ -41,7 +42,8 @@ evcc heeft een (experimentele) optimizer die per kwartier plant met de dynamisch
 het verbruiksprofiel van de laatste 4 weken, het rendement van de batterij en de piekgrens. Dat dekt regels 3, 5
 en 6 grotendeels zonder eigen code. Voorwaarden:
 - experimentele functies + optimizer aanzetten in evcc;
-- een **sponsor-token** van evcc (GitHub-sponsoring, enkele euro per maand);
+- een **sponsor-token** van evcc: het kleinste maandplan (4 $/maand via GitHub Sponsors) volstaat, het token
+  staat daarna op sponsor.evcc.io (eenmalig ±150 € geeft een levenslang token);
 - de berekening gebeurt op `optimizer.evcc.io`: evcc stuurt daarvoor prijzen, prognose en verbruiksprofiel door.
 
 Zonder optimizer: dezelfde regels met vaste drempels (laadplan auto, batterij laden onder een prijs,
@@ -52,5 +54,5 @@ ontladen blokkeren) plus een eigen regelaar voor reserve en ontladen in de duurs
 1. Nu: batterij-voorrang laag (regel 1), piekbewaker in proefmodus laten lopen.
 2. 1 november: Bolt-tarief aan; auto met laadplan.
 3. ✅ HeishaMon actief (CZ-TAW1 eruit, commando's werken) → boiler, kamertemperatuur en piekbewaker.
-4. EVA uit, batterij onder evcc (stap 3) → regels 3b, 5, 6; keuze optimizer.
+4. EVA uit, batterij onder evcc (stap 3, `evcc-batterij.yaml` klaar en getest: vasthouden, laden uit het net) → regels 3b, 5, 6; keuze optimizer.
 5. SolarEdge Modbus → injectie afregelen (regel 7).
