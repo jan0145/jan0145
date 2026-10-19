@@ -155,15 +155,28 @@ loadpoints:
     mode: pv       # "Zon": boiler naar 60 °C als er genoeg zonne-overschot is
     priority: 1
 
-# Stap 2 – dynamisch tarief van Bolt (pas vanaf 1 november!).
-# Haal op 1 november het #-teken weg voor de 5 regels hieronder en Run de taak opnieuw.
-# Daarna kun je bij de laadpaal "goedkoop laden" instellen en toont evcc de kostprijs per laadbeurt.
+# Stap 2 – dynamisch tarief van Bolt, per kwartier (pas vanaf 1 november!).
+# Op 1 november: haal het #-teken weg voor de regels van "tariffs:" tot en met de laatste "formula" en Run de taak.
+# De beursprijs (EPEX België, per kwartier) komt van energy-charts.info; "price" is in €/kWh.
+# Bolt:  afname   = 0,1145 × EPEX(€/MWh) + 1,645 c€/kWh  →  1.145 × price + 0.01645   (excl. btw)
+#        injectie = 0,094  × EPEX(€/MWh) − 1,133 c€/kWh  →  0.94  × price − 0.01133
+# Afname krijgt 6 % btw, injectie niet: daarom × 1.06 bij afname, zodat evcc ze eerlijk vergelijkt.
+# Jaar 1: 9 c€/kWh korting op afname → "- 0.09" (vanaf jaar 2 weglaten, of Ecopower-formule invullen).
+# + 0.10 = nettarieven en heffingen per kWh afname (Fluvius Antwerpen, ±10 c€; NAKIJKEN op je factuur).
+#   Die horen erbij: zonder zou afname met de korting goedkoper lijken dan injectie, en zou evcc
+#   ten onrechte "winst" zien in laden uit het net en terugleveren.
 # tariffs:
+#   currency: EUR
 #   grid:
 #     type: template
-#     template: epexprijzen-be
-#     provider: bolt
-#     region: vlaanderen
+#     template: energy-charts-api
+#     bzn: BE
+#     formula: (1.145 * price + 0.01645 - 0.09 + 0.10) * 1.06
+#   feedin:
+#     type: template
+#     template: energy-charts-api
+#     bzn: BE
+#     formula: 0.94 * price - 0.01133
 
 # ---------------------------------------------------------------------------
 # STAP 3 (VOORBEREIDING, NOG NIET ACTIVEREN): de batterij van EVA naar evcc
