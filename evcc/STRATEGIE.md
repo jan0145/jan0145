@@ -16,11 +16,12 @@ als enige sturing. Per regel: hoe het gebeurt en wat er nog nodig is.
 
 - Kwartierpiek: evcc-circuit `aansluiting` (maxPower) remt de auto; `piekbewaker.sh` zet daarna de warmtepomp
   stiller/uit (proefmodus).
-- Laadpaal via Modbus TCP, boiler (SWW 48 → 60 °C) via HeishaMon, prioriteit auto (2) > boiler (1).
+- Laadpaal via Modbus TCP; boiler via de warmteregelaar (40 / 48 / 55 °C), prioriteit bij overschot auto (2) > boiler (1).
 - Bolt-tarief per kwartier met de exacte formules (afname incl. nettarieven en 21 % btw, injectie), staat al aan
   zodat evcc nu al plant (tot 1 november zijn de bedragen een simulatie).
 - Zonneprognose (open-meteo) voor Solis (zuid, 3,2 kWp) en SolarEdge (west, 5,5 kWp).
 - Geschiedenis van alles in evcc; Stroom-app toont kwartierpiek, warmtepomp (COP), laadpaal.
+- Warmteregelaar (`warmteregelaar/`): boiler en verwarming in tijdvensters, met prijzen, zonneprognose en zelf geleerde opwarmtijden.
 
 ## De regels
 
@@ -30,7 +31,8 @@ als enige sturing. Per regel: hoe het gebeurt en wat er nog nodig is.
 | 2 | Piekbudget winter 5 kW / zomer 3,5 kW; binnen het budget huis/WP → auto → batterij | circuit `maxPower` (auto); optimizer gebruikt dezelfde grens als harde importgrens; piekbewaker voor de WP | ✅ winter; zomer: `maxPower` in april naar 3500 |
 | 3 | Nachtladen in de goedkoopste kwartieren | auto: **laadplan** (bv. 16 kWh tegen 07:00, kiest zelf de goedkoopste kwartieren); batterij: optimizer of "laden uit het net onder prijs X" | Bolt-tarief (1 nov), batterij onder evcc (stap 3) |
 | 3b | Batterij niet leeg laten lopen in de auto | evcc "ontladen blokkeren tijdens snel/gepland laden" | stap 3 (batterij onder evcc) |
-| 4 | SWW-beurt 's nachts zonder booster | vast nachtuur in de warmtepomp zelf (timer) of laadplan op de boiler; booster: instelling warmtepomp | HeishaMon-commando's moeten werken (CZ-TAW1-vraag) |
+| 4 | SWW in vensters: gewoon 40 °C, 17–22 u ≥ 48 °C, nachtbeurt 55 °C in de goedkoopste kwartieren (niet bij veel zon morgen), zonne-overschot 55 °C | **warmteregelaar** (leert opwarm- en afkoelsnelheid van de boiler); evcc geeft het zonne-overschot door | ✅ gebouwd, proefmodus |
+| 4b | Verwarming in vensters: weekdag 06–07:30 en 16–22 u 22 °C, weekend 07–22 u, anders 20 °C | **warmteregelaar** leert hoe lang het huis nodig heeft om op te warmen (per buitentemperatuur) en start op tijd, goedkoper vroeger als dat loont | ✅ gebouwd, proefmodus |
 | 5 | Winterreserve: min. 50 % SOC 07–18 u | optimizer houdt zelf reserve als hij een avondpiek verwacht; anders kleine aanvulling op de piekbewaker (batterij "vasthouden" onder 50 % tussen 07 en 18 u) | stap 3 |
 | 6 | Ontladen in de duurste kwartieren | optimizer (rekent met prijs, prognose en verbruiksprofiel) | stap 3 + keuze optimizer |
 | 7 | Injectie afregelen bij negatieve injectieprijs, ná auto/batterij/SWW | evcc-exportgrens + SolarEdge-afregeling (sjabloon `solaredge`); Solis enkel via contactor | Modbus TCP SolarEdge (installateur), contactor Solis |

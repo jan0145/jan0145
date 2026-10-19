@@ -392,6 +392,10 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <h2>Warmtepomp</h2>
     </div>
     <section class="card"><div id="hpInfo"></div></section>
+    <section class="card" id="regCard" hidden>
+      <div class="card-head"><h2>Warmteregelaar</h2></div>
+      <div id="regInfo"></div>
+    </section>
     <section class="card" id="hpSetCard" hidden>
       <div class="card-head"><h2>Kamertemperatuur</h2></div>
       <div class="setrow">
@@ -1621,6 +1625,39 @@ function renderHpInfo() {
   renderHpSet();
 }
 
+/* ---------- warmteregelaar (op de Synology, poort 7080): wat hij van plan is ---------- */
+
+let reg = null;
+// zelfde machine als evcc, poort 7080
+const regBase = () => { const b = evccBase(); return b ? b.replace(/:\d+$/, '') + ':7080' : null; };
+async function loadReg() {
+  const b = regBase();
+  if (!b) { reg = null; return; }
+  try { reg = await getJson(b + '/status'); } catch (e) { reg = null; }
+}
+function renderReg() {
+  const card = $('regCard');
+  card.hidden = !reg || $('hpView').hidden;
+  if (card.hidden) return;
+  const T = (v) => (typeof v === 'number' ? nf0.format(v) + ' °C' : '–');
+  const hm = (t) => { const d = new Date(t); return d.getFullYear() > 2000 ? d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : null; };
+  const L = reg.learned || {};
+  const n = (L.preheat || []).length;
+  $('regInfo').innerHTML = (reg.error ? `<p class="hint warn">${esc(reg.error)}</p>` : '') + kvHtml([
+    ['Nu', [
+      ['Modus', reg.act ? 'stuurt de warmtepomp' : 'proef: beslist, maar stuurt niets'],
+      ['Boiler', reg.dhw ? T(reg.dhw.Want) + ' · ' + reg.dhw.Why : null],
+      ['Verwarming', reg.heat ? T(reg.heat.Want) + ' · ' + reg.heat.Why : null],
+      ['Voorverwarmen vanaf', reg.heat && hm(reg.heat.PreheatStart) && new Date(reg.heat.PreheatStart) > new Date() ? hm(reg.heat.PreheatStart) + ' (±' + nf0.format(reg.heat.LeadMinutes) + ' min)' : null],
+    ]],
+    ['Geleerd', [
+      ['Boiler opwarmen', typeof L.dhwHeatRate === 'number' ? nf1.format(L.dhwHeatRate) + ' °C per uur' : null],
+      ['Boiler afkoelen', typeof L.dhwCoolRate === 'number' ? nf1.format(L.dhwCoolRate) + ' °C per uur' : null],
+      ['Opwarmtijd huis', n ? n + ' metingen' : 'nog geen metingen (schatting)'],
+    ]],
+  ]);
+}
+
 /* ---------- kamertemperatuur instellen (HeishaMon-commando) ---------- */
 
 const hpSet = { val: null, busy: false, msg: '' };
@@ -1805,7 +1842,7 @@ async function changeLp(period, k) {
 
 function openView(id) { $(id).hidden = false; document.body.style.overflow = 'hidden'; }
 function closeView(id) { $(id).hidden = true; document.body.style.overflow = ''; }
-function openHp() { hpSet.val = null; hpSet.msg = ''; openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); }
+function openHp() { hpSet.val = null; hpSet.msg = ''; openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); }
 function openLp() { openView('lpView'); renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {}); }
 
 function showTab(t) {
@@ -1869,6 +1906,7 @@ async function tickLive() {
     renderLpTile();
     renderHpInfo();
     renderLpInfo();
+    if (!$('hpView').hidden) loadReg().then(renderReg);
     showOk();
     renderTiles();
     if (dev.mode === 'now') renderDev();

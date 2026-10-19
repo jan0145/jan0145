@@ -102,9 +102,10 @@ chargers:
     port: 502
     id: 1
 
-  # Sanitair warm water op zonne-overschot (stap 4). evcc zet het boilerdoel van de warmtepomp
-  # via de HeishaMon tijdelijk op 60 °C ("aan") en daarna terug op 48 °C ("uit").
-  # 48 = je gewone boilertemperatuur, 60 = de temperatuur bij zonne-overschot.
+  # Sanitair warm water op zonne-overschot (stap 4). evcc beslist WANNEER er overschot is voor de
+  # boiler (na de auto); de warmteregelaar (poort 7080 op deze Synology) zet dan het boilerdoel op 55 °C.
+  # De regelaar is de enige die de boiler aanstuurt: gewoon 40 °C, 17–22 u minstens 48 °C,
+  # 's nachts in de goedkoopste kwartieren 55 °C.
   - name: boiler
     type: switchsocket
     features:
@@ -114,12 +115,10 @@ chargers:
     standbypower: 20 # W, daarboven warmt de warmtepomp de boiler echt op
     enabled:
       source: http
-      uri: http://192.168.0.HHH/json
-      jq: '[.heatpump[] | select(.Name == "DHW_Target_Temp") | .Value][0] >= 55'
-      cache: 5s
+      uri: http://127.0.0.1:7080/boiler
     enable:
       source: http
-      uri: 'http://192.168.0.HHH/command?SetDHWTemp={{ if .enable }}60{{ else }}48{{ end }}'
+      uri: 'http://127.0.0.1:7080/boiler?on={{ if .enable }}1{{ else }}0{{ end }}'
     power:
       source: http
       uri: http://192.168.0.HHH/json
@@ -152,7 +151,7 @@ loadpoints:
   # Boiler: krijgt het overschot dat de batterij en de auto niet gebruiken.
   - title: Boiler
     charger: boiler
-    mode: pv       # "Zon": boiler naar 60 °C als er genoeg zonne-overschot is
+    mode: pv       # "Zon": boiler naar 55 °C als er genoeg zonne-overschot is
     priority: 1
 
 # Tarieven en zonneprognose.
