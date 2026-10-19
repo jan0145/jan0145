@@ -209,7 +209,7 @@ tariffs:
 # Dan: vervang hierboven de meter "battery" (type custom) door dit blok (zonder #-tekens):
 #
 #  - name: battery
-    type: template
+#    type: template
 #    template: goodwe-hybrid
 #    usage: battery
 #    modbus: tcpip
