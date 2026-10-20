@@ -1005,7 +1005,7 @@ function renderHero(s, ext) {
 function renderTiles() {
   if (!live) return;
   const ext = gwNow();
-  const s = summarize(live.values, ext);
+  const s = summarize(liveVals(), ext);
   renderHero(s, ext);
   $('tUse').innerHTML = html(fmtPower(s.use));
   setSrc('srcUse', s.hasMains ? srcIco('calc', 'net' + (p1 ? ' (P1-meter)' : '') + ' + zon' + (s.battery !== null ? ' + batterij' : '')) : srcIco('iota', 'som van de groepen'));
@@ -1180,6 +1180,16 @@ function findSlot(map, t, tol) {
   return null;
 }
 const evccMeterNames = () => (gw && gw.ext ? gw.ext.map((m) => 'evcc:' + m.name) : []);
+
+// Warmtepomp: het elektrisch verbruik dat de warmtepomp zelf meldt (HeishaMon) in plaats van één tang ×3.
+// Valt terug op de IoTaWatt als de HeishaMon (of, voor de geschiedenis, evcc) niets heeft.
+const hpLiveW = () => (hm && hm.v ? hmPower().use : null);
+function liveVals() {
+  const n = hpIotName(), w = hpLiveW();
+  if (!live || !n || w === null) return live ? live.values : {};
+  return { ...live.values, [n]: w / (seriesCfg(n).mult || 1) };
+}
+const hpFromHm = (n) => !!n && n === hpIotName() && hpLiveW() !== null;
 
 const MAIN_SERIES = [
   { key: 'use', name: 'Verbruik', color: 'var(--use)' },
@@ -1397,11 +1407,18 @@ async function loadDev() {
   const names = devNames(), loads = loadNames(), evNames = evccMeterNames();
   const rows = await queryWh(dev.mode, dev.k, GROUP[dev.mode], loads);
   const [from, to] = unixRange(dev.mode, dev.k);
-  const ev = evNames.length ? await evccHistory(from, to, dev.mode === 'day' ? 'hour' : 'day') : null;
+  const hpN = hpIotName();
+  const ev = evNames.length || hpN ? await evccHistory(from, to, dev.mode === 'day' ? 'hour' : 'day') : null;
+  const hpEv = hpN && ev && ev['evcc:wp_elektrisch'];
+  const tol = dev.mode === 'day' ? 600 : 7200;
+  dev.hpHm = false;
   dev.buckets = rows.map((r) => {
     const vals = {};
     loads.forEach((n) => { vals[n] = loadWh(n, r.v[n]); });
-    evNames.forEach((n) => { const sl = ev && findSlot(ev[n], r.t, dev.mode === 'day' ? 600 : 7200); vals[n] = sl ? sl.e * 1000 : (ev ? 0 : null); });
+    // warmtepomp: wat de HeishaMon meldde (bewaard door evcc); waar evcc niets heeft, blijft de IoTaWatt
+    const sl = hpEv && findSlot(hpEv, r.t, tol);
+    if (sl) { vals[hpN] = sl.e * 1000; dev.hpHm = true; }
+    evNames.forEach((n) => { const x = ev && findSlot(ev[n], r.t, tol); vals[n] = x ? x.e * 1000 : (ev ? 0 : null); });
     return { t: r.t, vals };
   });
   dev.totals = {};
@@ -1469,10 +1486,11 @@ function renderDev() {
 
   if (now) {
     if (!live) { ul.innerHTML = '<li class="empty">Nog geen gegevens…</li>'; return; }
-    const s = summarize(live.values, gwNow());
+    const s = summarize(liveVals(), gwNow());
     const items = s.loads.map((l) => ({
-      label: labelOf(l.name), value: l.value, raw: l.raw, src: rowSrc(l.name),
-      tag: isHeatPumpLike(l.name) ? '×' + nf2.format(seriesCfg(l.name).mult).replace(/,00$/, '') + ' geschat' : '',
+      label: labelOf(l.name), value: l.value, raw: l.raw,
+      src: hpFromHm(l.name) ? srcIco('dev', 'HeishaMon (meldt in stappen van ±200 W)') : rowSrc(l.name),
+      tag: hpFromHm(l.name) ? '' : isHeatPumpLike(l.name) ? '×' + nf2.format(seriesCfg(l.name).mult).replace(/,00$/, '') + ' geschat' : '',
     }));
     if (s.hasMains && s.other > 0) items.push({ label: 'Overig (niet gemeten)', value: s.other, src: srcIco('calc', 'totaal min de gemeten toestellen') });
     const total = s.use || 1;
@@ -1486,8 +1504,10 @@ function renderDev() {
 
   const names = devNames();
   const total = names.reduce((a, n) => a + (dev.totals[n] || 0), 0);
-  const items = names.map((n) => ({ name: n, label: labelOf(n), value: dev.totals[n] || 0, on: isVisible(n), slot: slotOf(n), src: rowSrc(n),
-    tag: isHeatPumpLike(n) ? '×' + nf2.format(seriesCfg(n).mult).replace(/,00$/, '') + ' geschat' : '' }));
+  const hpH = (n) => dev.hpHm && n === hpIotName();
+  const items = names.map((n) => ({ name: n, label: labelOf(n), value: dev.totals[n] || 0, on: isVisible(n), slot: slotOf(n),
+    src: hpH(n) ? srcIco('dev', 'HeishaMon, bewaard door evcc; waar evcc niets heeft: IoTaWatt') : rowSrc(n),
+    tag: hpH(n) ? '' : isHeatPumpLike(n) ? '×' + nf2.format(seriesCfg(n).mult).replace(/,00$/, '') + ' geschat' : '' }));
   ul.innerHTML = sortItems(items).map((it) => rowHtml(it, total, fmtEnergy, { toggle: true })).join('')
     || '<li class="empty">Geen gegevens voor deze periode.</li>';
 
