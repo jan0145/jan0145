@@ -260,14 +260,16 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .hpsum .hpgrid { margin: 0; }
 .hpsum .hpgrid .v { font-size: 24px; }
 .hpsum .doing { font-size: 14px; color: var(--text-2); margin-bottom: 10px; font-weight: 550; }
-.setrow { display: flex; align-items: center; gap: 10px; }
-.setrow .pm { width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--track); color: var(--text); font-size: 24px; cursor: pointer; }
-.setrow .setval { font-size: 26px; font-weight: 650; min-width: 84px; text-align: center; }
-.setrow .btn { flex: 1; }
+.setrow { display: flex; align-items: center; gap: 6px; }
+.setrow .setlbl { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.2; }
+.setrow .pm { width: 34px; height: 34px; flex: none; border-radius: 10px; border: 0; background: var(--track); color: var(--text); font-size: 20px; cursor: pointer; }
+.setrow .setval { font-size: 18px; font-weight: 650; min-width: 58px; text-align: center; }
+.setrow .btn { flex: none; padding: 8px 10px; font-size: 13px; border-radius: 10px; margin-left: 2px; }
 .setrow .btn:disabled, .setrow .pm:disabled { opacity: .45; cursor: default; }
 .setblk[hidden] { display: none; }
-.setblk + .setblk { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
-.setlbl { font-size: 14px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
+.setblk + .setblk { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+.setblk .hint { margin: 6px 0 0; }
+.setblk .hint:empty { display: none; }
 
 /* weekschema */
 .wk-leg { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); margin: 8px 0 6px; }
@@ -299,6 +301,11 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .prow input[type="number"] { width: 64px; text-align: right; }
 .prow .u { font-size: 14px; color: var(--text-2); }
 .prow .pdel { border: 0; background: var(--track); color: var(--text-2); width: 36px; height: 36px; border-radius: 10px; font-size: 16px; cursor: pointer; flex: none; }
+.prow .pcopy.on { background: var(--use); color: #fff; }
+.cpanel { background: var(--track); border-radius: 12px; padding: 10px; margin: -2px 0 10px; }
+.cpanel .chint { font-size: 13px; color: var(--text-2); margin-bottom: 6px; }
+.cpanel .seg { background: var(--card); margin: 0; }
+.cpanel .seg button[aria-pressed="true"] { background: var(--use); color: #fff; }
 .btn.small { flex: none; padding: 8px 12px; font-size: 14px; }
 .btn:disabled { opacity: .45; cursor: default; }
 .sgrid { display: grid; grid-template-columns: 1fr auto auto; gap: 8px 8px; align-items: center; font-size: 15px; }
@@ -447,24 +454,24 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <section class="card" id="setCard" hidden>
       <div class="card-head"><h2>Manueel instellen</h2></div>
       <div class="setblk" id="setZ1Card" hidden>
-        <div class="setlbl">Verwarming</div>
         <div class="setrow">
+          <span class="setlbl">Verwarming</span>
           <button class="pm" id="setZ1Minus" aria-label="Lager">−</button>
           <div class="setval num" id="setZ1Val">–</div>
           <button class="pm" id="setZ1Plus" aria-label="Hoger">+</button>
           <button class="btn primary" id="setZ1Btn">Instellen</button>
         </div>
-        <p class="hint" id="setZ1Hint" style="margin-top:8px"></p>
+        <p class="hint" id="setZ1Hint"></p>
       </div>
       <div class="setblk" id="setDHWCard" hidden>
-        <div class="setlbl">Sanitair warm water</div>
         <div class="setrow">
+          <span class="setlbl">Sanitair water</span>
           <button class="pm" id="setDHWMinus" aria-label="Lager">−</button>
           <div class="setval num" id="setDHWVal">–</div>
           <button class="pm" id="setDHWPlus" aria-label="Hoger">+</button>
           <button class="btn primary" id="setDHWBtn">Instellen</button>
         </div>
-        <p class="hint" id="setDHWHint" style="margin-top:8px"></p>
+        <p class="hint" id="setDHWHint"></p>
       </div>
     </section>
     <section class="card" id="schedCard" hidden>
@@ -646,13 +653,13 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <h3>Sanitair warm water</h3>
     <div id="edDHW"></div>
     <button class="btn small" id="addDHW">+ Periode</button>
+    <p class="hint" id="copyHint" style="margin-top:10px"></p>
     <h3>Deze dag kopiëren naar</h3>
     <div class="btns" style="margin-top:0">
       <button class="btn small" style="flex:1" data-copy="wd">Ma–vr</button>
       <button class="btn small" style="flex:1" data-copy="we">Za–zo</button>
       <button class="btn small" style="flex:1" data-copy="all">Alle dagen</button>
     </div>
-    <p class="hint" id="copyHint" style="margin-top:6px"></p>
     <h3>Buiten de periodes</h3>
     <div class="sgrid">
       <span>Kamer (eco)</span><input type="number" inputmode="numeric" id="edEco" min="10" max="25" step="1"><span class="u">°C</span>
@@ -1844,7 +1851,6 @@ const SETTERS = {
   setDHW: {
     name: 'Boilertemperatuur', cmd: 'SetDHWTemp', read: 'DHW_Target_Temp',
     range: () => ({ min: 40, max: 60, shift: false }),
-    note: 'Een hogere temperatuur geldt tot de boiler warm is (hoogstens 3 uur); daarna volgt de warmteregelaar weer zijn plan.',
   },
 };
 // dirty = de gebruiker is een waarde aan het kiezen; anders volgt het blok de werkelijke instelling
@@ -1866,8 +1872,8 @@ function renderSetter(id) {
   $(id + 'Minus').disabled = st.busy || st.val <= r.min;
   $(id + 'Plus').disabled = st.busy || st.val >= r.max;
   $(id + 'Btn').disabled = st.busy || st.val === r.cur || !hmBase();
-  $(id + 'Hint').textContent = st.msg || ((r.shift ? 'Verschuiving van de stooklijn. ' : '') + 'Nu ingesteld: ' + fmtSet(r, r.cur) + '.'
-    + (SETTERS[id].note ? ' ' + SETTERS[id].note : ''));
+  // alleen meldingen tijdens en na het versturen (wat nu ingesteld is, staat al in het overzicht)
+  $(id + 'Hint').textContent = st.msg || (r.shift ? 'Verschuiving van de stooklijn.' : '');
 }
 function renderHpSet() {
   renderSetter('setZ1'); renderSetter('setDHW');
@@ -1900,6 +1906,7 @@ async function sendSetter(id) {
         ok = hv(S.read) === v;
       }
     }
+    if (ok) setTimeout(() => { if (st.msg === '✓ Ingesteld.') { st.msg = ''; renderSetter(id); } }, 6000);
     st.msg = ok ? '✓ Ingesteld.' : 'De warmtepomp heeft de nieuwe waarde (nog) niet bevestigd. Kijk binnen een minuut opnieuw.';
   } catch (e) {
     st.msg = 'Niet gelukt: ' + (e.message || e);
@@ -2036,7 +2043,7 @@ let ed = null, edDay = 0;
 function openSched(d) {
   if (!sched) return;
   ed = JSON.parse(JSON.stringify(sched));
-  edDay = d;
+  edDay = d; cp = null;
   $('edEco').value = ed.eco; $('edBase').value = ed.dhwBase; $('edAway').value = ed.away;
   $('schedErr').textContent = ''; $('copyHint').textContent = '';
   renderEd();
@@ -2044,6 +2051,31 @@ function openSched(d) {
 }
 function closeSched() { $('schedSheet').hidden = $('schedBg').hidden = true; ed = null; }
 const ED = { heat: { el: 'edHeat', min: 10, max: 26, def: 22 }, dhw: { el: 'edDHW', min: 30, max: 60, def: 48 } };
+// één periode kopiëren naar gekozen dagen; wat daar overlapt, maakt plaats
+let cp = null;   // { k: 'heat'|'dhw', i: rij, days: [dagen] }
+function copyPanelHtml(p) {
+  return `<div class="cpanel"><div class="chint">${p.from}–${p.to} · ${fT(p.temp)} kopiëren naar:</div>`
+    + `<div class="seg wide days" role="group" aria-label="Dagen">${DAYS.map((n, d) => d === edDay ? ''
+      : `<button data-cd="${d}" aria-pressed="${cp.days.includes(d)}">${n.slice(0, 2)}</button>`).join('')}</div>`
+    + `<div class="btns" style="margin-top:8px"><button class="btn small" style="flex:1" data-cno="1">Annuleer</button>`
+    + `<button class="btn small primary" style="flex:1" data-cgo="1"${cp.days.length ? '' : ' disabled'}>Kopieer</button></div></div>`;
+}
+function copyPeriod() {
+  const p = ed[cp.k][edDay][cp.i];
+  const a = toMin(p.from), z = toMin(p.to);
+  if (!(z > a)) { $('copyHint').textContent = 'Deze periode eindigt voor ze begint: pas ze eerst aan.'; return; }
+  let replaced = 0;
+  cp.days.forEach((d) => {
+    const keep = ed[cp.k][d].filter((q) => toMin(q.to) <= a || toMin(q.from) >= z);
+    replaced += ed[cp.k][d].length - keep.length;
+    ed[cp.k][d] = [...keep, { ...p }].sort((x, y) => toMin(x.from) - toMin(y.from));
+  });
+  $('copyHint').textContent = `✓ ${cp.k === 'heat' ? 'Verwarming' : 'Boiler'} ${p.from}–${p.to} gekopieerd naar `
+    + cp.days.sort().map((d) => DAYS[d].toLowerCase()).join(', ')
+    + (replaced ? ` (${replaced} overlappende periode${replaced > 1 ? 's' : ''} vervangen)` : '') + '. Vergeet niet te bewaren.';
+  cp = null;
+  renderEd();
+}
 // keuzelijst per kwartier (altijd 24 uur, ook op een toestel in het Engels)
 function quarterOpts(sel, lo, hi) {
   let o = '';
@@ -2054,14 +2086,16 @@ function quarterOpts(sel, lo, hi) {
 function renderEd() {
   $('schedTitle').textContent = 'Weekschema · ' + DAYS[edDay];
   $('schedDays').innerHTML = DAYS.map((n, d) => `<button data-d="${d}" aria-pressed="${d === edDay}">${n.slice(0, 2)}</button>`).join('');
-  $('schedDays').querySelectorAll('button').forEach((b) => { b.onclick = () => { edDay = Number(b.dataset.d); $('copyHint').textContent = ''; renderEd(); }; });
+  $('schedDays').querySelectorAll('button').forEach((b) => { b.onclick = () => { edDay = Number(b.dataset.d); cp = null; $('copyHint').textContent = ''; renderEd(); }; });
   Object.entries(ED).forEach(([k, E]) => {
     const ps = ed[k][edDay];
     $(E.el).innerHTML = ps.length ? ps.map((p, i) => `<div class="prow" data-k="${k}" data-i="${i}">`
       + `<select data-f="from" aria-label="Van">${quarterOpts(p.from, 0, 1425)}</select><span class="u">–</span>`
       + `<select data-f="to" aria-label="Tot">${quarterOpts(p.to, 15, 1440)}</select>`
       + `<input type="number" inputmode="numeric" data-f="temp" min="${E.min}" max="${E.max}" step="1" value="${p.temp}" aria-label="Temperatuur"><span class="u">°C</span>`
-      + `<button class="pdel" aria-label="Periode wissen">✕</button></div>`).join('')
+      + `<button class="pdel pcopy${cp && cp.k === k && cp.i === i ? ' on' : ''}" aria-label="Periode kopiëren naar andere dagen">⧉</button>`
+      + `<button class="pdel" data-del="1" aria-label="Periode wissen">✕</button></div>`
+      + (cp && cp.k === k && cp.i === i ? copyPanelHtml(p) : '')).join('')
       : `<p class="hint">Geen periodes: de hele dag ${k === 'heat' ? 'eco' : 'gewoon'}.</p>`;
     $(E.el).querySelectorAll('.prow').forEach((row) => {
       const p = ed[k][edDay][Number(row.dataset.i)];
@@ -2072,8 +2106,26 @@ function renderEd() {
           $('schedErr').textContent = '';
         };
       });
-      row.querySelector('.pdel').onclick = () => { ed[k][edDay].splice(Number(row.dataset.i), 1); renderEd(); };
+      row.querySelector('[data-del]').onclick = () => { cp = null; ed[k][edDay].splice(Number(row.dataset.i), 1); renderEd(); };
+      row.querySelector('.pcopy').onclick = () => {
+        const i = Number(row.dataset.i);
+        cp = cp && cp.k === k && cp.i === i ? null : { k, i, days: [] };
+        renderEd();
+      };
     });
+    const panel = $(E.el).querySelector('.cpanel');
+    if (panel) {
+      panel.querySelectorAll('[data-cd]').forEach((b) => {
+        b.onclick = () => {
+          const d = Number(b.dataset.cd);
+          cp.days = cp.days.includes(d) ? cp.days.filter((x) => x !== d) : [...cp.days, d];
+          b.setAttribute('aria-pressed', cp.days.includes(d));
+          panel.querySelector('[data-cgo]').disabled = !cp.days.length;
+        };
+      });
+      panel.querySelector('[data-cgo]').onclick = () => copyPeriod();
+      panel.querySelector('[data-cno]').onclick = () => { cp = null; renderEd(); };
+    }
   });
 }
 function addPeriod(k) {
