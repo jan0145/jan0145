@@ -11,7 +11,6 @@
 #   192.168.0.III  = IP-adres van de IoTaWatt (1 keer)
 #   192.168.0.LLL  = IP-adres van de laadpaal (1 keer)
 #   192.168.0.PPP  = IP-adres van de HomeWizard P1-meter (1 keer)
-#   192.168.0.HHH  = IP-adres van de HeishaMon (2 keer)
 #   PV1 / PV2      = namen van de zonnepaneel-kanalen in de IoTaWatt
 
 interval: 30s
@@ -58,20 +57,21 @@ meters:
       uri: "http://192.168.0.III/query?select=[PV1.watts,PV2.watts]&begin=s-10s&end=s&group=all&format=json"
       jq: "[.[0][] | if . == null then 0 elif . < 0 then -. else . end] | add"
 
-  # Warmtepomp via de HeishaMon (alleen lezen). evcc bewaart zo de geschiedenis van het
+  # Warmtepomp via de HeishaMon (alleen lezen), via de kopie van de warmteregelaar (poort 7080), zodat
+  # de HeishaMon maar door één programma bevraagd wordt. evcc bewaart zo de geschiedenis van het
   # elektrisch verbruik en de geleverde warmte; de Stroom-app berekent daaruit de COP.
   - name: wp_elektrisch
     type: custom
     power:
       source: http
-      uri: http://192.168.0.HHH/json
+      uri: http://127.0.0.1:7080/json
       jq: '[.heatpump[] | select(.Name | test("_Power_Consumption$")) | .Value] | add'
       cache: 5s
   - name: wp_warmte
     type: custom
     power:
       source: http
-      uri: http://192.168.0.HHH/json
+      uri: http://127.0.0.1:7080/json
       jq: '[.heatpump[] | select(.Name | test("_Power_Production$")) | .Value] | add'
       cache: 5s
 
@@ -119,14 +119,12 @@ chargers:
     enable:
       source: http
       uri: 'http://127.0.0.1:7080/boiler?on={{ if .enable }}1{{ else }}0{{ end }}'
-    power:
+    power: # alleen tijdens een boost die evcc vroeg
       source: http
-      uri: http://192.168.0.HHH/json
-      jq: '[.heatpump[] | select(.Name == "DHW_Power_Consumption") | .Value][0]'
-      cache: 5s
+      uri: http://127.0.0.1:7080/boiler/power
     temp:
       source: http
-      uri: http://192.168.0.HHH/json
+      uri: http://127.0.0.1:7080/json
       jq: '[.heatpump[] | select(.Name == "DHW_Temp") | .Value][0]'
       cache: 5s
 

@@ -123,19 +123,71 @@ func saveState() {
 
 type hmData map[string]float64
 
-func readHM() (hmData, error) {
-	resp, err := client.Get(hmURL + "/json")
+// De regelaar is de enige die de HeishaMon uitleest (één keer per HMPOLL seconden, nooit twee vragen
+// tegelijk). evcc, de Stroom-app en de piekbewaker krijgen een kopie via /json; commando's gaan via /command.
+// Zo krijgt het kleine wifi-bordje veel minder vragen.
+var (
+	hmPoll  = time.Duration(envInt("HMPOLL", 10)) * time.Second
+	hmReqMu sync.Mutex // één vraag tegelijk naar de HeishaMon
+	hmMu    sync.Mutex
+	hmBody  []byte
+	hmTime  time.Time
+	hmErr   error
+)
+
+func hmGet(path string) ([]byte, error) {
+	hmReqMu.Lock()
+	defer hmReqMu.Unlock()
+	resp, err := client.Get(hmURL + path)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HeishaMon: HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func pollHM() {
+	for {
+		b, err := hmGet("/json")
+		hmMu.Lock()
+		if err == nil && json.Valid(b) {
+			hmBody, hmTime, hmErr = b, time.Now(), nil
+		} else if err != nil {
+			hmErr = err
+		}
+		hmMu.Unlock()
+		time.Sleep(hmPoll)
+	}
+}
+
+// laatste HeishaMon-gegevens, als ze niet ouder zijn dan maxAge
+func hmCached(maxAge time.Duration) ([]byte, error) {
+	hmMu.Lock()
+	defer hmMu.Unlock()
+	if hmBody == nil || time.Since(hmTime) > maxAge {
+		if hmErr != nil {
+			return nil, hmErr
+		}
+		return nil, fmt.Errorf("nog geen gegevens van de HeishaMon")
+	}
+	return hmBody, nil
+}
+
+func readHM() (hmData, error) {
+	body, err := hmCached(2 * time.Minute)
+	if err != nil {
+		return nil, err
+	}
 	var d struct {
 		Heatpump []struct {
 			Name  string `json:"Name"`
 			Value any    `json:"Value"`
 		} `json:"heatpump"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+	if err := json.Unmarshal(body, &d); err != nil {
 		return nil, err
 	}
 	res := hmData{}
@@ -160,12 +212,10 @@ func sendHM(cmd string, v float64) error {
 	if !act {
 		return errProef
 	}
-	resp, err := client.Get(u)
-	if err != nil {
+	if _, err := hmGet(u[len(hmURL):]); err != nil {
+		log.Printf("⚠ HeishaMon %s=%.0f niet gelukt: %v", cmd, v, err)
 		return err
 	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
 	log.Printf("→ HeishaMon %s=%.0f", cmd, v)
 	return nil
 }
@@ -395,6 +445,40 @@ func serve() {
 		fmt.Fprint(w, on)
 		go func() { step(time.Now()) }()
 	})
+	// evcc-laadpunt "Boiler": verbruik alleen tijdens een boost die evcc vroeg (anders "disabled but charging")
+	h.HandleFunc("/boiler/power", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		on := st.PVBoost
+		mu.Unlock()
+		p := 0.0
+		if hm, err := readHM(); err == nil && on {
+			p = hm["DHW_Power_Consumption"]
+		}
+		fmt.Fprint(w, p)
+	})
+	// kopie van de HeishaMon-gegevens (voor evcc, de Stroom-app en de piekbewaker)
+	h.HandleFunc("/json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		b, err := hmCached(time.Minute)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(b)
+	})
+	// commando's doorgeven aan de HeishaMon, bv. /command?SetZ1HeatRequestTemperature=21
+	h.HandleFunc("/command", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		b, err := hmGet("/command?" + r.URL.RawQuery)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		log.Printf("doorgegeven aan de HeishaMon: %s", r.URL.RawQuery)
+		w.Write(b)
+		go func() { time.Sleep(hmPoll + 2*time.Second); step(time.Now()) }()
+	})
 	h.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		b, _ := json.Marshal(st.Status)
@@ -423,7 +507,9 @@ func main() {
 	log.Printf("start: HeishaMon %s, evcc %s, %s", hmURL, evccURL, map[bool]string{true: "STUURT", false: "PROEF (alleen loggen)"}[act])
 	log.Printf("boiler %.0f °C, 17–22 u ≥ %.0f °C, boost %.0f °C · kamer %.0f °C in de vensters, anders %.0f °C",
 		cfg.DHWBase, cfg.DHWEvening, cfg.DHWBoost, cfg.Comfort, cfg.Eco)
+	go pollHM()
 	go serve()
+	time.Sleep(3 * time.Second) // eerste HeishaMon-gegevens afwachten
 	for {
 		step(time.Now())
 		time.Sleep(tick)

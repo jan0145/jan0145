@@ -532,8 +532,8 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <p class="help">HomeWizard P1-meter met "Lokale API" aan. Geeft het exacte netverbruik en je kwartierpiek (capaciteitstarief). Leeg = uit.</p>
 
     <h3>Warmtepomp via HeishaMon (optioneel)</h3>
-    <input class="field" id="hmInput" placeholder="bv. http://192.168.0.254" autocapitalize="off" autocorrect="off" spellcheck="false">
-    <p class="help">Adres van de HeishaMon op de Panasonic-warmtepomp. Toont wat de warmtepomp doet, zijn verbruik en de temperaturen. De app leest alleen; er wordt niets aangestuurd. Leeg = uit.</p>
+    <input class="field" id="hmInput" placeholder="bv. http://192.168.0.159:7080" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="help">Adres van de warmteregelaar op de Synology (poort 7080), of rechtstreeks van de HeishaMon. Via de regelaar krijgt de HeishaMon veel minder vragen. Toont wat de warmtepomp doet, het verbruik en de temperaturen. Leeg = uit.</p>
 
     <h3>Kanalen</h3>
     <p class="help" style="margin:0 0 8px">Geef elk kanaal een naam en een rol. <b>Zon</b> telt als opwek, <b>Hoofdaansluiting</b> is een meting op de netkabel (optioneel). Driefasig toestel waarvan je maar één draad meet? Kies <b>×3</b> bij een 3N400V-net (4 draden, met nul) of <b>×1,73</b> bij een 3×230V-net (3 draden, zonder nul).</p>

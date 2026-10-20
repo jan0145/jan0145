@@ -42,6 +42,16 @@ Let op: in de proef warmt de boiler ook niet op bij zonne-overschot (dat loopt n
 
 Instellingen (in de taak vóór `./warmteregelaar`): `COMFORT=22 ECO=20 BOILER=40 BOILER_AVOND=48 BOILER_BOOST=55`.
 
+## Eén lezer voor de HeishaMon
+
+De HeishaMon is een klein wifi-bordje en verdraagt weinig gelijktijdige vragen. Daarom leest alleen de
+regelaar hem uit (elke 10 s, `HMPOLL=10`) en geeft hij een kopie door:
+
+- `http://<synology>:7080/json` — dezelfde gegevens als de HeishaMon (voor evcc en de Stroom-app);
+- `http://<synology>:7080/command?…` — commando's worden doorgegeven (bv. kamertemperatuur vanuit de app).
+
+In de Stroom-app vul je bij ⚙︎ → Warmtepomp dus `http://192.168.0.159:7080` in.
+
 ## Voor evcc
 
 Het laadpunt "Boiler" in `evcc.yaml` geeft het zonne-overschot door aan de regelaar
