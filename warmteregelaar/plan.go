@@ -16,31 +16,22 @@ type Rate struct {
 	Value float64   `json:"value"`
 }
 
-type Window struct{ From, To int } // minuten na middernacht
-
 type Config struct {
-	// sanitair warm water
-	DHWBase, DHWEvening, DHWBoost, DHWPrep float64
-	EveningFrom, EveningTo                 int     // uur
-	NightFrom, NightTo                     int     // uur: venster voor de nachtbeurt
-	NightFallbackFrom, NightFallbackTo     int     // minuten: vaste nachtbeurt als er geen prijzen zijn
-	SolarSkipKWh                           float64 // zoveel zon verwacht tussen 10 en 16 u → geen nachtbeurt
+	// sanitair warm water (de temperaturen per periode staan in het weekschema)
+	DHWBoost                           float64
+	NightFrom, NightTo                 int     // uur: venster voor de nachtbeurt
+	NightFallbackFrom, NightFallbackTo int     // minuten: vaste nachtbeurt als er geen prijzen zijn
+	SolarSkipKWh                       float64 // zoveel zon verwacht tussen 10 en 16 u → geen nachtbeurt
+	PrepHours                          int     // zoveel uur voor een boilerperiode al bijwarmen in de goedkoopste kwartieren
 	// verwarming
-	Comfort, Eco        float64
-	WeekdayWindows      []Window
-	WeekendWindows      []Window
 	MaxEarlyMinutes     int     // hoeveel vroeger dan nodig mag voorverwarmen starten als het goedkoper is
 	EarlyPenaltyPerHour float64 // vroeger starten kost meer energie: zoveel % duurder per uur
 }
 
 func defaultConfig() Config {
 	return Config{
-		DHWBase: 40, DHWEvening: 48, DHWBoost: 55, DHWPrep: 52,
-		EveningFrom: 17, EveningTo: 22, NightFrom: 0, NightTo: 7,
-		NightFallbackFrom: 60, NightFallbackTo: 150, SolarSkipKWh: 12,
-		Comfort: 22, Eco: 20,
-		WeekdayWindows:  []Window{{6 * 60, 7*60 + 30}, {16 * 60, 22 * 60}},
-		WeekendWindows:  []Window{{7 * 60, 22 * 60}},
+		DHWBoost: 55, NightFrom: 0, NightTo: 7,
+		NightFallbackFrom: 60, NightFallbackTo: 150, SolarSkipKWh: 12, PrepHours: 5,
 		MaxEarlyMinutes: 60, EarlyPenaltyPerHour: 0.15,
 	}
 }
@@ -98,13 +89,6 @@ func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 func atMinute(day time.Time, m int) time.Time {
 	y, mo, d := day.Date()
 	return time.Date(y, mo, d, 0, 0, 0, 0, day.Location()).Add(time.Duration(m) * time.Minute)
-}
-
-func (c Config) windowsFor(day time.Time) []Window {
-	if wd := day.Weekday(); wd == time.Saturday || wd == time.Sunday {
-		return c.WeekendWindows
-	}
-	return c.WeekdayWindows
 }
 
 // priceAt: prijs van het kwartier waarin t valt (ok=false als onbekend).
@@ -194,22 +178,28 @@ type DHWInput struct {
 }
 
 // DHWTarget: gewenste boilertemperatuur en waarom.
-func DHWTarget(c Config, l Learned, in DHWInput) (float64, string) {
+func DHWTarget(c Config, s Schedule, l Learned, in DHWInput) (float64, string) {
 	now := in.Now
-	target, why := c.DHWBase, fmt.Sprintf("gewoon %.0f °C", c.DHWBase)
+	target, why := s.DHWBase, fmt.Sprintf("gewoon %.0f °C", s.DHWBase)
 	set := func(t float64, w string) {
 		if t > target {
 			target, why = t, w
 		}
 	}
-	h := now.Hour()
-	if h >= c.EveningFrom && h < c.EveningTo {
-		set(c.DHWEvening, fmt.Sprintf("avond (%d–%d u): minstens %.0f °C", c.EveningFrom, c.EveningTo, c.DHWEvening))
-	}
 	if in.PVBoost {
 		set(c.DHWBoost, "zonne-overschot (evcc)")
 	}
+	if s.Mode == ModeVacation {
+		if target == s.DHWBase {
+			why = fmt.Sprintf("vakantie: %.0f °C", s.DHWBase)
+		}
+		return target, why
+	}
+	if p, ok := periodAt(s.DHW, now); ok {
+		set(p.Temp, fmt.Sprintf("schema %s–%s: minstens %.0f °C", hhmm(p.From), hhmm(p.To), p.Temp))
+	}
 	rate := math.Max(2, l.DHWHeatRate)
+	h := now.Hour()
 
 	// nachtbeurt in de goedkoopste kwartieren, tenzij er morgen genoeg zon is
 	if h >= c.NightFrom && h < c.NightTo {
@@ -218,9 +208,13 @@ func DHWTarget(c Config, l Learned, in DHWInput) (float64, string) {
 		if sun < c.SolarSkipKWh {
 			nf, nt := day.Add(time.Duration(c.NightFrom)*time.Hour), day.Add(time.Duration(c.NightTo)*time.Hour)
 			if _, ok := avgPrice(in.Prices, nf, nt); ok {
-				// vast aantal kwartieren (van ±avondtemperatuur tot de boost), zodat de keuze de hele nacht
-				// dezelfde blijft; een begonnen beurt loopt door tot de boiler warm is
-				need := int(clamp(math.Ceil((c.DHWBoost-c.DHWEvening+2)/rate*4), 2, 12))
+				// vast aantal kwartieren (van ±de warmste periode van de dag tot de boost), zodat de keuze de hele
+				// nacht dezelfde blijft; een begonnen beurt loopt door tot de boiler warm is
+				ref := s.DHWBase
+				for _, p := range s.DHW[dayIndex(now)] {
+					ref = math.Max(ref, p.Temp)
+				}
+				need := int(clamp(math.Ceil((c.DHWBoost-ref+2)/rate*4), 2, 12))
 				if containsQuarter(cheapestQuarters(in.Prices, nf, nt, need), now) {
 					set(c.DHWBoost, fmt.Sprintf("nachtbeurt in de goedkoopste kwartieren (%.0f kWh zon verwacht)", sun))
 				} else if in.Prev == c.DHWBoost && in.Temp < c.DHWBoost-1 {
@@ -232,21 +226,23 @@ func DHWTarget(c Config, l Learned, in DHWInput) (float64, string) {
 		}
 	}
 
-	// voor de avond: komt de boiler om 17 u niet aan 48 °C, dan bijwarmen in de goedkoopste kwartieren ervoor
-	ev := atMinute(now, c.EveningFrom*60)
-	if h >= 12 && now.Before(ev) {
-		hours := ev.Sub(now).Hours()
-		at17 := in.Temp - math.Max(0, l.DHWCoolRate)*hours
-		if at17 < c.DHWEvening+1 {
-			need := int(math.Ceil((c.DHWPrep - at17) / rate * 4))
-			need = int(clamp(float64(need), 1, 16))
-			left := int(math.Ceil(ev.Sub(now.Truncate(15*time.Minute)).Minutes() / 15))
-			if left <= need || containsQuarter(cheapestQuarters(in.Prices, now, ev, need), now) {
-				set(c.DHWPrep, fmt.Sprintf("bijwarmen voor de avond (om %d u verwacht %.0f °C)", c.EveningFrom, at17))
+	// voor een periode: haalt de boiler bij het begin de temperatuur niet, dan bijwarmen in de goedkoopste
+	// kwartieren ervoor (tot 4 °C boven de periode, zodat hij de hele periode volstaat)
+	if ps, p, ok := nextPeriod(s.DHW, now, s.DHWBase); ok && ps.Sub(now) <= time.Duration(c.PrepHours)*time.Hour {
+		if _, inside := periodAt(s.DHW, now); !inside || p.Temp > target {
+			prep := math.Min(c.DHWBoost, p.Temp+4)
+			hours := ps.Sub(now).Hours()
+			atStart := in.Temp - math.Max(0, l.DHWCoolRate)*hours
+			if atStart < p.Temp+1 {
+				need := int(clamp(math.Ceil((prep-atStart)/rate*4), 1, 16))
+				left := int(math.Ceil(ps.Sub(now.Truncate(15*time.Minute)).Minutes() / 15))
+				if left <= need || containsQuarter(cheapestQuarters(in.Prices, now, ps, need), now) {
+					set(prep, fmt.Sprintf("bijwarmen voor %s (dan verwacht %.0f °C)", ps.Format("15:04"), atStart))
+				}
 			}
-		}
-		if in.Prev == c.DHWPrep && in.Temp < c.DHWPrep-1 {
-			set(c.DHWPrep, "bijwarmen voor de avond loopt door")
+			if in.Prev == prep && in.Temp < prep-1 {
+				set(prep, fmt.Sprintf("bijwarmen voor %s loopt door", ps.Format("15:04")))
+			}
 		}
 	}
 	return target, why
@@ -260,65 +256,60 @@ type HeatInput struct {
 }
 
 type HeatPlan struct {
-	Target       float64
+	Target       float64 // 0 = verwarming uit (zomer)
 	Why          string
 	NextWindow   time.Time
 	PreheatStart time.Time
 	LeadMinutes  float64
 }
 
-// HeatTarget: gewenste kamertemperatuur. In een venster: comfort. Daarbuiten: eco, behalve als het tijd is
-// om voor te verwarmen (geleerde opwarmtijd), en dan het goedkoopste startmoment tot MaxEarlyMinutes vroeger.
-func HeatTarget(c Config, l Learned, in HeatInput) HeatPlan {
+// HeatTarget: gewenste kamertemperatuur. In een periode van het schema: die temperatuur. Daarbuiten: eco,
+// behalve als het tijd is om voor te verwarmen (geleerde opwarmtijd), en dan het goedkoopste startmoment
+// tot MaxEarlyMinutes vroeger.
+func HeatTarget(c Config, s Schedule, l Learned, in HeatInput) HeatPlan {
 	now := in.Now
-	m := now.Hour()*60 + now.Minute()
-	for _, w := range c.windowsFor(now) {
-		if m >= w.From && m < w.To {
-			return HeatPlan{Target: c.Comfort, Why: fmt.Sprintf("comfortvenster tot %s", atMinute(now, w.To).Format("15:04"))}
-		}
+	switch s.Mode {
+	case ModeSummer:
+		return HeatPlan{Why: "zomer: verwarming uit"}
+	case ModeVacation:
+		return HeatPlan{Target: s.Away, Why: fmt.Sprintf("vakantie: %.0f °C", s.Away)}
 	}
-	// volgende venster (vandaag of morgen)
-	var ws time.Time
-	for d := 0; d < 3 && ws.IsZero(); d++ {
-		day := atMinute(now, 0).AddDate(0, 0, d)
-		for _, w := range c.windowsFor(day) {
-			if t := atMinute(day, w.From); t.After(now) {
-				ws = t
-				break
-			}
-		}
+	if p, ok := periodAt(s.Heat, now); ok {
+		return HeatPlan{Target: p.Temp, Why: fmt.Sprintf("schema tot %s: %.0f °C", hhmm(p.To), p.Temp)}
 	}
-	plan := HeatPlan{Target: c.Eco, Why: fmt.Sprintf("eco %.0f °C", c.Eco), NextWindow: ws}
-	if ws.IsZero() {
+	plan := HeatPlan{Target: s.Eco, Why: fmt.Sprintf("eco %.0f °C", s.Eco)}
+	ws, next, ok := nextPeriod(s.Heat, now, s.Eco)
+	if !ok {
 		return plan
 	}
-	rise := c.Comfort - math.Min(in.Tin, c.Comfort)
+	plan.NextWindow = ws
+	rise := next.Temp - math.Min(in.Tin, next.Temp)
 	if rise < 0.5 {
-		rise = c.Comfort - c.Eco // kamer is nog warm: rekenen alsof hij tot eco afkoelt, voorzichtig
+		rise = next.Temp - s.Eco // kamer is nog warm: rekenen alsof hij tot eco afkoelt, voorzichtig
 		rise = math.Max(0.5, rise/2)
 	}
 	lead := l.LeadMinutes(in.Tout, rise)
 	plan.LeadMinutes = lead
 	latest := ws.Add(-time.Duration(lead) * time.Minute)
 	best, bestCost := latest, math.Inf(1)
-	for s := 0; s <= c.MaxEarlyMinutes; s += 15 {
-		st := latest.Add(-time.Duration(s) * time.Minute)
+	for e := 0; e <= c.MaxEarlyMinutes; e += 15 {
+		st := latest.Add(-time.Duration(e) * time.Minute)
 		p, ok := avgPrice(in.Prices, st, st.Add(time.Duration(lead)*time.Minute))
 		if !ok {
-			if s == 0 {
+			if e == 0 {
 				bestCost = 0 // geen prijzen: gewoon op de laatste goede tijd
 			}
 			break
 		}
-		cost := p * (1 + c.EarlyPenaltyPerHour*float64(s)/60)
+		cost := p * (1 + c.EarlyPenaltyPerHour*float64(e)/60)
 		if cost < bestCost-1e-9 {
 			best, bestCost = st, cost
 		}
 	}
 	plan.PreheatStart = best
 	if !now.Before(best) {
-		plan.Target = c.Comfort
-		plan.Why = fmt.Sprintf("voorverwarmen voor %s (±%.0f min nodig)", ws.Format("15:04"), lead)
+		plan.Target = next.Temp
+		plan.Why = fmt.Sprintf("voorverwarmen naar %.0f °C voor %s (±%.0f min nodig)", next.Temp, ws.Format("15:04"), lead)
 	}
 	return plan
 }

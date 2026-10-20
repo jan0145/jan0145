@@ -1,22 +1,24 @@
 # Warmteregelaar
 
-Stuurt de boiler- en kamertemperatuur van de Panasonic-warmtepomp via de HeishaMon, met **tijdvensters**
-in plaats van vaste uren. De regelaar kiest zelf wanneer hij opwarmt: met de kwartierprijzen en de
+Stuurt de boiler- en kamertemperatuur van de Panasonic-warmtepomp via de HeishaMon, met een **weekschema**
+(aan te passen in de Stroom-app, tab Verwarming) in plaats van vaste uren. De regelaar kiest zelf wanneer hij opwarmt: met de kwartierprijzen en de
 zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het huis.
 
 ## Wat hij doet
 
 **Sanitair warm water**
-- Gewoon **40 °C**; tussen **17 en 22 u minstens 48 °C** (koken, afwas, douche).
+- Gewoon **40 °C**; in de periodes van het weekschema de temperatuur van die periode
+  (standaard elke dag **17–22 u minstens 48 °C**: koken, afwas, douche).
 - 's Nachts (00–07 u) één beurt tot **55 °C** in de **goedkoopste kwartieren** — niet als er de volgende dag
   tussen 10 en 16 u veel zon verwacht wordt (≥ 12 kWh), want dan doet de zon het.
 - Bij **zonne-overschot** (evcc beslist, na de auto): 55 °C.
-- Tussen 12 en 17 u: zakt de boiler zo dat hij om 17 u niet aan 48 °C zou komen, dan bijwarmen tot 52 °C in
-  de goedkoopste kwartieren vóór 17 u.
+- In de 5 uur vóór een periode: zakt de boiler zo dat hij bij het begin de temperatuur niet zou halen, dan
+  bijwarmen tot 4 °C erboven (bv. 52 °C voor 48 °C) in de goedkoopste kwartieren ervoor.
 - Een begonnen beurt loopt door tot de boiler warm is (geen aan/uit-gependel).
 
 **Verwarming**
-- Weekdagen **06:00–07:30** en **16:00–22:00**: **22 °C**. Weekend **07:00–22:00**: 22 °C. Daarbuiten **20 °C**.
+- In de periodes van het weekschema de temperatuur van die periode; daarbuiten eco (**20 °C**).
+  Standaard: weekdagen **06:00–07:30** en **16:00–22:00** 22 °C, weekend **07:00–22:00** 22 °C.
 - Hij begint vooraf op te warmen, zodat het huis bij het begin van het venster warm is. Hoe lang dat duurt,
   **leert** hij: elke keer meet hij hoeveel minuten het huis nodig had per °C, bij welke buitentemperatuur.
   Zolang er nog geen 4 metingen zijn, rekent hij met een voorzichtige schatting.
@@ -25,6 +27,15 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
 - Zet iemand zelf de boiler anders (bv. hoger voor een bad), dan volgt de regelaar dat tot de boiler warm is,
   hoogstens 3 uur. Na een eigen commando wacht de regelaar 2 minuten voor hij een afwijking als "zelf ingesteld"
   beschouwt (de HeishaMon toont een nieuwe waarde pas na 10–60 s).
+
+**Stand** (knoppen in de app)
+- **Normaal**: het weekschema.
+- **Vakantie**: het schema staat uit: kamer op de vakantietemperatuur (standaard 16 °C), boiler gewoon (40 °C),
+  geen nachtbeurt en geen bijwarmen. Zonne-overschot mag de boiler nog opwarmen (gratis).
+- **Zomer**: de verwarming gaat uit: de regelaar zet de warmtepomp op "alleen sanitair water"
+  (`SetOperationMode=3`). De boiler volgt het schema. Terug naar normaal: de warmtepomp gaat terug naar de stand
+  van daarvoor (meestal verwarmen + sanitair water).
+- Bij een andere stand vervallen de manuele aanpassingen.
 
 **Leren** (bewaard in `warmteregelaar-state.json`): hoe snel de boiler opwarmt en afkoelt, en hoe lang het
 huis nodig heeft om op te warmen. Elke 5 minuten komt er een regel in `warmte-JJJJ-MM.csv` (buiten, kamer,
@@ -43,7 +54,10 @@ boiler, doelen, vermogen, prijs) — daarmee kan het model later verfijnd worden
 `ACT=0` = **proef**: hij beslist en logt, maar stuurt niets. Ziet het er goed uit: `ACT=1` en **Run**.
 Let op: in de proef warmt de boiler ook niet op bij zonne-overschot (dat loopt nu via de regelaar).
 
-Instellingen (in de taak vóór `./warmteregelaar`): `COMFORT=22 ECO=20 BOILER=40 BOILER_AVOND=48 BOILER_BOOST=55`.
+Instellingen (in de taak vóór `./warmteregelaar`): `BOILER_BOOST=55`. `COMFORT=22 ECO=20 BOILER=40 BOILER_AVOND=48`
+bepalen alleen het standaardschema; zodra het schema in de app bewaard is, geldt dat (in `warmteregelaar-state.json`).
+
+Weekschema via HTTP: `GET /schedule` (lezen), `POST /schedule` (JSON, vervangen), `GET /mode?set=normaal|vakantie|zomer`.
 
 ## Eén lezer voor de HeishaMon
 

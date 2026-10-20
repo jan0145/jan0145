@@ -223,7 +223,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 /* tabbladen en detailschermen */
 .tabs { margin: 4px 0 8px; }
 .tabs button { font-size: 15px; padding: 7px 12px; }
-#tabStatus[hidden], #tabDetails[hidden] { display: none; }
+#tabElek[hidden], #tabVerw[hidden], #tabLp[hidden] { display: none; }
 .tile.tap { position: relative; cursor: pointer; padding-right: 34px; }
 .tile.tap:active { opacity: .7; }
 .tile .tchev { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 26px; color: var(--text-3); line-height: 1; }
@@ -265,6 +265,47 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .setrow .setval { font-size: 26px; font-weight: 650; min-width: 84px; text-align: center; }
 .setrow .btn { flex: 1; }
 .setrow .btn:disabled, .setrow .pm:disabled { opacity: .45; cursor: default; }
+.setblk[hidden] { display: none; }
+.setblk + .setblk { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+.setlbl { font-size: 14px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
+
+/* weekschema */
+.wk-leg { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); margin: 8px 0 6px; }
+.wk-leg span { display: inline-flex; align-items: center; gap: 6px; }
+.wk-leg i { width: 12px; height: 8px; border-radius: 2px; display: inline-block; }
+.wk-axis { position: relative; height: 14px; margin-left: 34px; font-size: 10px; color: var(--text-3); }
+.wk-axis span { position: absolute; transform: translateX(-50%); }
+.wk-axis span:first-child { transform: none; }
+.wk-axis span:last-child { transform: translateX(-100%); }
+.wk-day { display: flex; align-items: center; width: 100%; border: 0; background: transparent; font: inherit; color: inherit;
+  padding: 4px 0; cursor: pointer; text-align: left; border-radius: 8px; }
+.wk-day:active { background: var(--track); }
+.wk-name { width: 34px; flex: none; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.wk-day.today .wk-name { color: var(--use); }
+.wk-bars { flex: 1; display: flex; flex-direction: column; gap: 2px; position: relative; min-width: 0; }
+.wk-bar { position: relative; height: 16px; background: var(--track); border-radius: 4px; overflow: hidden; }
+.wk-bar.dhw { height: 12px; }
+.wk-bar i { position: absolute; top: 0; bottom: 0; font-style: normal; font-size: 10px; font-weight: 650; color: #fff;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; }
+.wk-bar.heat i { background: var(--sun); }
+.wk-bar.dhw i { background: var(--use); font-size: 9px; }
+.wk-now { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text); border-radius: 1px; }
+#schedWeek .off, #schedWeek.off-all .wk-bar, #schedWeek.off-all .wk-leg { filter: grayscale(1); opacity: .35; }
+.prow { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.prow input { font: inherit; font-size: 16px; padding: 7px 8px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); min-width: 0; }
+.prow select { flex: 1; font: inherit; font-size: 16px; padding: 7px 6px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); min-width: 0; }
+.prow input[type="number"] { width: 64px; text-align: right; }
+.prow .u { font-size: 14px; color: var(--text-2); }
+.prow .pdel { border: 0; background: var(--track); color: var(--text-2); width: 36px; height: 36px; border-radius: 10px; font-size: 16px; cursor: pointer; flex: none; }
+.btn.small { flex: none; padding: 8px 12px; font-size: 14px; }
+.btn:disabled { opacity: .45; cursor: default; }
+.sgrid { display: grid; grid-template-columns: 1fr auto auto; gap: 8px 8px; align-items: center; font-size: 15px; }
+.sgrid input { font: inherit; font-size: 16px; width: 72px; padding: 7px 8px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); text-align: right; }
+.sgrid .u { color: var(--text-2); font-size: 14px; }
+.seg.days button { padding: 5px 0; }
 
 /* instellingen */
 .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10; }
@@ -310,11 +351,12 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
   <div class="banner" id="banner" hidden></div>
 
   <div class="seg wide tabs" role="tablist" aria-label="Scherm" id="tabSeg">
-    <button data-t="status" aria-pressed="true">Status</button>
-    <button data-t="details" aria-pressed="false">Details</button>
+    <button data-t="elek" aria-pressed="true">Elektriciteit</button>
+    <button data-t="verw" aria-pressed="false">Verwarming</button>
+    <button data-t="lp" aria-pressed="false">Laadpaal</button>
   </div>
 
-  <div id="tabStatus">
+  <div id="tabElek">
   <section class="hero" id="hero" aria-live="polite">
     <div class="ico" id="hIco" aria-hidden="true">…</div>
     <div>
@@ -393,7 +435,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
   </button>
   </div>
 
-  <div id="tabDetails" hidden>
+  <div id="tabVerw" hidden>
     <section class="tiles">
       <div class="tile wide tap" id="tHpTile" role="button" tabindex="0" hidden>
         <div class="dhead"><span class="dico hp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="14" rx="2.5"/><circle cx="9.5" cy="11.5" r="4.2"/><path d="M9.5 7.3v8.4M5.3 11.5h8.4"/><path d="M16.5 8.5h2.5M16.5 11.5h2.5M16.5 14.5h2.5"/><path d="M5 21h4M15 21h4"/></svg></span><div><div class="dtitle">Warmtepomp</div><div class="dstate" id="tHpLbl">–</div></div></div>
@@ -401,14 +443,77 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
         <div class="sub" id="tHpSub">&nbsp;</div>
         <span class="tchev" aria-hidden="true">›</span>
       </div>
-      <div class="tile wide tap" id="tLpTile" role="button" tabindex="0" hidden>
+    </section>
+    <section class="card" id="setCard" hidden>
+      <div class="card-head"><h2>Manueel instellen</h2></div>
+      <div class="setblk" id="setZ1Card" hidden>
+        <div class="setlbl">Verwarming</div>
+        <div class="setrow">
+          <button class="pm" id="setZ1Minus" aria-label="Lager">−</button>
+          <div class="setval num" id="setZ1Val">–</div>
+          <button class="pm" id="setZ1Plus" aria-label="Hoger">+</button>
+          <button class="btn primary" id="setZ1Btn">Instellen</button>
+        </div>
+        <p class="hint" id="setZ1Hint" style="margin-top:8px"></p>
+      </div>
+      <div class="setblk" id="setDHWCard" hidden>
+        <div class="setlbl">Sanitair warm water</div>
+        <div class="setrow">
+          <button class="pm" id="setDHWMinus" aria-label="Lager">−</button>
+          <div class="setval num" id="setDHWVal">–</div>
+          <button class="pm" id="setDHWPlus" aria-label="Hoger">+</button>
+          <button class="btn primary" id="setDHWBtn">Instellen</button>
+        </div>
+        <p class="hint" id="setDHWHint" style="margin-top:8px"></p>
+      </div>
+    </section>
+    <section class="card" id="schedCard" hidden>
+      <div class="card-head"><h2>Weekschema</h2></div>
+      <div class="seg wide" role="group" aria-label="Stand" id="modeSeg" style="margin:0 0 6px">
+        <button data-m="normaal" aria-pressed="true">Normaal</button>
+        <button data-m="vakantie" aria-pressed="false">Vakantie</button>
+        <button data-m="zomer" aria-pressed="false">Zomer</button>
+      </div>
+      <p class="hint" id="modeHint"></p>
+      <div id="schedWeek"></div>
+      <p class="hint" id="schedHint" style="margin-top:8px">Tik op een dag om het schema aan te passen.</p>
+    </section>
+    <p class="empty" id="hpEmpty" hidden>Nog geen warmtepomp. Vul bij ⚙︎ het adres van de warmteregelaar of de HeishaMon in.</p>
+  </div>
+
+  <div id="tabLp" hidden>
+    <section class="tiles">
+      <div class="tile wide" id="tLpTile" hidden>
         <div class="dhead"><span class="dico lp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="2.5" width="10" height="19" rx="2.5"/><path d="M9.6 6.5 7 11.5h3l-2.4 5"/><path d="M13.5 9h2.2a1.8 1.8 0 0 1 1.8 1.8v5.4a1.5 1.5 0 0 0 3 0V8.2L18.4 6"/></svg></span><div><div class="dtitle">Laadpaal</div><div class="dstate" id="tLpLbl">–</div></div></div>
         <div class="val num" id="tLp">–</div>
         <div class="sub" id="tLpSub">&nbsp;</div>
-        <span class="tchev" aria-hidden="true">›</span>
       </div>
     </section>
-    <p class="empty" id="detEmpty" hidden>Nog geen warmtepomp of laadpaal. Vul bij ⚙︎ het adres van de HeishaMon en van evcc in.</p>
+    <section class="card"><div id="lpInfo"></div></section>
+    <div class="seg wide" role="group" aria-label="Periode" id="lpSeg">
+      <button data-p="day" aria-pressed="true">Dag</button>
+      <button data-p="week" aria-pressed="false">Week</button>
+      <button data-p="month" aria-pressed="false">Maand</button>
+    </div>
+    <div class="pnav">
+      <button id="lpPrev" aria-label="Vorige periode">‹</button>
+      <span id="lpLabel"></span>
+      <button id="lpNext" aria-label="Volgende periode">›</button>
+    </div>
+    <section class="card">
+      <div class="card-head"><h2 id="lpChartTitle">Laadvermogen</h2></div>
+      <div class="chart-wrap" id="lpWrap">
+        <svg id="lpChart" role="img" aria-label="Geschiedenis van de laadpaal"></svg>
+        <div class="tip" id="lpTip"></div>
+      </div>
+      <div class="htot" id="lpTot"></div>
+      <p class="hint" id="lpNote"></p>
+    </section>
+    <section class="card" id="sessCard" hidden>
+      <div class="card-head"><h2>🚗 Laadsessies</h2></div>
+      <div class="hint" id="sessTot"></div>
+      <ul class="rows" id="sessRows"></ul>
+    </section>
   </div>
 </main>
 
@@ -419,26 +524,6 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <h2>Warmtepomp</h2>
     </div>
     <section class="card hpsum" id="hpSum"></section>
-    <section class="card" id="setZ1Card" hidden>
-      <div class="card-head"><h2>Verwarming</h2></div>
-      <div class="setrow">
-        <button class="pm" id="setZ1Minus" aria-label="Lager">−</button>
-        <div class="setval num" id="setZ1Val">–</div>
-        <button class="pm" id="setZ1Plus" aria-label="Hoger">+</button>
-        <button class="btn primary" id="setZ1Btn">Instellen</button>
-      </div>
-      <p class="hint" id="setZ1Hint" style="margin-top:8px"></p>
-    </section>
-    <section class="card" id="setDHWCard" hidden>
-      <div class="card-head"><h2>Sanitair warm water</h2></div>
-      <div class="setrow">
-        <button class="pm" id="setDHWMinus" aria-label="Lager">−</button>
-        <div class="setval num" id="setDHWVal">–</div>
-        <button class="pm" id="setDHWPlus" aria-label="Hoger">+</button>
-        <button class="btn primary" id="setDHWBtn">Instellen</button>
-      </div>
-      <p class="hint" id="setDHWHint" style="margin-top:8px"></p>
-    </section>
     <section class="card"><div id="hpInfo"></div></section>
     <section class="card" id="regCard" hidden>
       <div class="card-head"><h2>Warmteregelaar</h2></div>
@@ -471,40 +556,6 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       </div>
       <p class="hint" style="margin-top:6px">COP = geleverde warmte ÷ elektrisch verbruik. Volgens de warmtepomp zelf, dus een richtwaarde.</p>
       <p class="hint" id="hpNote"></p>
-    </section>
-  </main>
-</div>
-
-<div class="view" id="lpView" hidden role="dialog" aria-label="Laadpaal">
-  <main>
-    <div class="vhead">
-      <button class="iconbtn" id="lpBack" aria-label="Terug">‹</button>
-      <h2>Laadpaal</h2>
-    </div>
-    <section class="card"><div id="lpInfo"></div></section>
-    <div class="seg wide" role="group" aria-label="Periode" id="lpSeg">
-      <button data-p="day" aria-pressed="true">Dag</button>
-      <button data-p="week" aria-pressed="false">Week</button>
-      <button data-p="month" aria-pressed="false">Maand</button>
-    </div>
-    <div class="pnav">
-      <button id="lpPrev" aria-label="Vorige periode">‹</button>
-      <span id="lpLabel"></span>
-      <button id="lpNext" aria-label="Volgende periode">›</button>
-    </div>
-    <section class="card">
-      <div class="card-head"><h2 id="lpChartTitle">Laadvermogen</h2></div>
-      <div class="chart-wrap" id="lpWrap">
-        <svg id="lpChart" role="img" aria-label="Geschiedenis van de laadpaal"></svg>
-        <div class="tip" id="lpTip"></div>
-      </div>
-      <div class="htot" id="lpTot"></div>
-      <p class="hint" id="lpNote"></p>
-    </section>
-    <section class="card" id="sessCard" hidden>
-      <div class="card-head"><h2>🚗 Laadsessies</h2></div>
-      <div class="hint" id="sessTot"></div>
-      <ul class="rows" id="sessRows"></ul>
     </section>
   </main>
 </div>
@@ -580,6 +631,39 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <div class="btns">
       <button class="btn" id="cancelSettings">Annuleer</button>
       <button class="btn primary" id="saveSettings">Bewaar</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-bg" id="schedBg" hidden></div>
+<div class="sheet" id="schedSheet" hidden role="dialog" aria-modal="true" aria-labelledby="schedTitle">
+  <div class="sheet-inner">
+    <h2 id="schedTitle">Weekschema</h2>
+    <div class="seg wide days" role="group" aria-label="Dag" id="schedDays" style="margin-top:12px"></div>
+    <h3>Verwarming</h3>
+    <div id="edHeat"></div>
+    <button class="btn small" id="addHeat">+ Periode</button>
+    <h3>Sanitair warm water</h3>
+    <div id="edDHW"></div>
+    <button class="btn small" id="addDHW">+ Periode</button>
+    <h3>Deze dag kopiëren naar</h3>
+    <div class="btns" style="margin-top:0">
+      <button class="btn small" style="flex:1" data-copy="wd">Ma–vr</button>
+      <button class="btn small" style="flex:1" data-copy="we">Za–zo</button>
+      <button class="btn small" style="flex:1" data-copy="all">Alle dagen</button>
+    </div>
+    <p class="hint" id="copyHint" style="margin-top:6px"></p>
+    <h3>Buiten de periodes</h3>
+    <div class="sgrid">
+      <span>Kamer (eco)</span><input type="number" inputmode="numeric" id="edEco" min="10" max="25" step="1"><span class="u">°C</span>
+      <span>Boiler</span><input type="number" inputmode="numeric" id="edBase" min="30" max="60" step="1"><span class="u">°C</span>
+      <span>Kamer tijdens vakantie</span><input type="number" inputmode="numeric" id="edAway" min="5" max="25" step="1"><span class="u">°C</span>
+    </div>
+    <p class="help" style="font-size:13px;color:var(--text-3)">De regelaar warmt zelf op tijd voor (geleerde opwarmtijd, in de goedkoopste kwartieren) en doet 's nachts een boilerbeurt van 55 °C in de goedkoopste kwartieren.</p>
+    <p class="hint warn" id="schedErr"></p>
+    <div class="btns">
+      <button class="btn" id="schedCancel">Annuleer</button>
+      <button class="btn primary" id="schedSave">Bewaar</button>
     </div>
   </div>
 </div>
@@ -1481,9 +1565,9 @@ function drawChart(svg, buckets, series, opt) {
     g += `<line x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}" stroke="${r.color}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
     g += `<text class="axis ref" x="${i % 2 ? m.l + 4 : W - m.r - 2}" y="${(y(r.v) - 3).toFixed(1)}" text-anchor="${i % 2 ? 'start' : 'end'}" style="fill:${r.color};paint-order:stroke;stroke:var(--card);stroke-width:3px">${esc(r.label)}</text>`;
   });
-  // rechteras (bv. laadtoestand batterij 0–100 %)
+  // rechteras (bv. laadtoestand batterij 0–100 %): 0 % op dezelfde lijn als 0 links
   if (opt.right) {
-    const R = opt.right, y2 = (v) => m.t + (1 - v / R.max) * ih;
+    const R = opt.right, y0 = y(0), y2 = (v) => y0 - v / R.max * (y0 - m.t);
     for (let v = 0; v <= R.max; v += R.max / 4) {
       g += `<text class="axis num" x="${W - m.r + 4}" y="${y2(v) + 4}" text-anchor="start">${nf0.format(v)}</text>`;
     }
@@ -1642,6 +1726,8 @@ function hpGridHtml() {
 function renderHM() {
   const tile = $('tHpTile');
   tile.hidden = !hm;
+  $('hpEmpty').hidden = !!hm;
+  renderHpSet();
   if (!hm) return;
   if (hm.error) {
     $('tHpGrid').innerHTML = '';
@@ -1704,14 +1790,17 @@ function renderHpInfo() {
       ['Aanvoer', T('Main_Outlet_Temp')], ['Retour', T('Main_Inlet_Temp')], ['Doel aanvoer', T('Main_Target_Temp')],
     ]],
   ]);
-  renderHpSet();
 }
 
 /* ---------- warmteregelaar (op de Synology, poort 7080): wat hij van plan is ---------- */
 
 let reg = null;
-// zelfde machine als evcc, poort 7080
-const regBase = () => { const b = evccBase(); return b ? b.replace(/:\d+$/, '') + ':7080' : null; };
+// het HeishaMon-adres als dat de regelaar is (poort 7080), anders dezelfde machine als evcc, poort 7080
+const regBase = () => {
+  const h = hmBase();
+  if (h && /:7080$/.test(h)) return h;
+  const b = evccBase(); return b ? b.replace(/:\d+$/, '') + ':7080' : null;
+};
 async function loadReg() {
   const b = regBase();
   if (!b) { reg = null; return; }
@@ -1720,6 +1809,7 @@ async function loadReg() {
 function renderReg() {
   const card = $('regCard');
   card.hidden = !reg || $('hpView').hidden;
+  renderSched();
   if (card.hidden) return;
   const T = (v) => (typeof v === 'number' ? nf0.format(v) + ' °C' : '–');
   const hm = (t) => { const d = new Date(t); return d.getFullYear() > 2000 ? d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : null; };
@@ -1728,6 +1818,7 @@ function renderReg() {
   $('regInfo').innerHTML = (reg.error ? `<p class="hint warn">${esc(reg.error)}</p>` : '') + kvHtml([
     ['Nu', [
       ['Modus', reg.act ? 'stuurt de warmtepomp' : 'proef: beslist, maar stuurt niets'],
+      ['Stand', reg.mode ? { normaal: 'weekschema', vakantie: 'vakantie (schema uit)', zomer: 'zomer (verwarming uit)' }[reg.mode] || reg.mode : null],
       ['Boiler', reg.dhw ? T(reg.dhw.Want) + ' · ' + reg.dhw.Why : null],
       ['Verwarming', reg.heat ? T(reg.heat.Want) + ' · ' + reg.heat.Why : null],
       ['Voorverwarmen vanaf', reg.heat && hm(reg.heat.PreheatStart) && new Date(reg.heat.PreheatStart) > new Date() ? hm(reg.heat.PreheatStart) + ' (±' + nf0.format(reg.heat.LeadMinutes) + ' min)' : null],
@@ -1778,7 +1869,10 @@ function renderSetter(id) {
   $(id + 'Hint').textContent = st.msg || ((r.shift ? 'Verschuiving van de stooklijn. ' : '') + 'Nu ingesteld: ' + fmtSet(r, r.cur) + '.'
     + (SETTERS[id].note ? ' ' + SETTERS[id].note : ''));
 }
-function renderHpSet() { renderSetter('setZ1'); renderSetter('setDHW'); }
+function renderHpSet() {
+  renderSetter('setZ1'); renderSetter('setDHW');
+  $('setCard').hidden = $('setZ1Card').hidden && $('setDHWCard').hidden;
+}
 function stepSetter(id, d) {
   const r = setterRange(id); if (!r) return;
   const st = setState[id];
@@ -1813,6 +1907,7 @@ async function sendSetter(id) {
   st.busy = false;
   st.dirty = false;
   renderHpInfo(); renderHM();
+  setTimeout(() => loadReg().then(() => { renderReg(); renderSched(); }), 3000);
 }
 
 // Geschiedenis van de warmtepomp: evcc bewaart verbruik en warmte van de HeishaMon (wp_elektrisch / wp_warmte).
@@ -1873,6 +1968,165 @@ async function changeHp(period, k) {
   renderHpView();
 }
 
+/* ---------- weekschema (warmteregelaar: GET/POST /schedule, /mode?set=…) ---------- */
+
+let sched = null;            // { mode, eco, dhwBase, away, heat: [7][{from,to,temp}], dhw: [7][…] }
+const DAYS = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
+const toMin = (s) => { const [h, m] = String(s).split(':').map(Number); return h * 60 + (m || 0); };
+const fromMin = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+const dayIdx = (d = new Date()) => (d.getDay() + 6) % 7;
+const fT = (v) => nf0.format(v) + ' °C';
+async function loadSched() {
+  const b = regBase();
+  if (!b) { sched = null; return; }
+  try { sched = await getJson(b + '/schedule'); } catch (e) { /* vorige houden: de regelaar kan even weg zijn */ }
+}
+function barHtml(periods) {
+  return (periods || []).map((p) => {
+    const a = toMin(p.from), z = toMin(p.to), l = a / 14.4, w = (z - a) / 14.4;
+    return `<i style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%" title="${p.from}–${p.to} ${fT(p.temp)}">${w >= 9 ? nf0.format(p.temp) + '°' : ''}</i>`;
+  }).join('');
+}
+function renderSched() {
+  const card = $('schedCard');
+  card.hidden = !sched;
+  if (!sched) return;
+  const mode = sched.mode || 'normaal';
+  document.querySelectorAll('#modeSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.m === mode));
+  $('modeHint').textContent = {
+    normaal: `Het weekschema is actief. Buiten de periodes: kamer ${fT(sched.eco)}, boiler ${fT(sched.dhwBase)}.`,
+    vakantie: `Vakantie: het schema staat uit. Kamer ${fT(sched.away)}, boiler ${fT(sched.dhwBase)}, geen nachtbeurt.`,
+    zomer: 'Zomer: de verwarming staat uit (warmtepomp alleen sanitair water). De boiler volgt het schema.',
+  }[mode] + (reg && reg.act === false ? ' Proefmodus: de regelaar stuurt nog niets.' : '');
+  const now = new Date(), nowPct = (now.getHours() * 60 + now.getMinutes()) / 14.4, td = dayIdx(now);
+  const offHeat = mode !== 'normaal' ? ' off' : '', offDhw = mode === 'vakantie' ? ' off' : '';
+  let h = `<div class="wk-leg"><span class="${offHeat.trim()}"><i style="background:var(--sun)"></i>Verwarming (anders ${fT(sched.eco)})</span>`
+    + `<span class="${offDhw.trim()}"><i style="background:var(--use)"></i>Boiler (anders ${fT(sched.dhwBase)})</span></div>`;
+  h += '<div class="wk-axis">' + [0, 6, 12, 18, 24].map((x) => `<span style="left:${x / .24}%">${x}</span>`).join('') + '</div>';
+  DAYS.forEach((name, d) => {
+    h += `<button class="wk-day${d === td ? ' today' : ''}" data-d="${d}" aria-label="${name} aanpassen"><span class="wk-name">${name.slice(0, 2)}</span><span class="wk-bars">`
+      + `<span class="wk-bar heat${offHeat}">${barHtml(sched.heat[d])}</span>`
+      + `<span class="wk-bar dhw${offDhw}">${barHtml(sched.dhw[d])}</span>`
+      + (d === td ? `<b class="wk-now" style="left:${nowPct.toFixed(2)}%"></b>` : '') + '</span></button>';
+  });
+  $('schedWeek').innerHTML = h;
+  $('schedWeek').querySelectorAll('.wk-day').forEach((b) => { b.onclick = () => openSched(Number(b.dataset.d)); });
+}
+async function setMode(m) {
+  const b = regBase();
+  if (!sched || !b || m === (sched.mode || 'normaal')) return;
+  const q = {
+    vakantie: `Vakantie aanzetten? Het weekschema gaat uit: kamer ${fT(sched.away)}, boiler ${fT(sched.dhwBase)}, geen nachtbeurt.`,
+    zomer: 'Zomerstand aanzetten? De verwarming gaat uit: de warmtepomp maakt enkel nog sanitair warm water, volgens het schema.',
+    normaal: 'Terug naar het weekschema?' + (sched.mode === 'zomer' ? ' De verwarming gaat weer aan.' : ''),
+  }[m];
+  if (!confirm(q)) return;
+  try {
+    const r = await fetch(b + '/mode?set=' + encodeURIComponent(m));
+    const t = (await r.text()).trim();
+    if (!r.ok) throw new Error(t);
+    sched.mode = t;
+  } catch (e) { alert('Niet gelukt: ' + (e.message || e)); }
+  renderSched();
+  setTimeout(() => loadReg().then(() => { renderReg(); renderSched(); }), 2000);
+}
+
+// bewerken: een kopie van het schema, per dag
+let ed = null, edDay = 0;
+function openSched(d) {
+  if (!sched) return;
+  ed = JSON.parse(JSON.stringify(sched));
+  edDay = d;
+  $('edEco').value = ed.eco; $('edBase').value = ed.dhwBase; $('edAway').value = ed.away;
+  $('schedErr').textContent = ''; $('copyHint').textContent = '';
+  renderEd();
+  $('schedSheet').hidden = $('schedBg').hidden = false;
+}
+function closeSched() { $('schedSheet').hidden = $('schedBg').hidden = true; ed = null; }
+const ED = { heat: { el: 'edHeat', min: 10, max: 26, def: 22 }, dhw: { el: 'edDHW', min: 30, max: 60, def: 48 } };
+// keuzelijst per kwartier (altijd 24 uur, ook op een toestel in het Engels)
+function quarterOpts(sel, lo, hi) {
+  let o = '';
+  for (let m = lo; m <= hi; m += 15) { const v = fromMin(m); o += `<option${v === sel ? ' selected' : ''}>${v}</option>`; }
+  if (toMin(sel) % 15) o = `<option selected>${sel}</option>` + o;  // geen kwartier: toch tonen
+  return o;
+}
+function renderEd() {
+  $('schedTitle').textContent = 'Weekschema · ' + DAYS[edDay];
+  $('schedDays').innerHTML = DAYS.map((n, d) => `<button data-d="${d}" aria-pressed="${d === edDay}">${n.slice(0, 2)}</button>`).join('');
+  $('schedDays').querySelectorAll('button').forEach((b) => { b.onclick = () => { edDay = Number(b.dataset.d); $('copyHint').textContent = ''; renderEd(); }; });
+  Object.entries(ED).forEach(([k, E]) => {
+    const ps = ed[k][edDay];
+    $(E.el).innerHTML = ps.length ? ps.map((p, i) => `<div class="prow" data-k="${k}" data-i="${i}">`
+      + `<select data-f="from" aria-label="Van">${quarterOpts(p.from, 0, 1425)}</select><span class="u">–</span>`
+      + `<select data-f="to" aria-label="Tot">${quarterOpts(p.to, 15, 1440)}</select>`
+      + `<input type="number" inputmode="numeric" data-f="temp" min="${E.min}" max="${E.max}" step="1" value="${p.temp}" aria-label="Temperatuur"><span class="u">°C</span>`
+      + `<button class="pdel" aria-label="Periode wissen">✕</button></div>`).join('')
+      : `<p class="hint">Geen periodes: de hele dag ${k === 'heat' ? 'eco' : 'gewoon'}.</p>`;
+    $(E.el).querySelectorAll('.prow').forEach((row) => {
+      const p = ed[k][edDay][Number(row.dataset.i)];
+      row.querySelectorAll('input, select').forEach((inp) => {
+        inp.onchange = () => {
+          const f = inp.dataset.f;
+          p[f] = f === 'temp' ? Number(inp.value) : inp.value;
+          $('schedErr').textContent = '';
+        };
+      });
+      row.querySelector('.pdel').onclick = () => { ed[k][edDay].splice(Number(row.dataset.i), 1); renderEd(); };
+    });
+  });
+}
+function addPeriod(k) {
+  const ps = ed[k][edDay], E = ED[k];
+  const last = ps.length ? ps.reduce((a, p) => (toMin(p.to) > toMin(a.to) ? p : a)) : null;
+  const from = last ? toMin(last.to) : 8 * 60;
+  if (from >= 24 * 60 - 15) { $('schedErr').textContent = 'De dag is vol: pas eerst een periode aan.'; return; }
+  ps.push({ from: fromMin(from), to: fromMin(Math.min(24 * 60, from + 60)), temp: last ? last.temp : E.def });
+  renderEd();
+}
+function copyDay(to) {
+  const days = { wd: [0, 1, 2, 3, 4], we: [5, 6], all: [0, 1, 2, 3, 4, 5, 6] }[to].filter((d) => d !== edDay);
+  days.forEach((d) => { ed.heat[d] = JSON.parse(JSON.stringify(ed.heat[edDay])); ed.dhw[d] = JSON.parse(JSON.stringify(ed.dhw[edDay])); });
+  $('copyHint').textContent = '✓ ' + DAYS[edDay] + ' gekopieerd naar ' + days.map((d) => DAYS[d].slice(0, 2).toLowerCase()).join(', ') + '. Vergeet niet te bewaren.';
+}
+// eenvoudige controle vooraf; de regelaar controleert alles opnieuw
+function checkEd() {
+  for (const [k, E] of Object.entries(ED)) {
+    for (let d = 0; d < 7; d++) {
+      const ps = ed[k][d].slice().sort((a, b) => toMin(a.from) - toMin(b.from));
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i], w = (k === 'heat' ? 'Verwarming' : 'Boiler') + ' ' + DAYS[d].toLowerCase() + ': ';
+        if (!p.from || !p.to) return w + 'vul van en tot in.';
+        if (toMin(p.to) <= toMin(p.from)) return w + `${p.from}–${p.to} eindigt voor het begint.`;
+        if (!(p.temp >= E.min && p.temp <= E.max)) return w + `temperatuur tussen ${E.min} en ${E.max} °C.`;
+        if (i && toMin(p.from) < toMin(ps[i - 1].to)) return w + 'periodes overlappen.';
+      }
+      ed[k][d] = ps;
+    }
+  }
+  return '';
+}
+async function saveSched() {
+  ed.eco = Number($('edEco').value); ed.dhwBase = Number($('edBase').value); ed.away = Number($('edAway').value);
+  const err = checkEd();
+  if (err) { $('schedErr').textContent = err; return; }
+  const btn = $('schedSave');
+  btn.disabled = true;
+  try {
+    // text/plain: geen voorafgaande CORS-vraag nodig
+    const r = await fetch(regBase() + '/schedule', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(ed) });
+    const t = await r.text();
+    if (!r.ok) throw new Error(t.trim());
+    sched = JSON.parse(t);
+    closeSched();
+    renderSched();
+    setTimeout(() => loadReg().then(() => { renderReg(); renderSched(); }), 2000);
+  } catch (e) {
+    $('schedErr').textContent = 'Niet bewaard: ' + (e.message || e);
+  }
+  btn.disabled = false;
+}
+
 /* ---------- laadpaal (evcc) ---------- */
 
 const LP_MODE = { off: 'Uit', now: 'Snel', minpv: 'Min+Zon', pv: 'Zon', smart: 'Slim' };
@@ -1887,10 +2141,9 @@ function renderLpTile() {
     $('tLpSub').textContent = 'Modus ' + (LP_MODE[lp.lp.mode] || lp.lp.mode || '–')
       + (lp.lp.chargedEnergy > 0 ? ' · deze laadbeurt ' + txt(fmtEnergy(lp.lp.chargedEnergy)) : '');
   }
-  $('detEmpty').hidden = !!(lp || hm);
 }
 function renderLpInfo() {
-  if ($('lpView').hidden) return;
+  if ($('tabLp').hidden) return;
   const lp = lpNow(), el = $('lpInfo');
   if (!lp) { el.innerHTML = '<p class="empty">' + (gw ? 'evcc kent geen laadpaal.' : 'evcc niet bereikbaar. Controleer het adres bij ⚙︎.') + '</p>'; return; }
   const x = lp.lp;
@@ -1919,7 +2172,7 @@ async function loadLpHist() {
     : slotTimes(lpv.period, lpv.k).map((t) => { const sl = findSlot(map, t, 7200); return { t, vals: { kwh: map ? (sl ? sl.e * 1000 : 0) : null } }; });
 }
 function renderLpView() {
-  if ($('lpView').hidden) return;
+  if ($('tabLp').hidden) return;
   document.querySelectorAll('#lpSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === lpv.period));
   $('lpLabel').textContent = periodLabel(lpv.period, lpv.k);
   $('lpNext').disabled = lpv.k === 0;
@@ -1941,15 +2194,21 @@ async function changeLp(period, k) {
 
 function openView(id) { $(id).hidden = false; document.body.style.overflow = 'hidden'; }
 function closeView(id) { $(id).hidden = true; document.body.style.overflow = ''; }
-function openHp() { Object.values(setState).forEach((x) => { x.val = null; x.msg = ''; x.dirty = false; }); openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); }
-function openLp() { openView('lpView'); renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {}); }
+function openHp() { openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); }
 
+const TABS = { elek: 'tabElek', verw: 'tabVerw', lp: 'tabLp' };
 function showTab(t) {
-  config.tab = t === 'details' ? 'details' : 'status';
-  $('tabStatus').hidden = config.tab !== 'status';
-  $('tabDetails').hidden = config.tab !== 'details';
+  t = { status: 'elek', details: 'verw' }[t] || t;  // oude namen
+  config.tab = TABS[t] ? t : 'elek';
+  Object.entries(TABS).forEach(([k, id]) => { $(id).hidden = config.tab !== k; });
   document.querySelectorAll('#tabSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.t === config.tab));
-  if (config.tab === 'status') renderHist();
+  if (config.tab === 'elek') renderHist();
+  if (config.tab === 'verw') {
+    Object.values(setState).forEach((x) => { if (!x.busy) { x.val = null; x.msg = ''; x.dirty = false; } });
+    renderHM();
+    Promise.all([loadReg(), loadSched()]).then(() => { renderReg(); renderSched(); });
+  }
+  if (config.tab === 'lp') { renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {}); }
 }
 
 const PEAK_MIN = 2500; // Vlaanderen: het capaciteitstarief rekent minstens 2,5 kW
@@ -2005,7 +2264,7 @@ async function tickLive() {
     renderLpTile();
     renderHpInfo();
     renderLpInfo();
-    if (!$('hpView').hidden) loadReg().then(renderReg);
+    if (!$('hpView').hidden || !$('tabVerw').hidden) loadReg().then(renderReg);
     showOk();
     renderTiles();
     if (dev.mode === 'now') renderDev();
@@ -2021,7 +2280,8 @@ async function tickDay() {
     loadSessions().catch(() => {});
     if (!$('devView').hidden && dev.mode !== 'now' && dev.k === 0) { await loadDev(); renderDev(); }
     if (!$('hpView').hidden && hpv.k === 0) { await loadHpHist(); renderHpView(); }
-    if (!$('lpView').hidden && lpv.k === 0) { await loadLpHist(); renderLpView(); }
+    if (!$('tabLp').hidden && lpv.k === 0) { await loadLpHist(); renderLpView(); }
+    if (!$('tabVerw').hidden) { await loadSched(); renderSched(); }
   } catch (e) { showError(e); }
 }
 
@@ -2219,14 +2479,12 @@ document.querySelectorAll('#hMode button').forEach((b) => {
 document.querySelectorAll('#tabSeg button').forEach((b) => { b.onclick = () => { showTab(b.dataset.t); saveConfig(); }; });
 const tapTile = (id, fn) => { $(id).onclick = fn; $(id).onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } }; };
 tapTile('tHpTile', openHp);
-tapTile('tLpTile', openLp);
 $('hpBack').onclick = () => closeView('hpView');
 Object.keys(SETTERS).forEach((id) => {
   $(id + 'Minus').onclick = () => stepSetter(id, -1);
   $(id + 'Plus').onclick = () => stepSetter(id, 1);
   $(id + 'Btn').onclick = () => sendSetter(id);
 });
-$('lpBack').onclick = () => closeView('lpView');
 document.querySelectorAll('#hpSeg button').forEach((b) => { b.onclick = () => changeHp(b.dataset.p, 0); });
 document.querySelectorAll('#lpSeg button').forEach((b) => { b.onclick = () => changeLp(b.dataset.p, 0); });
 $('hpPrev').onclick = () => changeHp(hpv.period, hpv.k + 1);
@@ -2238,6 +2496,13 @@ $('lpNext').onclick = () => changeLp(lpv.period, lpv.k - 1);
   $(w).addEventListener('pointerdown', (e) => chartPointer($(c), $(t), e));
   $(w).addEventListener('pointerleave', () => chartOut($(c), $(t)));
 });
+document.querySelectorAll('#modeSeg button').forEach((b) => { b.onclick = () => setMode(b.dataset.m); });
+$('addHeat').onclick = () => addPeriod('heat');
+$('addDHW').onclick = () => addPeriod('dhw');
+document.querySelectorAll('[data-copy]').forEach((b) => { b.onclick = () => copyDay(b.dataset.copy); });
+$('schedCancel').onclick = closeSched;
+$('schedBg').onclick = closeSched;
+$('schedSave').onclick = saveSched;
 $('openSettings').onclick = openSettings;
 $('cancelSettings').onclick = closeSettings;
 $('sheetBg').onclick = closeSettings;

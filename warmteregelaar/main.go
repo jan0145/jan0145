@@ -52,8 +52,13 @@ func envFloat(k string, d float64) float64 {
 // ---------- toestand ----------
 
 type State struct {
-	Learned Learned `json:"learned"`
-	PVBoost bool    `json:"pvBoost"`
+	Learned  Learned   `json:"learned"`
+	Schedule *Schedule `json:"schedule,omitempty"` // weekschema (leeg = standaardschema)
+	PVBoost  bool      `json:"pvBoost"`
+	// zomerstand: de regelaar zette de warmtepomp op "alleen sanitair water"; daarna terug naar SummerPrev
+	SummerOn   bool      `json:"summerOn"`
+	SummerPrev float64   `json:"summerPrev"`
+	SummerAt   time.Time `json:"summerAt"`
 	// laatste doelen die de regelaar stuurde (om manuele aanpassingen te herkennen)
 	SentDHW  float64   `json:"sentDHW"`
 	SentZ1   float64   `json:"sentZ1"`
@@ -91,6 +96,7 @@ type mark struct {
 type Status struct {
 	Time time.Time `json:"time"`
 	Act  bool      `json:"act"`
+	Mode string    `json:"mode"`
 	DHW  struct {
 		Temp, Target, Want float64
 		Why                string
@@ -109,10 +115,19 @@ type Status struct {
 }
 
 var (
-	mu  sync.Mutex
-	st  State
-	cfg = defaultConfig()
+	mu    sync.Mutex
+	st    State
+	cfg   = defaultConfig()
+	sched Schedule // standaardschema (uit de omgevingsvariabelen), tot er een in de toestand staat
 )
+
+// huidig weekschema
+func schedule() Schedule {
+	if st.Schedule != nil {
+		return *st.Schedule
+	}
+	return sched
+}
 
 func statePath() string { return filepath.Join(dataDir, "warmteregelaar-state.json") }
 
@@ -283,7 +298,8 @@ func step(now time.Time) {
 	mu.Lock()
 	defer mu.Unlock()
 	s := &st.Status
-	s.Time, s.Act, s.Error = now, act, ""
+	sc := schedule()
+	s.Time, s.Act, s.Mode, s.Error = now, act, sc.Mode, ""
 	hm, err := readHM()
 	if err != nil {
 		s.Error = "HeishaMon: " + err.Error()
@@ -301,7 +317,9 @@ func step(now time.Time) {
 	learnDHW(now, dhw, dhwHeating)
 
 	// boiler
-	want, why := DHWTarget(cfg, st.Learned, DHWInput{Now: now, Temp: dhw, PVBoost: st.PVBoost, Prev: st.PrevDHW, Prices: prices, Solar: solar})
+	summer(now, sc, hm)
+
+	want, why := DHWTarget(cfg, sc, st.Learned, DHWInput{Now: now, Temp: dhw, PVBoost: st.PVBoost, Prev: st.PrevDHW, Prices: prices, Solar: solar})
 	st.PrevDHW = want
 	// zelf aangepast op de bediening (en blijft staan): voorrang, tot de boiler warm is of hoogstens 3 uur
 	if act && st.SentDHW != 0 && now.Sub(st.SentDHWAt) > graceAfterSend && math.Round(dhwSet) == math.Round(st.SeenDHW) && math.Round(dhwSet) != math.Round(st.SentDHW) &&
@@ -325,10 +343,12 @@ func step(now time.Time) {
 	}
 
 	// verwarming (alleen als de warmtepomp met een kamertemperatuur werkt, niet met een stooklijnverschuiving)
-	plan := HeatTarget(cfg, st.Learned, HeatInput{Now: now, Tin: tin, Tout: tout, Prices: prices})
+	plan := HeatTarget(cfg, sc, st.Learned, HeatInput{Now: now, Tin: tin, Tout: tout, Prices: prices})
 	s.Heat.Tin, s.Heat.Tout, s.Heat.Set, s.Heat.Want, s.Heat.Why = tin, tout, z1, plan.Target, plan.Why
 	s.Heat.NextWindow, s.Heat.PreheatStart, s.Heat.LeadMinutes = plan.NextWindow, plan.PreheatStart, plan.LeadMinutes
-	if z1 >= 10 {
+	if plan.Target == 0 {
+		// zomer: verwarming uit, kamertemperatuur niet sturen
+	} else if z1 >= 10 {
 		// iemand heeft zelf de thermostaat aangepast: respecteren tot het volgende omslagpunt
 		if act && st.SentZ1 != 0 && now.Sub(st.SentZ1At) > graceAfterSend && math.Round(z1) == math.Round(st.SeenZ1) && math.Round(z1) != math.Round(st.SentZ1) && math.Round(z1) != math.Round(plan.Target) && now.After(st.Override) {
 			st.Override = nextBoundary(now, plan)
@@ -346,7 +366,7 @@ func step(now time.Time) {
 			st.SentZ1 = plan.Target
 		}
 		st.SeenZ1 = z1
-		learnPreheat(now, tin, tout, plan, z1)
+		learnPreheat(now, tin, tout, plan, z1, sc.Eco)
 	} else {
 		s.Heat.Why = "de warmtepomp werkt met een stooklijnverschuiving: kamertemperatuur niet gestuurd"
 	}
@@ -367,18 +387,61 @@ const graceAfterSend = 2 * time.Minute
 // zelfde commando pas opnieuw sturen als de warmtepomp het na zoveel tijd nog niet overnam
 const resendAfter = 45 * time.Second
 
+// nieuw schema; bij een andere stand vervallen de manuele aanpassingen (mu moet vast zijn)
+func setSchedule(ns Schedule) {
+	if old := schedule(); old.Mode != ns.Mode {
+		log.Printf("stand: %s → %s", old.Mode, ns.Mode)
+		st.Override, st.DHWOverride = time.Time{}, time.Time{}
+	} else {
+		log.Print("weekschema aangepast")
+	}
+	st.Schedule = &ns
+	saveState()
+}
+
 func markDHWOverride(now time.Time, v float64) {
 	st.DHWOverride, st.DHWManual, st.SentDHW, st.SentDHWAt = now.Add(3*time.Hour), v, v, now
 	log.Printf("boiler zelf op %.0f °C gezet: de regelaar volgt dat tot %s (of tot de boiler warm is)", v, st.DHWOverride.Format("15:04"))
 }
 
-// volgende omslag: einde/begin van een venster of voorverwarmen
-func nextBoundary(now time.Time, p HeatPlan) time.Time {
-	m := now.Hour()*60 + now.Minute()
-	for _, w := range cfg.windowsFor(now) {
-		if m >= w.From && m < w.To {
-			return atMinute(now, w.To)
+// Zomerstand: warmtepomp op "alleen sanitair water" (3); bij het verlaten terug naar de vorige stand.
+// Operating_Mode_State: 0 verwarmen, 3 alleen sanitair water, 4 verwarmen + sanitair water, …
+func summer(now time.Time, sc Schedule, hm hmData) {
+	op, ok := hm["Operating_Mode_State"]
+	if !ok {
+		return
+	}
+	if now.Sub(st.SummerAt) < 75*time.Second { // de HeishaMon toont een nieuwe stand pas na een tijdje
+		return
+	}
+	if sc.Mode == ModeSummer && op != 3 {
+		if !st.SummerOn {
+			st.SummerPrev = op
 		}
+		logChange("summer", fmt.Sprintf("zomer: warmtepomp van stand %.0f naar alleen sanitair water", op))
+		if err := sendHM("SetOperationMode", 3); err == nil {
+			st.SummerOn, st.SummerAt = true, now
+		}
+	} else if sc.Mode != ModeSummer && st.SummerOn {
+		prev := st.SummerPrev
+		if prev == 3 || prev == 0 { // niets zinnigs om naar terug te gaan: verwarmen + sanitair water
+			prev = 4
+		}
+		if op == 3 {
+			logChange("summer", fmt.Sprintf("zomer voorbij: warmtepomp terug naar stand %.0f", prev))
+			if err := sendHM("SetOperationMode", prev); err != nil {
+				return
+			}
+			st.SummerAt = now
+		}
+		st.SummerOn = false
+	}
+}
+
+// volgende omslag: einde/begin van een periode of voorverwarmen
+func nextBoundary(now time.Time, p HeatPlan) time.Time {
+	if per, ok := periodAt(schedule().Heat, now); ok {
+		return atMinute(now, per.To)
 	}
 	if !p.PreheatStart.IsZero() && p.PreheatStart.After(now) {
 		return p.PreheatStart
@@ -415,11 +478,11 @@ func learnDHW(now time.Time, temp float64, heating bool) {
 }
 
 // Kamer: hoe lang het duurt om van eco naar comfort te gaan, bij welke buitentemperatuur.
-func learnPreheat(now time.Time, tin, tout float64, p HeatPlan, set float64) {
+func learnPreheat(now time.Time, tin, tout float64, p HeatPlan, set, eco float64) {
 	r := st.Preheat
 	if r == nil {
-		if p.Target == cfg.Comfort && math.Round(set) == math.Round(cfg.Comfort) && tin <= cfg.Comfort-1.5 {
-			st.Preheat = &preheatRun{Start: now, Tin: tin, Target: cfg.Comfort, ToutS: tout, N: 1}
+		if p.Target > eco && math.Round(set) == math.Round(p.Target) && tin <= p.Target-1.5 {
+			st.Preheat = &preheatRun{Start: now, Tin: tin, Target: p.Target, ToutS: tout, N: 1}
 		}
 		return
 	}
@@ -518,7 +581,7 @@ func serve() {
 			markDHWOverride(now, v)
 		}
 		if v, err := strconv.ParseFloat(q.Get("SetZ1HeatRequestTemperature"), 64); err == nil {
-			plan := HeatTarget(cfg, st.Learned, HeatInput{Now: now, Tin: st.Status.Heat.Tin, Tout: st.Status.Heat.Tout, Prices: readRates("grid")})
+			plan := HeatTarget(cfg, schedule(), st.Learned, HeatInput{Now: now, Tin: st.Status.Heat.Tin, Tout: st.Status.Heat.Tout, Prices: readRates("grid")})
 			st.Override, st.SentZ1, st.SentZ1At = nextBoundary(now, plan), v, now
 			log.Printf("kamertemperatuur zelf op %.0f °C gezet: de regelaar wacht tot %s", v, st.Override.Format("02/01 15:04"))
 		}
@@ -526,6 +589,54 @@ func serve() {
 		mu.Unlock()
 		w.Write(b)
 		go func() { time.Sleep(hmPoll + 2*time.Second); step(time.Now()) }()
+	})
+	// weekschema: GET = lezen, POST = vervangen (JSON; de app stuurt text/plain, dan vraagt de browser geen toelating)
+	h.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		switch r.Method {
+		case http.MethodOptions:
+			return
+		case http.MethodPost:
+			var ns Schedule
+			if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&ns); err != nil {
+				http.Error(w, "ongeldig schema: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := ns.Validate(); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			setSchedule(ns)
+			mu.Unlock()
+			go func() { step(time.Now()) }()
+		}
+		mu.Lock()
+		b, _ := json.Marshal(schedule())
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(b)
+	})
+	// stand: /mode?set=normaal|vakantie|zomer
+	h.HandleFunc("/mode", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		mu.Lock()
+		ns := schedule()
+		if v := r.URL.Query().Get("set"); v != "" {
+			ns.Mode = v
+			if err := ns.Validate(); err != nil {
+				mu.Unlock()
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			setSchedule(ns)
+			go func() { step(time.Now()) }()
+		}
+		mode := schedule().Mode
+		mu.Unlock()
+		fmt.Fprint(w, mode)
 	})
 	h.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -543,18 +654,17 @@ func main() {
 	if loc, err := time.LoadLocation(env("TZ", "Europe/Brussels")); err == nil {
 		time.Local = loc
 	}
-	cfg.Comfort = envFloat("COMFORT", cfg.Comfort)
-	cfg.Eco = envFloat("ECO", cfg.Eco)
-	cfg.DHWBase = envFloat("BOILER", cfg.DHWBase)
-	cfg.DHWEvening = envFloat("BOILER_AVOND", cfg.DHWEvening)
+	// standaardschema; zodra het in de app aangepast is, geldt dat (warmteregelaar-state.json)
+	sched = defaultSchedule(envFloat("COMFORT", 22), envFloat("ECO", 20), envFloat("BOILER", 40), envFloat("BOILER_AVOND", 48))
 	cfg.DHWBoost = envFloat("BOILER_BOOST", cfg.DHWBoost)
 	if _, err := url.Parse(hmURL); err != nil {
 		log.Fatal(err)
 	}
 	loadState()
 	log.Printf("start: HeishaMon %s, evcc %s, %s", hmURL, evccURL, map[bool]string{true: "STUURT", false: "PROEF (alleen loggen)"}[act])
-	log.Printf("boiler %.0f °C, 17–22 u ≥ %.0f °C, boost %.0f °C · kamer %.0f °C in de vensters, anders %.0f °C",
-		cfg.DHWBase, cfg.DHWEvening, cfg.DHWBoost, cfg.Comfort, cfg.Eco)
+	sc := schedule()
+	log.Printf("stand %s · boiler gewoon %.0f °C, boost %.0f °C · kamer eco %.0f °C, vakantie %.0f °C (weekschema: /schedule)",
+		sc.Mode, sc.DHWBase, cfg.DHWBoost, sc.Eco, sc.Away)
 	go pollHM()
 	go serve()
 	time.Sleep(3 * time.Second) // eerste HeishaMon-gegevens afwachten
