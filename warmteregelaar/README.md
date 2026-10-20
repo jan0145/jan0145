@@ -22,6 +22,9 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
   Zolang er nog geen 4 metingen zijn, rekent hij met een voorzichtige schatting.
 - Is het tot een uur vroeger beginnen goedkoper, dan doet hij dat (rekening houdend met het extra verbruik).
 - Zet iemand zelf de thermostaat anders (bediening of Stroom-app), dan geldt dat tot het volgende omslagpunt.
+- Zet iemand zelf de boiler anders (bv. hoger voor een bad), dan volgt de regelaar dat tot de boiler warm is,
+  hoogstens 3 uur. Na een eigen commando wacht de regelaar 2 minuten voor hij een afwijking als "zelf ingesteld"
+  beschouwt (de HeishaMon toont een nieuwe waarde pas na 10–60 s).
 
 **Leren** (bewaard in `warmteregelaar-state.json`): hoe snel de boiler opwarmt en afkoelt, en hoe lang het
 huis nodig heeft om op te warmen. Elke 5 minuten komt er een regel in `warmte-JJJJ-MM.csv` (buiten, kamer,

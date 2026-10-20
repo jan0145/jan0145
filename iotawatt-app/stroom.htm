@@ -400,20 +400,30 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <h2>Warmtepomp</h2>
     </div>
     <section class="card hpsum" id="hpSum"></section>
+    <section class="card" id="setZ1Card" hidden>
+      <div class="card-head"><h2>Verwarming</h2></div>
+      <div class="setrow">
+        <button class="pm" id="setZ1Minus" aria-label="Lager">−</button>
+        <div class="setval num" id="setZ1Val">–</div>
+        <button class="pm" id="setZ1Plus" aria-label="Hoger">+</button>
+        <button class="btn primary" id="setZ1Btn">Instellen</button>
+      </div>
+      <p class="hint" id="setZ1Hint" style="margin-top:8px"></p>
+    </section>
+    <section class="card" id="setDHWCard" hidden>
+      <div class="card-head"><h2>Sanitair warm water</h2></div>
+      <div class="setrow">
+        <button class="pm" id="setDHWMinus" aria-label="Lager">−</button>
+        <div class="setval num" id="setDHWVal">–</div>
+        <button class="pm" id="setDHWPlus" aria-label="Hoger">+</button>
+        <button class="btn primary" id="setDHWBtn">Instellen</button>
+      </div>
+      <p class="hint" id="setDHWHint" style="margin-top:8px"></p>
+    </section>
     <section class="card"><div id="hpInfo"></div></section>
     <section class="card" id="regCard" hidden>
       <div class="card-head"><h2>Warmteregelaar</h2></div>
       <div id="regInfo"></div>
-    </section>
-    <section class="card" id="hpSetCard" hidden>
-      <div class="card-head"><h2>Kamertemperatuur</h2></div>
-      <div class="setrow">
-        <button class="pm" id="hpMinus" aria-label="Lager">−</button>
-        <div class="setval num" id="hpSetVal">–</div>
-        <button class="pm" id="hpPlus" aria-label="Hoger">+</button>
-        <button class="btn primary" id="hpSetBtn">Instellen</button>
-      </div>
-      <p class="hint" id="hpSetHint" style="margin-top:8px"></p>
     </section>
     <div class="seg wide" role="group" aria-label="Periode" id="hpSeg">
       <button data-p="day" aria-pressed="true">Dag</button>
@@ -1682,61 +1692,78 @@ function renderReg() {
   ]);
 }
 
-/* ---------- kamertemperatuur instellen (HeishaMon-commando) ---------- */
+/* ---------- temperaturen instellen (HeishaMon-commando, via de warmteregelaar) ---------- */
 
-const hpSet = { val: null, busy: false, msg: '' };
 const hmBase = () => { const u = (config.hm || '').trim(); return u && u.toLowerCase() !== 'demo' ? (/^https?:\/\//.test(u) ? u : 'http://' + u).replace(/\/+$/, '') : null; };
-// Met een kamerthermostaat is dit de gewenste kamertemperatuur (20 °C of meer);
-// werkt de warmtepomp op stooklijn, dan is het een verschuiving van −5 tot +5.
-function hpSetRange() {
-  const cur = hv('Z1_Heat_Request_Temp');
+// Twee instelblokken: verwarming (kamertemperatuur) en sanitair warm water (boilertemperatuur).
+const SETTERS = {
+  setZ1: {
+    name: 'Kamertemperatuur', cmd: 'SetZ1HeatRequestTemperature', read: 'Z1_Heat_Request_Temp',
+    // met een kamerthermostaat de gewenste temperatuur; op stooklijn een verschuiving van −5 tot +5
+    range: (cur) => (cur >= 10 ? { min: 16, max: 26, shift: false } : { min: -5, max: 5, shift: true }),
+  },
+  setDHW: {
+    name: 'Boilertemperatuur', cmd: 'SetDHWTemp', read: 'DHW_Target_Temp',
+    range: () => ({ min: 40, max: 60, shift: false }),
+    note: 'Een hogere temperatuur geldt tot de boiler warm is (hoogstens 3 uur); daarna volgt de warmteregelaar weer zijn plan.',
+  },
+};
+// dirty = de gebruiker is een waarde aan het kiezen; anders volgt het blok de werkelijke instelling
+const setState = { setZ1: { val: null, busy: false, msg: '', dirty: false }, setDHW: { val: null, busy: false, msg: '', dirty: false } };
+
+function setterRange(id) {
+  const cur = hv(SETTERS[id].read);
   if (cur === null) return null;
-  return cur >= 10 ? { min: 16, max: 26, shift: false, cur } : { min: -5, max: 5, shift: true, cur };
+  return { ...SETTERS[id].range(cur), cur };
 }
-function renderHpSet() {
-  const r = hm && hm.v ? hpSetRange() : null;
-  $('hpSetCard').hidden = !r;
+const fmtSet = (r, v) => (r.shift ? (v > 0 ? '+' : '') + nf0.format(v) + ' K' : nf0.format(v) + ' °C');
+
+function renderSetter(id) {
+  const st = setState[id], r = hm && hm.v ? setterRange(id) : null;
+  $(id + 'Card').hidden = !r;
   if (!r) return;
-  if (hpSet.val === null) hpSet.val = r.cur;
-  const fmtV = (v) => (r.shift ? (v > 0 ? '+' : '') + nf0.format(v) + ' K' : nf0.format(v) + ' °C');
-  $('hpSetVal').textContent = fmtV(hpSet.val);
-  $('hpMinus').disabled = hpSet.busy || hpSet.val <= r.min;
-  $('hpPlus').disabled = hpSet.busy || hpSet.val >= r.max;
-  $('hpSetBtn').disabled = hpSet.busy || hpSet.val === r.cur || !hmBase();
-  $('hpSetHint').textContent = hpSet.msg || ((r.shift ? 'Verschuiving van de stooklijn. ' : '') + 'Nu ingesteld: ' + fmtV(r.cur) + '.');
+  if (st.val === null || (!st.dirty && !st.busy)) st.val = r.cur;
+  $(id + 'Val').textContent = fmtSet(r, st.val);
+  $(id + 'Minus').disabled = st.busy || st.val <= r.min;
+  $(id + 'Plus').disabled = st.busy || st.val >= r.max;
+  $(id + 'Btn').disabled = st.busy || st.val === r.cur || !hmBase();
+  $(id + 'Hint').textContent = st.msg || ((r.shift ? 'Verschuiving van de stooklijn. ' : '') + 'Nu ingesteld: ' + fmtSet(r, r.cur) + '.'
+    + (SETTERS[id].note ? ' ' + SETTERS[id].note : ''));
 }
-function stepHpSet(d) {
-  const r = hpSetRange(); if (!r) return;
-  hpSet.val = Math.min(r.max, Math.max(r.min, (hpSet.val === null ? r.cur : hpSet.val) + d));
-  hpSet.msg = '';
-  renderHpSet();
+function renderHpSet() { renderSetter('setZ1'); renderSetter('setDHW'); }
+function stepSetter(id, d) {
+  const r = setterRange(id); if (!r) return;
+  const st = setState[id];
+  st.val = Math.min(r.max, Math.max(r.min, (st.val === null ? r.cur : st.val) + d));
+  st.dirty = st.val !== r.cur;
+  st.msg = '';
+  renderSetter(id);
 }
-async function sendHpSet() {
-  const r = hpSetRange(), b = hmBase();
-  if (!r || !b || hpSet.val === r.cur) return;
-  const v = hpSet.val;
-  if (!confirm('Kamertemperatuur van de warmtepomp instellen op ' + (r.shift ? (v > 0 ? '+' : '') + v + ' K' : v + ' °C') + '?')) return;
-  hpSet.busy = true; hpSet.msg = 'Versturen…'; renderHpSet();
+async function sendSetter(id) {
+  const S = SETTERS[id], st = setState[id], r = setterRange(id), b = hmBase();
+  if (!r || !b || st.val === r.cur) return;
+  const v = st.val;
+  if (!confirm(S.name + ' van de warmtepomp instellen op ' + fmtSet(r, v) + '?')) return;
+  st.busy = true; st.msg = 'Versturen…'; renderSetter(id);
   try {
-    // HeishaMon: http://<ip>/command?SetZ1HeatRequestTemperature=<waarde>
+    // http://<regelaar of HeishaMon>/command?<commando>=<waarde>
     // Een commando gaat soms verloren: tot 3 keer versturen, telkens 15 s wachten op bevestiging.
     let ok = false;
     for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
-      await fetch(b + '/command?SetZ1HeatRequestTemperature=' + encodeURIComponent(v), { mode: 'no-cors' });
-      hpSet.msg = `Verstuurd (poging ${attempt} van 3). Wachten op de warmtepomp…`; renderHpSet();
+      await fetch(b + '/command?' + S.cmd + '=' + encodeURIComponent(v), { mode: 'no-cors' });
+      st.msg = `Verstuurd (poging ${attempt} van 3). Wachten op de warmtepomp…`; renderSetter(id);
       for (let i = 0; i < 3 && !ok; i++) {
         await new Promise((res) => setTimeout(res, 5000));
         await loadHM();
-        ok = hv('Z1_Heat_Request_Temp') === v;
+        ok = hv(S.read) === v;
       }
     }
-    hpSet.msg = ok ? '✓ Ingesteld. Blijft dat niet staan, dan zet iets anders hem terug (weekprogramma of Panasonic-app).'
-      : 'De warmtepomp neemt het commando niet over. Mogelijk werkt het Panasonic-internetdoosje (CZ-TAW1) de HeishaMon tegen.';
+    st.msg = ok ? '✓ Ingesteld.' : 'De warmtepomp heeft de nieuwe waarde (nog) niet bevestigd. Kijk binnen een minuut opnieuw.';
   } catch (e) {
-    hpSet.msg = 'Niet gelukt: ' + (e.message || e);
+    st.msg = 'Niet gelukt: ' + (e.message || e);
   }
-  hpSet.busy = false;
-  if (hpSet.msg.startsWith('✓')) hpSet.val = null;
+  st.busy = false;
+  st.dirty = false;
   renderHpInfo(); renderHM();
 }
 
@@ -1866,7 +1893,7 @@ async function changeLp(period, k) {
 
 function openView(id) { $(id).hidden = false; document.body.style.overflow = 'hidden'; }
 function closeView(id) { $(id).hidden = true; document.body.style.overflow = ''; }
-function openHp() { hpSet.val = null; hpSet.msg = ''; openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); }
+function openHp() { Object.values(setState).forEach((x) => { x.val = null; x.msg = ''; x.dirty = false; }); openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); }
 function openLp() { openView('lpView'); renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {}); }
 
 function showTab(t) {
@@ -2146,9 +2173,11 @@ const tapTile = (id, fn) => { $(id).onclick = fn; $(id).onkeydown = (e) => { if 
 tapTile('tHpTile', openHp);
 tapTile('tLpTile', openLp);
 $('hpBack').onclick = () => closeView('hpView');
-$('hpMinus').onclick = () => stepHpSet(-1);
-$('hpPlus').onclick = () => stepHpSet(1);
-$('hpSetBtn').onclick = sendHpSet;
+Object.keys(SETTERS).forEach((id) => {
+  $(id + 'Minus').onclick = () => stepSetter(id, -1);
+  $(id + 'Plus').onclick = () => stepSetter(id, 1);
+  $(id + 'Btn').onclick = () => sendSetter(id);
+});
 $('lpBack').onclick = () => closeView('lpView');
 document.querySelectorAll('#hpSeg button').forEach((b) => { b.onclick = () => changeHp(b.dataset.p, 0); });
 document.querySelectorAll('#lpSeg button').forEach((b) => { b.onclick = () => changeLp(b.dataset.p, 0); });

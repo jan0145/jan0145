@@ -59,6 +59,14 @@ type State struct {
 	SentZ1   float64   `json:"sentZ1"`
 	PrevDHW  float64   `json:"prevDHW"`
 	Override time.Time `json:"override"` // tot wanneer een manuele aanpassing van de kamertemperatuur voorgaat
+	// manuele aanpassing van de boiler (bv. voor een bad): geldt tot de boiler warm is, hoogstens 3 uur
+	DHWOverride time.Time `json:"dhwOverride"`
+	DHWManual   float64   `json:"dhwManual"`
+	SeenDHW     float64   `json:"seenDHW"` // vorige waarneming (een aanpassing telt pas als ze blijft staan)
+	SeenZ1      float64   `json:"seenZ1"`
+	// wanneer de regelaar zelf iets stuurde: de HeishaMon toont dat pas na ±10–60 s
+	SentDHWAt time.Time `json:"sentDHWAt"`
+	SentZ1At  time.Time `json:"sentZ1At"`
 	// lopende metingen om bij te leren
 	Preheat *preheatRun `json:"preheat,omitempty"`
 	DHWMark *mark       `json:"dhwMark,omitempty"`
@@ -86,6 +94,7 @@ type Status struct {
 	DHW  struct {
 		Temp, Target, Want float64
 		Why                string
+		Override           time.Time
 	} `json:"dhw"`
 	Heat struct {
 		Tin, Tout, Set, Want float64
@@ -294,11 +303,24 @@ func step(now time.Time) {
 	// boiler
 	want, why := DHWTarget(cfg, st.Learned, DHWInput{Now: now, Temp: dhw, PVBoost: st.PVBoost, Prev: st.PrevDHW, Prices: prices, Solar: solar})
 	st.PrevDHW = want
-	s.DHW.Temp, s.DHW.Target, s.DHW.Want, s.DHW.Why = dhw, dhwSet, want, why
-	if math.Round(dhwSet) != math.Round(want) {
+	// zelf aangepast op de bediening (en blijft staan): voorrang, tot de boiler warm is of hoogstens 3 uur
+	if act && st.SentDHW != 0 && now.Sub(st.SentDHWAt) > graceAfterSend && math.Round(dhwSet) == math.Round(st.SeenDHW) && math.Round(dhwSet) != math.Round(st.SentDHW) &&
+		math.Round(dhwSet) != math.Round(want) && !now.Before(st.DHWOverride) {
+		markDHWOverride(now, dhwSet)
+	}
+	st.SeenDHW = dhwSet
+	if now.Before(st.DHWOverride) && st.DHWManual > want && dhw >= st.DHWManual-1 {
+		st.DHWOverride = time.Time{} // boiler is warm: terug naar het eigen plan
+		log.Printf("boiler heeft de zelf gekozen %.0f °C bereikt: terug naar het plan", st.DHWManual)
+	}
+	if now.Before(st.DHWOverride) {
+		want, why = st.DHWManual, "zelf ingesteld, geldt tot "+st.DHWOverride.Format("15:04")+" of tot de boiler warm is"
+	}
+	s.DHW.Temp, s.DHW.Target, s.DHW.Want, s.DHW.Why, s.DHW.Override = dhw, dhwSet, want, why, st.DHWOverride
+	if math.Round(dhwSet) != math.Round(want) && (math.Round(st.SentDHW) != math.Round(want) || now.Sub(st.SentDHWAt) > resendAfter) {
 		logChange("dhw", fmt.Sprintf("boiler %.0f → %.0f °C: %s", dhwSet, want, why))
 		if err := sendHM("SetDHWTemp", want); err == nil {
-			st.SentDHW = want
+			st.SentDHW, st.SentDHWAt = want, now
 		}
 	}
 
@@ -308,21 +330,22 @@ func step(now time.Time) {
 	s.Heat.NextWindow, s.Heat.PreheatStart, s.Heat.LeadMinutes = plan.NextWindow, plan.PreheatStart, plan.LeadMinutes
 	if z1 >= 10 {
 		// iemand heeft zelf de thermostaat aangepast: respecteren tot het volgende omslagpunt
-		if act && st.SentZ1 != 0 && math.Round(z1) != math.Round(st.SentZ1) && math.Round(z1) != math.Round(plan.Target) && now.After(st.Override) {
+		if act && st.SentZ1 != 0 && now.Sub(st.SentZ1At) > graceAfterSend && math.Round(z1) == math.Round(st.SeenZ1) && math.Round(z1) != math.Round(st.SentZ1) && math.Round(z1) != math.Round(plan.Target) && now.After(st.Override) {
 			st.Override = nextBoundary(now, plan)
 			log.Printf("kamertemperatuur zelf op %.0f °C gezet: de regelaar wacht tot %s", z1, st.Override.Format("02/01 15:04"))
 		}
 		if now.Before(st.Override) {
 			s.Heat.Want = z1
 			s.Heat.Why = "zelf ingesteld, geldt tot " + st.Override.Format("15:04")
-		} else if math.Round(z1) != math.Round(plan.Target) {
+		} else if math.Round(z1) != math.Round(plan.Target) && (math.Round(st.SentZ1) != math.Round(plan.Target) || now.Sub(st.SentZ1At) > resendAfter) {
 			logChange("z1", fmt.Sprintf("kamer %.0f → %.0f °C: %s", z1, plan.Target, plan.Why))
 			if err := sendHM("SetZ1HeatRequestTemperature", plan.Target); err == nil {
-				st.SentZ1 = plan.Target
+				st.SentZ1, st.SentZ1At = plan.Target, now
 			}
 		} else if act {
 			st.SentZ1 = plan.Target
 		}
+		st.SeenZ1 = z1
 		learnPreheat(now, tin, tout, plan, z1)
 	} else {
 		s.Heat.Why = "de warmtepomp werkt met een stooklijnverschuiving: kamertemperatuur niet gestuurd"
@@ -336,6 +359,17 @@ func step(now time.Time) {
 		st.LastLog = now
 	}
 	saveState()
+}
+
+// na een eigen commando zo lang niet besluiten dat iemand anders de temperatuur aanpaste
+const graceAfterSend = 2 * time.Minute
+
+// zelfde commando pas opnieuw sturen als de warmtepomp het na zoveel tijd nog niet overnam
+const resendAfter = 45 * time.Second
+
+func markDHWOverride(now time.Time, v float64) {
+	st.DHWOverride, st.DHWManual, st.SentDHW, st.SentDHWAt = now.Add(3*time.Hour), v, v, now
+	log.Printf("boiler zelf op %.0f °C gezet: de regelaar volgt dat tot %s (of tot de boiler warm is)", v, st.DHWOverride.Format("15:04"))
 }
 
 // volgende omslag: einde/begin van een venster of voorverwarmen
@@ -476,6 +510,19 @@ func serve() {
 			return
 		}
 		log.Printf("doorgegeven aan de HeishaMon: %s", r.URL.RawQuery)
+		q := r.URL.Query()
+		mu.Lock()
+		now := time.Now()
+		if v, err := strconv.ParseFloat(q.Get("SetDHWTemp"), 64); err == nil {
+			markDHWOverride(now, v)
+		}
+		if v, err := strconv.ParseFloat(q.Get("SetZ1HeatRequestTemperature"), 64); err == nil {
+			plan := HeatTarget(cfg, st.Learned, HeatInput{Now: now, Tin: st.Status.Heat.Tin, Tout: st.Status.Heat.Tout, Prices: readRates("grid")})
+			st.Override, st.SentZ1, st.SentZ1At = nextBoundary(now, plan), v, now
+			log.Printf("kamertemperatuur zelf op %.0f °C gezet: de regelaar wacht tot %s", v, st.Override.Format("02/01 15:04"))
+		}
+		saveState()
+		mu.Unlock()
 		w.Write(b)
 		go func() { time.Sleep(hmPoll + 2*time.Second); step(time.Now()) }()
 	})
