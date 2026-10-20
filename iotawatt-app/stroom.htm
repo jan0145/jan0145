@@ -233,6 +233,25 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .kv dt { color: var(--text-2); }
 .kv dd { margin: 0; font-weight: 600; text-align: right; }
 .chart-wrap .ref { font-size: 10px; }
+.dhead { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.dico { width: 40px; height: 40px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; color: #fff; }
+.dico svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.dico.hp { background: var(--sun); }
+.dico.lp { background: var(--c2); }
+.dtitle { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+.dstate { font-size: 13px; color: var(--text-2); }
+.hpline { display: flex; gap: 24px; margin: 6px 0 8px; }
+.hpline .k, .hptab th { font-size: 12px; color: var(--text-2); font-weight: 500; }
+.hpline .v { font-size: 19px; font-weight: 650; }
+.hpline .v.on { color: var(--good); }
+.hptab { width: 100%; border-collapse: collapse; }
+.hptab th { text-align: left; padding: 0 0 4px; }
+.hptab th:not(:first-child), .hptab td:not(:first-child) { text-align: right; }
+.hptab td { padding: 4px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.hptab td:first-child { color: var(--text-2); }
+.hptab td.v { font-size: 19px; font-weight: 650; }
+.hpsum .hpline .v, .hpsum .hptab td.v { font-size: 24px; }
+.hpsum .hptab td { border-top-color: rgba(42, 120, 214, .25); }
 .hpgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; margin: 8px 0 4px; }
 .hpgrid .k { font-size: 12px; color: var(--text-2); }
 .hpgrid .v { font-size: 19px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
@@ -362,7 +381,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="tip" id="tip"></div>
     </div>
     <div class="htot" id="hTot"></div>
-    <p class="hint" id="hSignHint" style="margin-top:6px">Negatief = naar het net of naar de batterij.</p>
+    <p class="hint" id="hSignHint" style="margin-top:6px">Negatief = naar het net. De batterij staat als laadtoestand (%) op de rechteras.</p>
   </section>
 
   <button class="navcard" id="openDevices">
@@ -377,13 +396,13 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
   <div id="tabDetails" hidden>
     <section class="tiles">
       <div class="tile wide tap" id="tHpTile" role="button" tabindex="0" hidden>
-        <div class="lbl" id="tHpLbl">Warmtepomp</div>
-        <div class="hpgrid num" id="tHpGrid"></div>
+        <div class="dhead"><span class="dico hp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="14" rx="2.5"/><circle cx="9.5" cy="11.5" r="4.2"/><path d="M9.5 7.3v8.4M5.3 11.5h8.4"/><path d="M16.5 8.5h2.5M16.5 11.5h2.5M16.5 14.5h2.5"/><path d="M5 21h4M15 21h4"/></svg></span><div><div class="dtitle">Warmtepomp</div><div class="dstate" id="tHpLbl">–</div></div></div>
+        <div id="tHpGrid"></div>
         <div class="sub" id="tHpSub">&nbsp;</div>
         <span class="tchev" aria-hidden="true">›</span>
       </div>
       <div class="tile wide tap" id="tLpTile" role="button" tabindex="0" hidden>
-        <div class="lbl" id="tLpLbl">Laadpaal</div>
+        <div class="dhead"><span class="dico lp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="2.5" width="10" height="19" rx="2.5"/><path d="M9.6 6.5 7 11.5h3l-2.4 5"/><path d="M13.5 9h2.2a1.8 1.8 0 0 1 1.8 1.8v5.4a1.5 1.5 0 0 0 3 0V8.2L18.4 6"/></svg></span><div><div class="dtitle">Laadpaal</div><div class="dstate" id="tLpLbl">–</div></div></div>
         <div class="val num" id="tLp">–</div>
         <div class="sub" id="tLpSub">&nbsp;</div>
         <span class="tchev" aria-hidden="true">›</span>
@@ -1038,6 +1057,7 @@ async function evccHistory(from, to, aggregate, extra = '') {
         const t = Math.round(new Date(sl.start).getTime() / 1000);
         const cur = map[t] || { e: 0, r: 0 };
         cur.e += sl.energy || 0; cur.r += sl.returnEnergy || 0;
+        if (typeof sl.socTemp === 'number' && cur.soc === undefined) cur.soc = sl.socTemp;
         map[t] = cur;
       });
     });
@@ -1078,8 +1098,12 @@ async function loadHist() {
       return { t: r.t, vals: {
         use: h ? h.e * 4000 : r.use, sun: r.sun,
         grid: g ? netKwh(g) * 4000 : null, battery: bt ? batKwh(bt) * 4000 : null,
+        soc: bt && typeof bt.soc === 'number' ? bt.soc : null,
       } };
     });
+    if (hist.k === 0 && gw && typeof gw.battery_soc === 'number' && hist.buckets.length) {
+      hist.buckets[hist.buckets.length - 1].vals.soc = gw.battery_soc;
+    }
     hist.ev = ev;
     return;
   }
@@ -1159,10 +1183,13 @@ function renderHist() {
   $('hNext').disabled = hist.k === 0;
   const day = hist.period === 'day';
   const has = (k) => hist.buckets.some((b) => typeof b.vals[k] === 'number');
-  const series = MAIN_SERIES.filter((s) => s.key === 'use' || s.key === 'sun' || has(s.key));
-  $('hLegend').innerHTML = series.map((s) => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
+  // de batterij staat in de grafiek als laadtoestand (%) op de rechteras, niet als vermogen
+  const series = MAIN_SERIES.filter((s) => s.key !== 'battery' && (s.key === 'use' || s.key === 'sun' || has(s.key)));
+  const socSeries = day && has('soc') ? { key: 'soc', name: 'Batterij', color: 'var(--c2)', max: 100, fmt: (v) => ({ v: nf0.format(v), u: '%' }) } : null;
+  $('hLegend').innerHTML = [...series, ...(socSeries ? [{ ...socSeries, name: 'Batterij (%)' }] : [])]
+    .map((s) => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
   drawChart($('chart'), hist.buckets, series, day
-    ? { kind: 'lines', unit: 'W', period: 'day', t0: unixRange('day', hist.k)[0], area: 'use' }
+    ? { kind: 'lines', unit: 'W', period: 'day', t0: unixRange('day', hist.k)[0], area: 'use', right: socSeries }
     : { kind: chartKind(), unit: 'Wh', period: hist.period });
 
   // totalen (kWh); bij de dag: W-punten omrekenen naar energie
@@ -1370,7 +1397,7 @@ function closeDevices() {
    opt: { kind: 'bars'|'lines', stacked, unit: 'Wh'|'W', period, t0 (tijd-as voor één dag), area } */
 function drawChart(svg, buckets, series, opt) {
   const W = svg.clientWidth || 340, H = 210;
-  const m = { l: 42, r: 8, t: 20, b: 22 };
+  const m = { l: 42, r: opt.right ? 34 : 8, t: 20, b: 22 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const val = (b, k) => { const v = b.vals[k]; return typeof v === 'number' && isFinite(v) ? v : null; };
@@ -1454,6 +1481,21 @@ function drawChart(svg, buckets, series, opt) {
     g += `<line x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}" stroke="${r.color}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
     g += `<text class="axis ref" x="${i % 2 ? m.l + 4 : W - m.r - 2}" y="${(y(r.v) - 3).toFixed(1)}" text-anchor="${i % 2 ? 'start' : 'end'}" style="fill:${r.color};paint-order:stroke;stroke:var(--card);stroke-width:3px">${esc(r.label)}</text>`;
   });
+  // rechteras (bv. laadtoestand batterij 0–100 %)
+  if (opt.right) {
+    const R = opt.right, y2 = (v) => m.t + (1 - v / R.max) * ih;
+    for (let v = 0; v <= R.max; v += R.max / 4) {
+      g += `<text class="axis num" x="${W - m.r + 4}" y="${y2(v) + 4}" text-anchor="start">${nf0.format(v)}</text>`;
+    }
+    g += `<text class="axis" x="${W}" y="10" text-anchor="end">%</text>`;
+    let d = '', pen = false;
+    buckets.forEach((b, i) => {
+      const v = val(b, R.key);
+      if (v === null) { pen = false; return; }
+      d += (pen ? 'L' : 'M') + xc(i).toFixed(1) + ',' + y2(Math.min(R.max, Math.max(0, v))).toFixed(1); pen = true;
+    });
+    if (d) g += `<path d="${d}" fill="none" stroke="${R.color}" stroke-width="2" stroke-dasharray="5 3" stroke-linejoin="round"/>`;
+  }
   if (!buckets.length) g += `<text class="axis" x="${m.l + iw / 2}" y="${m.t + ih / 2}" text-anchor="middle">Geen gegevens</text>`;
   g += opt.kind === 'bars'
     ? `<rect id="${svg.id}-hl" x="0" y="${m.t}" width="${band}" height="${ih}" fill="var(--text)" opacity=".06" visibility="hidden"/>`
@@ -1482,6 +1524,10 @@ function chartPointer(svg, tip, ev) {
       const v = b.vals[s.key], h = SIGN_HINT[s.key];
       return `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:4px"></span>${esc(s.name)} <b>${txt(fmt(v))}</b>${h && Math.abs(v) > 1 ? ` <span style="opacity:.7">${v > 0 ? h[0] : h[1]}</span>` : ''}`;
     });
+  const R = sc.opt.right;
+  if (R && typeof b.vals[R.key] === 'number') {
+    parts.push(`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${R.color};margin-right:4px"></span>${esc(R.name)} <b>${txt(R.fmt(b.vals[R.key]))}</b>`);
+  }
   tip.innerHTML = `<div style="margin-bottom:2px">${title}</div>` + (parts.join('<br>') || 'niets') + (b.note ? `<div style="opacity:.7">${esc(b.note)}</div>` : '');
   tip.style.whiteSpace = 'nowrap';
   tip.classList.add('on');
@@ -1576,19 +1622,21 @@ function hpDoing() {
   if (freq === 0) return 'stand-by';
   return hv('ThreeWay_Valve_State') === 1 ? 'warmt sanitair water op' : 'verwarmt het huis';
 }
-// Overzicht: status, buiten, binnen, gevraagd binnen, boiler, gevraagd boiler
+// Overzicht: status en buitentemperatuur op één lijn, daaronder een tabel gevraagd / huidig
+// voor verwarming en boiler
 function hpGridHtml() {
   const T = (n) => { const x = hv(n); return x === null ? '–' : nf1.format(x).replace(/,0$/, '') + ' °C'; };
   const on = hv('Heatpump_State') === 1;
-  const cells = [
-    ['Warmtepomp', on ? 'aan' : 'uit', on ? 'on' : ''],
-    ['Buiten', T('Outside_Temp')],
-    ['Binnen', T('Z1_Temp')],
-    ['Gevraagd binnen', hv('Z1_Heat_Request_Temp') !== null && hv('Z1_Heat_Request_Temp') >= 10 ? T('Z1_Heat_Request_Temp') : '–'],
-    ['Boiler', T('DHW_Temp')],
-    ['Gevraagd boiler', T('DHW_Target_Temp')],
-  ];
-  return cells.map(([k, v, c]) => `<div><div class="k">${esc(k)}</div><div class="v${c ? ' ' + c : ''}">${esc(v)}</div></div>`).join('');
+  const z1set = hv('Z1_Heat_Request_Temp');
+  return `<div class="hpline">
+      <div><div class="k">Warmtepomp</div><div class="v${on ? ' on' : ''}">${on ? 'aan' : 'uit'}</div></div>
+      <div><div class="k">Buiten</div><div class="v">${T('Outside_Temp')}</div></div>
+    </div>
+    <table class="hptab num">
+      <tr><th></th><th>Gevraagd</th><th>Huidig</th></tr>
+      <tr><td>Verwarming</td><td class="v">${z1set !== null && z1set >= 10 ? T('Z1_Heat_Request_Temp') : '–'}</td><td class="v">${T('Z1_Temp')}</td></tr>
+      <tr><td>Boiler</td><td class="v">${T('DHW_Target_Temp')}</td><td class="v">${T('DHW_Temp')}</td></tr>
+    </table>`;
 }
 
 function renderHM() {
@@ -1603,7 +1651,7 @@ function renderHM() {
   const freq = hv('Compressor_Freq') || 0;
   const p = hmPower();
   const doing = hpDoing();
-  $('tHpLbl').textContent = 'Warmtepomp · ' + doing;
+  $('tHpLbl').textContent = doing.replace(/^./, (c) => c.toUpperCase());
   $('tHpGrid').innerHTML = hpGridHtml();
   const err = hm.v.Error && hm.v.Error.value && hm.v.Error.value !== 'No error' ? '⚠ fout ' + hm.v.Error.value : '';
   const heaters = (hv('Internal_Heater_State') === 1 || hv('External_Heater_State') === 1) ? '⚠ elektrische bijverwarming aan' : '';
@@ -1631,7 +1679,7 @@ function renderHpInfo() {
   if ($('hpView').hidden) return;
   const sum = $('hpSum');
   sum.hidden = !(hm && hm.v);
-  if (hm && hm.v) sum.innerHTML = `<div class="doing">${esc(hpDoing().replace(/^./, (c) => c.toUpperCase()))}</div><div class="hpgrid num">${hpGridHtml()}</div>`;
+  if (hm && hm.v) sum.innerHTML = `<div class="doing">${esc(hpDoing().replace(/^./, (c) => c.toUpperCase()))}</div>${hpGridHtml()}`;
   const el = $('hpInfo');
   if (!hm || hm.error) { el.innerHTML = `<p class="empty">${hm ? 'HeishaMon niet bereikbaar (' + esc(hm.error) + ')' : 'Vul bij ⚙︎ het adres van de HeishaMon in.'}</p>`; return; }
   const T = (n) => { const x = hv(n); return x === null ? null : nf1.format(x).replace(/,0$/, '') + ' °C'; };
@@ -1834,7 +1882,7 @@ function renderLpTile() {
   const lp = lpNow();
   $('tLpTile').hidden = !lp;
   if (lp) {
-    $('tLpLbl').textContent = 'Laadpaal · ' + lpState(lp);
+    $('tLpLbl').textContent = lpState(lp).replace(/^./, (c) => c.toUpperCase());
     $('tLp').innerHTML = html(fmtPower(lp.power));
     $('tLpSub').textContent = 'Modus ' + (LP_MODE[lp.lp.mode] || lp.lp.mode || '–')
       + (lp.lp.chargedEnergy > 0 ? ' · deze laadbeurt ' + txt(fmtEnergy(lp.lp.chargedEnergy)) : '');

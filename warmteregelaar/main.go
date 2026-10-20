@@ -493,7 +493,8 @@ func serve() {
 	// kopie van de HeishaMon-gegevens (voor evcc, de Stroom-app en de piekbewaker)
 	h.HandleFunc("/json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		b, err := hmCached(time.Minute)
+		// bij een korte wifi-onderbreking van de HeishaMon nog tot 5 min de laatste gegevens geven
+		b, err := hmCached(5 * time.Minute)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return

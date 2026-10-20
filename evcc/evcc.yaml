@@ -116,12 +116,14 @@ chargers:
     enabled:
       source: http
       uri: http://127.0.0.1:7080/boiler
+      cache: 2s
     enable:
       source: http
       uri: 'http://127.0.0.1:7080/boiler?on={{ if .enable }}1{{ else }}0{{ end }}'
     power: # alleen tijdens een boost die evcc vroeg
       source: http
       uri: http://127.0.0.1:7080/boiler/power
+      cache: 2s
     temp:
       source: http
       uri: http://127.0.0.1:7080/json
