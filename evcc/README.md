@@ -91,6 +91,11 @@ Volgorde als het kwartier boven de grens dreigt te gaan:
 Daarna zet het script alles terug zoals het was: bij een nieuw kwartier, of zodra de prognose ruim onder de grens
 blijft. Tussen twee ingrepen zit minstens 3 minuten (spaart de compressor); tijdens ontdooien grijpt het niet in.
 
+Het negeert korte pieken: de eerste 2 minuten van een kwartier (`SETTLE=120`) grijpt het nooit in, en de
+overschrijding moet minstens 1 minuut aanhouden (`OVERSEC=60`). Verbruikt de warmtepomp minder dan 500 W
+(`HPMIN=500`), dan valt er bij de warmtepomp niets te winnen en logt het alleen. Wordt het script gestopt
+tijdens een ingreep, dan zet het de warmtepomp eerst terug.
+
 Installeren:
 1. Zet `piekbewaker.sh` in `/volume1/homes/docker/evcc/` (vul bovenaan de adressen van P1-meter en HeishaMon in).
 2. Task Scheduler → Create → Triggered Task → User-defined script, User **root**, Event **Boot-up**:
