@@ -56,5 +56,6 @@ ontladen blokkeren) plus een eigen regelaar voor reserve en ontladen in de duurs
 1. Nu: batterij-voorrang laag (regel 1), piekbewaker in proefmodus laten lopen.
 2. 1 november: Bolt-tarief aan; auto met laadplan.
 3. ✅ HeishaMon actief (CZ-TAW1 eruit, commando's werken) → boiler, kamertemperatuur en piekbewaker.
-4. EVA uit, batterij onder evcc (stap 3, `evcc-batterij.yaml` klaar en getest: vasthouden, laden uit het net) → regels 3b, 5, 6; keuze optimizer.
+4. ✅ EVA uit (20/10/2026), batterij onder evcc (goodwe-hybrid, laden uit het net max. 3,5 kW zodat huis + batterij onder
+   5 kW blijft); sponsor-token aanwezig → optimizer aanzetten (regels 3, 3b, 5, 6).
 5. SolarEdge Modbus → injectie afregelen (regel 7).

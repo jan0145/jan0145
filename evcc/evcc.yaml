@@ -215,7 +215,7 @@ tariffs:
 #    id: 247
 #    maxacpower: 8000        # GW8K-BT: 8 kW
 #    capacity: 10            # kWh  <-- capaciteit van je batterij nakijken
-#    maxchargepower: 5000    # W, laden van het net (goedkope uren, dynamisch tarief)
+#    maxchargepower: 3500    # W, laden uit het net: + huis blijft onder de kwartierpiekgrens van 5 kW
 #    minsoc: 10              # %, nooit dieper ontladen
 #
 # evcc kan dan:

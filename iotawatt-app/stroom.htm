@@ -233,6 +233,14 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .kv dt { color: var(--text-2); }
 .kv dd { margin: 0; font-weight: 600; text-align: right; }
 .chart-wrap .ref { font-size: 10px; }
+.hpgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; margin: 8px 0 4px; }
+.hpgrid .k { font-size: 12px; color: var(--text-2); }
+.hpgrid .v { font-size: 19px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.hpgrid .v.on { color: var(--good); }
+.hpsum { background: var(--use-soft); box-shadow: none; }
+.hpsum .hpgrid { margin: 0; }
+.hpsum .hpgrid .v { font-size: 24px; }
+.hpsum .doing { font-size: 14px; color: var(--text-2); margin-bottom: 10px; font-weight: 550; }
 .setrow { display: flex; align-items: center; gap: 10px; }
 .setrow .pm { width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--track); color: var(--text); font-size: 24px; cursor: pointer; }
 .setrow .setval { font-size: 26px; font-weight: 650; min-width: 84px; text-align: center; }
@@ -370,7 +378,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <section class="tiles">
       <div class="tile wide tap" id="tHpTile" role="button" tabindex="0" hidden>
         <div class="lbl" id="tHpLbl">Warmtepomp</div>
-        <div class="val num" id="tHp">–</div>
+        <div class="hpgrid num" id="tHpGrid"></div>
         <div class="sub" id="tHpSub">&nbsp;</div>
         <span class="tchev" aria-hidden="true">›</span>
       </div>
@@ -391,6 +399,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <button class="iconbtn" id="hpBack" aria-label="Terug">‹</button>
       <h2>Warmtepomp</h2>
     </div>
+    <section class="card hpsum" id="hpSum"></section>
     <section class="card"><div id="hpInfo"></div></section>
     <section class="card" id="regCard" hidden>
       <div class="card-head"><h2>Warmteregelaar</h2></div>
@@ -1557,28 +1566,41 @@ function hpDoing() {
   if (freq === 0) return 'stand-by';
   return hv('ThreeWay_Valve_State') === 1 ? 'warmt sanitair water op' : 'verwarmt het huis';
 }
+// Overzicht: status, buiten, binnen, gevraagd binnen, boiler, gevraagd boiler
+function hpGridHtml() {
+  const T = (n) => { const x = hv(n); return x === null ? '–' : nf1.format(x).replace(/,0$/, '') + ' °C'; };
+  const on = hv('Heatpump_State') === 1;
+  const cells = [
+    ['Warmtepomp', on ? 'aan' : 'uit', on ? 'on' : ''],
+    ['Buiten', T('Outside_Temp')],
+    ['Binnen', T('Z1_Temp')],
+    ['Gevraagd binnen', hv('Z1_Heat_Request_Temp') !== null && hv('Z1_Heat_Request_Temp') >= 10 ? T('Z1_Heat_Request_Temp') : '–'],
+    ['Boiler', T('DHW_Temp')],
+    ['Gevraagd boiler', T('DHW_Target_Temp')],
+  ];
+  return cells.map(([k, v, c]) => `<div><div class="k">${esc(k)}</div><div class="v${c ? ' ' + c : ''}">${esc(v)}</div></div>`).join('');
+}
+
 function renderHM() {
   const tile = $('tHpTile');
   tile.hidden = !hm;
   if (!hm) return;
   if (hm.error) {
-    $('tHp').textContent = '–';
+    $('tHpGrid').innerHTML = '';
     $('tHpSub').textContent = 'HeishaMon niet bereikbaar (' + hm.error + ')';
     return;
   }
   const freq = hv('Compressor_Freq') || 0;
   const p = hmPower();
   const doing = hpDoing();
-  const fmtT = (n) => (n === null ? '–' : nf0.format(n) + ' °C');
   $('tHpLbl').textContent = 'Warmtepomp · ' + doing;
-  $('tHp').innerHTML = freq > 0 ? html(fmtPower(p.use)) : '–';
+  $('tHpGrid').innerHTML = hpGridHtml();
   const err = hm.v.Error && hm.v.Error.value && hm.v.Error.value !== 'No error' ? '⚠ fout ' + hm.v.Error.value : '';
   const heaters = (hv('Internal_Heater_State') === 1 || hv('External_Heater_State') === 1) ? '⚠ elektrische bijverwarming aan' : '';
-  const boost = gw && gw.boiler && gw.boiler.enabled ? '☀︎ boiler warmt op met zonne-overschot (doel 60 °C)' : '';
+  const boost = gw && gw.boiler && gw.boiler.enabled ? '☀︎ boiler warmt op met zonne-overschot (doel 55 °C)' : '';
   const quiet = hv('Quiet_Mode_Level') > 0 ? '🔇 stille modus ' + hv('Quiet_Mode_Level') + ' (minder vermogen)' : '';
   const lines = [
-    freq > 0 && p.use > 0 ? `levert ${txt(fmtPower(p.prod))} warmte · COP ${nf1.format(p.prod / p.use)}` : '',
-    `Boiler ${fmtT(hv('DHW_Temp'))} (doel ${fmtT(hv('DHW_Target_Temp'))}) · aanvoer ${fmtT(hv('Main_Outlet_Temp'))} · buiten ${fmtT(hv('Outside_Temp'))}`,
+    freq > 0 && p.use > 0 ? `verbruikt ${txt(fmtPower(p.use))} · levert ${txt(fmtPower(p.prod))} warmte · COP ${nf1.format(p.prod / p.use)}` : '',
     boost, quiet, err, heaters,
   ].filter(Boolean);
   $('tHpSub').innerHTML = lines.map((l) => '<div>' + esc(l) + '</div>').join('');
@@ -1597,6 +1619,9 @@ function kvHtml(groups) {
 
 function renderHpInfo() {
   if ($('hpView').hidden) return;
+  const sum = $('hpSum');
+  sum.hidden = !(hm && hm.v);
+  if (hm && hm.v) sum.innerHTML = `<div class="doing">${esc(hpDoing().replace(/^./, (c) => c.toUpperCase()))}</div><div class="hpgrid num">${hpGridHtml()}</div>`;
   const el = $('hpInfo');
   if (!hm || hm.error) { el.innerHTML = `<p class="empty">${hm ? 'HeishaMon niet bereikbaar (' + esc(hm.error) + ')' : 'Vul bij ⚙︎ het adres van de HeishaMon in.'}</p>`; return; }
   const T = (n) => { const x = hv(n); return x === null ? null : nf1.format(x).replace(/,0$/, '') + ' °C'; };
@@ -1617,9 +1642,8 @@ function renderHpInfo() {
       ['Warmte', txt(fmtPower(p.prod))],
       ['COP', freq > 0 && p.use > 0 ? nf1.format(p.prod / p.use) : '–'],
     ]],
-    ['Temperaturen', [
-      ['Buiten', T('Outside_Temp')], ['Aanvoer', T('Main_Outlet_Temp')], ['Retour', T('Main_Inlet_Temp')],
-      ['Doel aanvoer', T('Main_Target_Temp')], ['Boiler', T('DHW_Temp')], ['Doel boiler', T('DHW_Target_Temp')], ['Kamer', T('Z1_Temp')],
+    ['Water', [
+      ['Aanvoer', T('Main_Outlet_Temp')], ['Retour', T('Main_Inlet_Temp')], ['Doel aanvoer', T('Main_Target_Temp')],
     ]],
   ]);
   renderHpSet();
