@@ -777,7 +777,7 @@ const select = (cols) => '[' + cols.join(',') + ']';
 
 let gwKind = { url: null, kind: null };
 // Alleen de velden die de app nodig heeft (sneller op een trage NAS).
-const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext, loadpoints: [.loadpoints[]? | {title, chargePower, mode, connected, charging, chargedEnergy, phasesActive, chargeCurrent, enabled, vehicleSoc, chargerFeatureHeating}], circuits: .circuits}';
+const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext, pv: [.pv[]? | {name, power}], loadpoints: [.loadpoints[]? | {title, chargePower, mode, connected, charging, chargedEnergy, phasesActive, chargeCurrent, enabled, vehicleSoc, chargerFeatureHeating}], circuits: .circuits}';
 
 // Naar een ander apparaat: geen cache-optie meegeven (Safari stuurt dan een extra
 // CORS-voorvraag die evcc niet kent), maar de cache omzeilen met een tijdstempel.
@@ -817,7 +817,9 @@ function fromEvcc(raw) {
     if (lp && typeof lp.chargePower === 'number') ext.push({ name: lp.title || 'Laadpaal ' + (i + 1), power: lp.chargePower,
       lp: { mode: lp.mode, connected: lp.connected, charging: lp.charging, chargedEnergy: lp.chargedEnergy, phases: lp.phasesActive, current: lp.chargeCurrent } });
   });
-  return { ok: true, grid_w: grid, battery_w: batW, battery_soc: soc, ext, limit, boiler };
+  // zonnepanelen per omvormer (evcc "pv": [{ name, power }])
+  const pv = Array.isArray(d.pv) ? d.pv.filter((m) => m && typeof m.power === 'number').map((m) => ({ name: m.name || '', power: m.power })) : [];
+  return { ok: true, grid_w: grid, battery_w: batW, battery_soc: soc, ext, limit, boiler, pv };
 }
 
 async function loadGoodWe() {
@@ -1009,14 +1011,16 @@ function renderTiles() {
   renderHero(s, ext);
   $('tUse').innerHTML = html(fmtPower(s.use));
   setSrc('srcUse', s.hasMains ? srcIco('calc', 'net' + (p1 ? ' (P1-meter)' : '') + ' + zon' + (s.battery !== null ? ' + batterij' : '')) : srcIco('iota', 'som van de groepen'));
-  setSrc('srcSun', srcIco('iota', 'tangen op de omvormers'));
+  setSrc('srcSun', seFromEvcc(seIotName()) ? srcIco('calc', labelOf(seIotName()) + ' rechtstreeks van de SolarEdge, de rest van de IoTaWatt')
+    : srcIco('iota', 'tangen op de omvormers'));
   setSrc('srcBat', srcIco('dev', 'GoodWe-omvormer via evcc'));
   setSrc('srcLeg', SRC_LEG);
   $('tSun').innerHTML = html(fmtPower(s.sun));
   $('tSun').style.opacity = s.sun < 5 ? .5 : 1;
   // Verdeling per zonnepaneel-kanaal onder het totaal.
-  const pvs = seriesNames.filter((n) => seriesCfg(n).role === 'solar' && live.values[n] !== null && live.values[n] !== undefined);
-  const split = pvs.length > 1 ? pvs.map((n) => esc(labelOf(n)) + ': ' + txt(fmtPower(Math.abs(live.values[n] * (seriesCfg(n).mult || 1))))) : [];
+  const lv = liveVals();
+  const pvs = seriesNames.filter((n) => seriesCfg(n).role === 'solar' && lv[n] !== null && lv[n] !== undefined);
+  const split = pvs.length > 1 ? pvs.map((n) => esc(labelOf(n)) + ': ' + txt(fmtPower(Math.abs(lv[n] * (seriesCfg(n).mult || 1))))) : [];
   let sunToday = '';
 
   if (today) {
@@ -1185,11 +1189,21 @@ const evccMeterNames = () => (gw && gw.ext ? gw.ext.map((m) => 'evcc:' + m.name)
 // Valt terug op de IoTaWatt als de HeishaMon (of, voor de geschiedenis, evcc) niets heeft.
 const hpLiveW = () => (hm && hm.v ? hmPower().use : null);
 function liveVals() {
+  if (!live) return {};
+  const v = { ...live.values };
   const n = hpIotName(), w = hpLiveW();
-  if (!live || !n || w === null) return live ? live.values : {};
-  return { ...live.values, [n]: w / (seriesCfg(n).mult || 1) };
+  if (n && w !== null) v[n] = w / (seriesCfg(n).mult || 1);
+  const se = seIotName(), sw = seLiveW();
+  if (se && sw !== null) v[se] = sw / (seriesCfg(se).mult || 1);
+  return v;
 }
 const hpFromHm = (n) => !!n && n === hpIotName() && hpLiveW() !== null;
+// SolarEdge: evcc leest de omvormer rechtstreeks (Modbus). Dat vervangt de tang in de IoTaWatt
+// (het kanaal met "SolarEdge" in de naam, anders PV1 / Zon 1).
+const seIotName = () => solarNames().find((n) => /solaredge/i.test(n + ' ' + labelOf(n)))
+  || solarNames().find((n) => /^(pv|zon)[ _]?1$/i.test(n) || /^zon[ _]?1$/i.test(labelOf(n)));
+const seLiveW = () => { const m = gw && gw.pv && gw.pv.find((x) => /solaredge/i.test(x.name)); return m ? Math.abs(m.power) : null; };
+const seFromEvcc = (n) => !!n && n === seIotName() && seLiveW() !== null;
 
 const MAIN_SERIES = [
   { key: 'use', name: 'Verbruik', color: 'var(--use)' },
@@ -1495,8 +1509,10 @@ function renderDev() {
     if (s.hasMains && s.other > 0) items.push({ label: 'Overig (niet gemeten)', value: s.other, src: srcIco('calc', 'totaal min de gemeten toestellen') });
     const total = s.use || 1;
     let out = sortItems(items).map((it) => rowHtml(it, total, fmtPower)).join('');
-    const suns = solarNames().filter((n) => live.values[n] !== null && live.values[n] !== undefined)
-      .map((n) => ({ label: labelOf(n), value: sunWh(n, live.values[n]), sun: true, src: srcIco('iota') }));
+    const lv = liveVals();
+    const suns = solarNames().filter((n) => lv[n] !== null && lv[n] !== undefined)
+      .map((n) => ({ label: labelOf(n), value: sunWh(n, lv[n]), sun: true,
+        src: seFromEvcc(n) ? srcIco('dev', 'SolarEdge-omvormer via evcc (Modbus)') : srcIco('iota') }));
     out += sortItems(suns).map((it) => rowHtml(it, Math.max(total, s.sun || 1), fmtPower)).join('');
     ul.innerHTML = out || '<li class="empty">Geen kanalen ingesteld. Tik op ⚙︎.</li>';
     return;

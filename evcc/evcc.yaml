@@ -11,7 +11,8 @@
 #   192.168.0.III  = IP-adres van de IoTaWatt (1 keer)
 #   192.168.0.LLL  = IP-adres van de laadpaal (1 keer)
 #   192.168.0.PPP  = IP-adres van de HomeWizard P1-meter (1 keer)
-#   PV1 / PV2      = namen van de zonnepaneel-kanalen in de IoTaWatt
+#   192.168.0.SSS  = IP-adres van de SolarEdge-omvormer (1 keer)
+#   PV2            = naam van het Solis-kanaal in de IoTaWatt
 
 interval: 30s
 log: info
@@ -48,14 +49,25 @@ meters:
         type: holding
         decode: uint16
 
-  # Zonnepanelen: uit de IoTaWatt (de GoodWe BT heeft zelf geen panelen).
-  # Het teken van elk kanaal wordt genegeerd (absolute waarde).
-  - name: pv
+  # Zonnepanelen
+  # SolarEdge (west, Zon 1): rechtstreeks via Modbus TCP (op de omvormer aangezet, poort 502).
+  # Het sjabloon kan de omvormer ook afregelen (injectie beperken). Maar één systeem mag ermee praten!
+  - name: solaredge
+    type: template
+    template: solaredge-inverter
+    usage: pv
+    modbus: tcpip
+    host: 192.168.0.SSS
+    port: 502
+    id: 1
+  # Solis (zuid, Zon 2): geen lokale toegang, dus via de tang in de IoTaWatt (kanaal PV2).
+  # Het teken wordt genegeerd (absolute waarde).
+  - name: solis_iotawatt
     type: custom
     power:
       source: http
-      uri: "http://192.168.0.III/query?select=[PV1.watts,PV2.watts]&begin=s-10s&end=s&group=all&format=json"
-      jq: "[.[0][] | if . == null then 0 elif . < 0 then -. else . end] | add"
+      uri: "http://192.168.0.III/query?select=[PV2.watts]&begin=s-10s&end=s&group=all&format=json"
+      jq: ".[0][0] | if . == null then 0 elif . < 0 then -. else . end"
 
   # Warmtepomp via de HeishaMon (alleen lezen), via de kopie van de warmteregelaar (poort 7080), zodat
   # de HeishaMon maar door één programma bevraagd wordt. evcc bewaart zo de geschiedenis van het
@@ -80,7 +92,8 @@ site:
   meters:
     grid: grid
     pv:
-      - pv
+      - solaredge
+      - solis_iotawatt
     battery:
       - battery
     ext:

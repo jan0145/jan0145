@@ -20,6 +20,7 @@ als enige sturing. Per regel: hoe het gebeurt en wat er nog nodig is.
 - Bolt-tarief per kwartier met de exacte formules (afname incl. nettarieven en 21 % btw, injectie), staat al aan
   zodat evcc nu al plant (tot 1 november zijn de bedragen een simulatie).
 - Zonneprognose (open-meteo) voor Solis (zuid, 3,2 kWp) en SolarEdge (west, 5,5 kWp).
+- Zonnepanelen: SolarEdge rechtstreeks via Modbus TCP, Solis via de IoTaWatt-tang (PV2).
 - Geschiedenis van alles in evcc; Stroom-app toont kwartierpiek, warmtepomp (COP), laadpaal.
 - Warmteregelaar (`warmteregelaar/`): boiler en verwarming in tijdvensters, met prijzen, zonneprognose en zelf geleerde opwarmtijden.
 
@@ -35,7 +36,7 @@ als enige sturing. Per regel: hoe het gebeurt en wat er nog nodig is.
 | 4b | Verwarming volgens het weekschema (standaard weekdag 06–07:30 en 16–22 u 22 °C, weekend 07–22 u, anders 20 °C; aan te passen in de app, met standen vakantie en zomer) | **warmteregelaar** leert hoe lang het huis nodig heeft om op te warmen (per buitentemperatuur) en start op tijd, goedkoper vroeger als dat loont | ✅ gebouwd, proefmodus |
 | 5 | Winterreserve: min. 50 % SOC 07–18 u | optimizer houdt zelf reserve als hij een avondpiek verwacht; anders kleine aanvulling op de piekbewaker (batterij "vasthouden" onder 50 % tussen 07 en 18 u) | stap 3 |
 | 6 | Ontladen in de duurste kwartieren | optimizer (rekent met prijs, prognose en verbruiksprofiel) | stap 3 + keuze optimizer |
-| 7 | Injectie afregelen bij negatieve injectieprijs, ná auto/batterij/SWW | evcc-exportgrens + SolarEdge-afregeling (sjabloon `solaredge`); Solis enkel via contactor | Modbus TCP SolarEdge (installateur), contactor Solis |
+| 7 | Injectie afregelen bij negatieve injectieprijs, ná auto/batterij/SWW | evcc-exportgrens + SolarEdge-afregeling (sjabloon `solaredge`); Solis enkel via contactor | SolarEdge: Modbus TCP aan (poort 502), evcc leest hem rechtstreeks (sjabloon `solaredge-inverter`, kan afregelen) ✅; afregelen bij negatieve prijs nog in te stellen. Solis: geen lokale toegang, blijft via de IoTaWatt; afregelen enkel via contactor |
 | 8 | Dimmen/booster uit alleen tegen de piek | piekbewaker (stille modus → uit); SG-ready via optionele print of HeishaMon | geen CZ-NS4P aanwezig (HeishaMon: Optional_PCB uit); HeishaMon kan de optionele print nabootsen |
 
 ## De optimizer van evcc
@@ -58,4 +59,4 @@ ontladen blokkeren) plus een eigen regelaar voor reserve en ontladen in de duurs
 3. ✅ HeishaMon actief (CZ-TAW1 eruit, commando's werken) → boiler, kamertemperatuur en piekbewaker.
 4. ✅ EVA uit (20/10/2026), batterij onder evcc (goodwe-hybrid, laden uit het net max. 3,5 kW zodat huis + batterij onder
    5 kW blijft); sponsor-token aanwezig → optimizer aanzetten (regels 3, 3b, 5, 6).
-5. SolarEdge Modbus → injectie afregelen (regel 7).
+5. ✅ SolarEdge Modbus TCP aan, evcc leest de omvormer rechtstreeks → nog: injectie afregelen (regel 7).
