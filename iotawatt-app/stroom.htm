@@ -462,6 +462,16 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     </section>
     <section class="card" id="setCard" hidden>
       <div class="card-head"><h2>Manueel instellen</h2></div>
+      <div class="setblk" id="setPowCard" hidden>
+        <div class="setrow">
+          <span class="setlbl">Warmtepomp</span>
+          <div class="seg" role="group" aria-label="Warmtepomp aan of uit" id="powSeg">
+            <button data-v="1" aria-pressed="false">Aan</button>
+            <button data-v="0" aria-pressed="false">Uit</button>
+          </div>
+        </div>
+        <p class="hint" id="setPowHint"></p>
+      </div>
       <div class="setblk" id="setZ1Card" hidden>
         <div class="setrow">
           <span class="setlbl">Verwarming</span>
@@ -1883,7 +1893,7 @@ async function loadReg() {
 function renderReg() {
   const card = $('regCard');
   card.hidden = !reg || $('hpView').hidden;
-  renderSched();
+  renderSched(); renderHpSet();
   if (card.hidden) return;
   const T = (v) => (typeof v === 'number' ? nf0.format(v) + ' °C' : '–');
   const hm = (t) => { const d = new Date(t); return d.getFullYear() > 2000 ? d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : null; };
@@ -1939,12 +1949,21 @@ function renderSetter(id) {
   $(id + 'Minus').disabled = st.busy || st.val <= r.min;
   $(id + 'Plus').disabled = st.busy || st.val >= r.max;
   $(id + 'Btn').disabled = st.busy || st.val === r.cur || !hmBase();
-  // alleen meldingen tijdens en na het versturen (wat nu ingesteld is, staat al in het overzicht)
-  $(id + 'Hint').textContent = st.msg || (r.shift ? 'Verschuiving van de stooklijn.' : '');
+  // alleen meldingen tijdens en na het versturen, en hoe lang een eigen instelling voorgaat op het schema
+  $(id + 'Hint').textContent = st.msg || overrideHint(id) || (r.shift ? 'Verschuiving van de stooklijn.' : '');
+}
+// de warmteregelaar laat een eigen instelling voorgaan: de kamer tot het volgende omslagpunt van het
+// schema, de boiler tot hij warm is (hoogstens 3 uur)
+function overrideHint(id) {
+  const o = reg && (id === 'setZ1' ? reg.heat : reg.dhw), t = o && o.Override ? new Date(o.Override) : null;
+  if (!t || !(t > new Date())) return '';
+  const hhmm = t.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  return id === 'setZ1' ? `Zelf ingesteld: geldt tot ${hhmm}, daarna weer het weekschema.`
+    : `Zelf ingesteld: geldt tot de boiler warm is (uiterlijk ${hhmm}).`;
 }
 function renderHpSet() {
-  renderSetter('setZ1'); renderSetter('setDHW');
-  $('setCard').hidden = $('setZ1Card').hidden && $('setDHWCard').hidden;
+  renderPow(); renderSetter('setZ1'); renderSetter('setDHW');
+  $('setCard').hidden = $('setPowCard').hidden && $('setZ1Card').hidden && $('setDHWCard').hidden;
 }
 function stepSetter(id, d) {
   const r = setterRange(id); if (!r) return;
@@ -1954,25 +1973,61 @@ function stepSetter(id, d) {
   st.msg = '';
   renderSetter(id);
 }
+// commando naar de warmtepomp; tot 3 keer, telkens tot 15 s wachten tot de HeishaMon de nieuwe waarde toont
+async function sendHmCmd(cmd, v, read, progress) {
+  const b = hmBase();
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await fetch(b + '/command?' + cmd + '=' + encodeURIComponent(v), { mode: 'no-cors' });
+    progress(`Verstuurd (poging ${attempt} van 3). Wachten op de warmtepomp…`);
+    for (let i = 0; i < 3; i++) {
+      await new Promise((res) => setTimeout(res, 5000));
+      await loadHM();
+      if (hv(read) === v) return true;
+    }
+  }
+  return false;
+}
+
+// warmtepomp aan/uit
+const powState = { busy: false, msg: '' };
+function renderPow() {
+  const on = hv('Heatpump_State');
+  $('setPowCard').hidden = !(hm && hm.v) || on === null;
+  if ($('setPowCard').hidden) return;
+  $('powSeg').querySelectorAll('button').forEach((x) => {
+    x.setAttribute('aria-pressed', Number(x.dataset.v) === on);
+    x.disabled = powState.busy || !hmBase();
+  });
+  const h = $('setPowHint');
+  h.className = 'hint' + (on === 0 && !powState.msg ? ' warn' : '');
+  h.textContent = powState.msg || (on === 0 ? 'De warmtepomp staat uit: geen verwarming en geen warm water. Een temperatuur instellen zet hem ook weer aan.' : '');
+}
+async function sendPow(v) {
+  if (powState.busy || hv('Heatpump_State') === v) return;
+  if (!confirm(v ? 'De warmtepomp aanzetten?' : 'De warmtepomp uitzetten? Dan is er geen verwarming en geen warm water meer, tot je hem weer aanzet.')) return;
+  powState.busy = true; powState.msg = 'Versturen…'; renderPow();
+  try {
+    const ok = await sendHmCmd('SetHeatpump', v, 'Heatpump_State', (m) => { powState.msg = m; renderPow(); });
+    powState.msg = ok ? '✓ Warmtepomp ' + (v ? 'aan.' : 'uit.') : 'De warmtepomp heeft het (nog) niet bevestigd. Kijk binnen een minuut opnieuw.';
+    if (ok) setTimeout(() => { if (powState.msg.startsWith('✓')) { powState.msg = ''; renderPow(); } }, 6000);
+  } catch (e) { powState.msg = 'Niet gelukt: ' + (e.message || e); }
+  powState.busy = false;
+  renderHpInfo(); renderHM();
+}
+
 async function sendSetter(id) {
   const S = SETTERS[id], st = setState[id], r = setterRange(id), b = hmBase();
   if (!r || !b || st.val === r.cur) return;
   const v = st.val;
-  if (!confirm(S.name + ' van de warmtepomp instellen op ' + fmtSet(r, v) + '?')) return;
+  const off = hv('Heatpump_State') === 0;
+  if (!confirm(S.name + ' van de warmtepomp instellen op ' + fmtSet(r, v) + '?' + (off ? ' De warmtepomp staat uit en wordt ook aangezet.' : ''))) return;
   st.busy = true; st.msg = 'Versturen…'; renderSetter(id);
   try {
     // http://<regelaar of HeishaMon>/command?<commando>=<waarde>
-    // Een commando gaat soms verloren: tot 3 keer versturen, telkens 15 s wachten op bevestiging.
-    let ok = false;
-    for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
-      await fetch(b + '/command?' + S.cmd + '=' + encodeURIComponent(v), { mode: 'no-cors' });
-      st.msg = `Verstuurd (poging ${attempt} van 3). Wachten op de warmtepomp…`; renderSetter(id);
-      for (let i = 0; i < 3 && !ok; i++) {
-        await new Promise((res) => setTimeout(res, 5000));
-        await loadHM();
-        ok = hv(S.read) === v;
-      }
-    }
+    const progress = (m) => { st.msg = m; renderSetter(id); };
+    let ok = true;
+    if (off) { progress('Warmtepomp aanzetten…'); ok = await sendHmCmd('SetHeatpump', 1, 'Heatpump_State', progress); renderPow(); }
+    if (ok) ok = await sendHmCmd(S.cmd, v, S.read, progress);
     if (ok) setTimeout(() => { if (st.msg === '✓ Ingesteld.') { st.msg = ''; renderSetter(id); } }, 6000);
     st.msg = ok ? '✓ Ingesteld.' : 'De warmtepomp heeft de nieuwe waarde (nog) niet bevestigd. Kijk binnen een minuut opnieuw.';
   } catch (e) {
@@ -2601,6 +2656,7 @@ document.querySelectorAll('#tabSeg button').forEach((b) => { b.onclick = () => {
 const tapTile = (id, fn) => { $(id).onclick = fn; $(id).onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } }; };
 tapTile('tHpTile', openHp);
 $('hpBack').onclick = () => closeView('hpView');
+$('powSeg').querySelectorAll('button').forEach((x) => { x.onclick = () => sendPow(Number(x.dataset.v)); });
 Object.keys(SETTERS).forEach((id) => {
   $(id + 'Minus').onclick = () => stepSetter(id, -1);
   $(id + 'Plus').onclick = () => stepSetter(id, 1);
