@@ -615,7 +615,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
         <div class="tip" id="tcDhwTip"></div>
       </div>
     </section>
-    <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten. Grijs: voorspeld door de warmteregelaar (links van "nu" wat er 24 uur geleden voorspeld werd). Rood: zelf ingestelde temperatuur.</p>
+    <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten. Grijs: voorspeld door de warmteregelaar (links van "nu" wat er 24 uur geleden voorspeld werd). Stippellijn: ingestelde temperatuur (oranje gemeten, lichtgrijs gepland, rood zelf ingesteld).</p>
     <div class="seg wide" role="group" aria-label="Periode" id="hpSeg">
       <button data-p="day" aria-pressed="true">Dag</button>
       <button data-p="week" aria-pressed="false">Week</button>
@@ -1980,7 +1980,7 @@ function drawTempChart(svg, tip, t0, t1, lines, unit) {
       else d += `L${x(t).toFixed(1)},${y(v).toFixed(1)}`;
       prev = [t, v];
     });
-    if (d) g += `<path d="${d}" fill="none" stroke="${L.color}" stroke-width="${L.w || 2}" ${L.dash ? `stroke-dasharray="${L.dash}"` : ''} stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (d) g += `<path d="${d}" fill="none" stroke="${L.color}" stroke-width="${L.w || 2}" ${L.dash ? `stroke-dasharray="${L.dash}"` : ''} ${L.op ? `opacity="${L.op}"` : ''} stroke-linejoin="round" stroke-linecap="round"/>`;
   });
   g += `<line x1="${x(now)}" x2="${x(now)}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--text-2)" stroke-width="1"/>`
     + `<text class="axis" x="${x(now) + 3}" y="${m.t - 6}">nu</text>`;
@@ -2026,22 +2026,21 @@ function renderTempCharts() {
   // gemeten in kleur, de ingestelde temperatuur in rood waar ze zelf ingesteld werd
   const mk = (tempKey, setKey, manKey, cTemp, cSet, nTemp, nSet) => {
     const pastT = fpts(tc.past, tempKey, true).filter(([t]) => t <= now), curT = fpts(tc.forecast, tempKey, true).filter(([t]) => t >= now - 900);
-    const pastS = fpts(tc.past, setKey, false).filter(([t]) => t <= now), curS = fpts(tc.forecast, setKey, false).filter(([t]) => t >= now - 900);
+    const curS = fpts(tc.forecast, setKey, false).filter(([t]) => t >= now - 900);
     const setH = H.filter((r) => r[setKey] > 0);
     const man = setH.some((r) => r[manKey]);
     return [
-      { name: 'Voorspeld', color: grey, pts: pastS, w: 1.2, step: true, noTip: true },
-      { name: 'Voorspeld ingesteld', color: grey, pts: curS, w: 1.2, step: true },
+      { name: 'Ingesteld (gepland)', color: grey, op: 0.55, pts: curS, dash: '5 3', w: 1.5, step: true, legend: 'dash', lo: 5 },
       { name: 'Voorspeld (24 u geleden)', color: grey, pts: pastT, w: 2 },
-      { name: 'Voorspeld', color: grey, pts: curT, w: 2, legend: 'line' },
-      { name: nSet, color: cSet, pts: setH.map((r) => [ts(r), r[manKey] ? null : r[setKey]]), dash: '5 3', w: 1.5, step: true, legend: 'dash' },
-      { name: 'Zelf ingesteld', color: 'var(--bad)', pts: setH.map((r) => [ts(r), r[manKey] ? r[setKey] : null]), w: 2, step: true, legend: man ? 'line' : '' },
-      { name: nTemp, color: cTemp, pts: H.filter((r) => r[tempKey] > -50).map((r) => [ts(r), r[tempKey]]), w: 2.2, legend: 'line' },
+      { name: 'Voorspeld', color: grey, pts: curT, w: 2, legend: 'line', lo: 4 },
+      { name: nSet, color: cSet, pts: setH.map((r) => [ts(r), r[manKey] ? null : r[setKey]]), dash: '5 3', w: 1.5, step: true, legend: 'dash', lo: 2 },
+      { name: 'Zelf ingesteld', color: 'var(--bad)', pts: setH.map((r) => [ts(r), r[manKey] ? r[setKey] : null]), dash: '5 3', w: 2, step: true, legend: man ? 'dash' : '', lo: 3 },
+      { name: nTemp, color: cTemp, pts: H.filter((r) => r[tempKey] > -50).map((r) => [ts(r), r[tempKey]]), w: 2.2, legend: 'line', lo: 1 },
     ];
   };
-  const leg = (lines) => lines.filter((L) => L.legend).map((L) => `<span><i class="${L.legend === 'line' ? '' : L.legend}" style="background:${L.color};border-color:${L.color}"></i>${esc(L.name)}</span>`).join('');
+  const leg = (lines) => lines.filter((L) => L.legend).sort((a, b) => a.lo - b.lo).map((L) => `<span><i class="${L.legend === 'line' ? '' : L.legend}" style="background:${L.color};border-color:${L.color}${L.op ? `;opacity:${L.op}` : ''}"></i>${esc(L.name)}</span>`).join('');
   const room = mk('room', 'roomSet', 'roomManual', 'var(--c0)', 'var(--sun)', 'Kamer', 'Ingesteld');
-  const dhw = mk('dhw', 'dhwSet', 'dhwManual', 'var(--c6)', 'var(--c3)', 'Boiler', 'Ingesteld');
+  const dhw = mk('dhw', 'dhwSet', 'dhwManual', 'var(--c6)', 'var(--sun)', 'Boiler', 'Ingesteld');
   $('tcRoomLeg').innerHTML = leg(room); $('tcDhwLeg').innerHTML = leg(dhw);
   drawTempChart($('tcRoom'), $('tcRoomTip'), t0, t1, room, '°C');
   drawTempChart($('tcDhw'), $('tcDhwTip'), t0, t1, dhw, '°C');
