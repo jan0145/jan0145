@@ -6,7 +6,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"sort"
 	"time"
 )
 
@@ -17,30 +16,25 @@ type Rate struct {
 }
 
 type Config struct {
-	// sanitair warm water (de temperaturen per periode staan in het weekschema)
-	DHWBoost                           float64
-	NightFrom, NightTo                 int     // uur: venster voor de nachtbeurt
-	NightFallbackFrom, NightFallbackTo int     // minuten: vaste nachtbeurt als er geen prijzen zijn
-	SolarSkipKWh                       float64 // zoveel zon verwacht tussen 10 en 16 u → geen nachtbeurt
-	PrepHours                          int     // zoveel uur voor een boilerperiode al bijwarmen in de goedkoopste kwartieren
+	// sanitair warm water (de temperaturen per periode staan in het weekschema; het plan in sww.go)
+	DHWBoost    float64 // bij zonne-overschot
+	DHWBoostHot float64 // bij veel overschot of een negatieve terugleverprijs (met de elektrische bijverwarming)
 	// verwarming
 	MaxEarlyMinutes     int     // hoeveel vroeger dan nodig mag voorverwarmen starten als het goedkoper is
 	EarlyPenaltyPerHour float64 // vroeger starten kost meer energie: zoveel % duurder per uur
 }
 
 func defaultConfig() Config {
-	return Config{
-		DHWBoost: 55, NightFrom: 0, NightTo: 7,
-		NightFallbackFrom: 60, NightFallbackTo: 150, SolarSkipKWh: 12, PrepHours: 5,
-		MaxEarlyMinutes: 60, EarlyPenaltyPerHour: 0.15,
-	}
+	return Config{DHWBoost: 55, DHWBoostHot: 60, MaxEarlyMinutes: 60, EarlyPenaltyPerHour: 0.15}
 }
 
 // Wat de regelaar geleerd heeft over de boiler en het huis.
 type Learned struct {
-	DHWHeatRate float64         `json:"dhwHeatRate"` // °C per uur tijdens een boilerbeurt
-	DHWCoolRate float64         `json:"dhwCoolRate"` // °C per uur afkoeling + verbruik zonder beurt
-	Preheat     []PreheatSample `json:"preheat"`     // hoe lang opwarmen duurde, bij welke buitentemperatuur
+	DHWHeatRate float64         `json:"dhwHeatRate"`      // °C per uur tijdens een boilerbeurt
+	DHWCoolRate float64         `json:"dhwCoolRate"`      // (oud, niet meer gebruikt)
+	DHWLoss     float64         `json:"dhwLoss"`          // warmteverlies: °C per uur per °C boven 20 °C
+	DHWUse      *[7][96]float64 `json:"dhwUse,omitempty"` // verbruik: °C per kwartier, per weekdag (0 = maandag)
+	Preheat     []PreheatSample `json:"preheat"`          // hoe lang opwarmen duurde, bij welke buitentemperatuur
 }
 
 type PreheatSample struct {
@@ -50,11 +44,7 @@ type PreheatSample struct {
 	Minutes float64   `json:"minutes"`
 }
 
-func defaultLearned() Learned { return Learned{DHWHeatRate: 8, DHWCoolRate: 0.4} }
-
-// afkoeling om vooruit te rekenen: hoogstens 1 °C per uur (een geïsoleerde boiler zonder tappen koelt trager;
-// een bad of douche is geen afkoeling en mag de voorspelling niet laten ontsporen)
-func (l Learned) coolRate() float64 { return clamp(l.DHWCoolRate, 0, 1) }
+func defaultLearned() Learned { return Learned{DHWHeatRate: 8, DHWLoss: 0.012} }
 
 // LeadMinutes: hoeveel minuten voor het venster de verwarming hoger moet om op tijd warm te zijn.
 // Zonder metingen een voorzichtige schatting; met ≥ 4 metingen een rechte door de metingen
@@ -120,137 +110,39 @@ func avgPrice(rates []Rate, from, to time.Time) (float64, bool) {
 	return sum / float64(n), true
 }
 
-// cheapestQuarters: de n goedkoopste kwartieren (begintijden) in [from, to).
-func cheapestQuarters(rates []Rate, from, to time.Time, n int) []time.Time {
-	type q struct {
-		t time.Time
-		p float64
-	}
-	var qs []q
-	start := from.Truncate(15 * time.Minute)
-	for t := start; t.Before(to); t = t.Add(15 * time.Minute) {
-		if p, ok := priceAt(rates, t); ok {
-			qs = append(qs, q{t, p})
-		}
-	}
-	sort.SliceStable(qs, func(i, j int) bool { return qs[i].p < qs[j].p })
-	if n > len(qs) {
-		n = len(qs)
-	}
-	res := make([]time.Time, n)
-	for i := 0; i < n; i++ {
-		res[i] = qs[i].t
-	}
-	return res
-}
-
-func containsQuarter(qs []time.Time, now time.Time) bool {
-	cur := now.Truncate(15 * time.Minute)
-	for _, t := range qs {
-		if t.Equal(cur) {
-			return true
-		}
-	}
-	return false
-}
-
-// solarKWh: verwachte zonne-opbrengst (kWh) tussen from en to; solar-rates zijn in W.
-func solarKWh(rates []Rate, from, to time.Time) float64 {
-	var kwh float64
-	for _, r := range rates {
-		s, e := r.Start, r.End
-		if s.Before(from) {
-			s = from
-		}
-		if e.After(to) {
-			e = to
-		}
-		if e.After(s) {
-			kwh += r.Value * e.Sub(s).Hours() / 1000
-		}
-	}
-	return kwh
-}
-
 type DHWInput struct {
 	Now     time.Time
 	Temp    float64
 	PVBoost bool    // evcc: zonne-overschot voor de boiler
-	Prev    float64 // doel van de vorige ronde: een begonnen beurt loopt door tot de boiler warm is
+	PVHot   bool    // veel overschot of negatieve terugleverprijs: tot DHWBoostHot
+	Prev    float64 // opwarmdoel van het plan in de vorige ronde (0 = geen): een begonnen beurt loopt door
 	Prices  []Rate
+	FeedIn  []Rate
 	Solar   []Rate
 }
 
-// DHWTarget: gewenste boilertemperatuur en waarom.
-func DHWTarget(c Config, s Schedule, l Learned, in DHWInput) (float64, string) {
-	now := in.Now
-	target, why := s.DHWBase, fmt.Sprintf("gewoon %.0f °C", s.DHWBase)
-	set := func(t float64, w string) {
-		if t > target {
-			target, why = t, w
-		}
+// DHWTarget: het plan (sww.go), plus een begonnen beurt die doorloopt en het zonne-overschot van evcc.
+// Planned = opwarmdoel van het plan (0 als het plan nu niet opwarmt), voor de volgende ronde.
+func DHWTarget(c Config, s Schedule, l Learned, in DHWInput) DHWPlan {
+	p := PlanDHW(c, s, l, in)
+	if p.Target > s.DHWBase {
+		p.Planned = p.Target
+	}
+	// een begonnen beurt loopt door tot de boiler warm is (geen aan/uit-gependel als het plan herschuift)
+	if in.Prev > p.Target && in.Temp < in.Prev-1 {
+		p.Target, p.Planned = in.Prev, in.Prev
+		p.Why = fmt.Sprintf("opwarmen tot %.0f °C loopt door", in.Prev)
 	}
 	if in.PVBoost {
-		set(c.DHWBoost, "zonne-overschot (evcc)")
-	}
-	if s.Mode == ModeVacation {
-		if target == s.DHWBase {
-			why = fmt.Sprintf("vakantie: %.0f °C", s.DHWBase)
+		boost, w := c.DHWBoost, "zonne-overschot (evcc)"
+		if in.PVHot {
+			boost, w = c.DHWBoostHot, "veel zonne-overschot of negatieve terugleverprijs (evcc): ook met de bijverwarming"
 		}
-		return target, why
-	}
-	if p, ok := periodAt(s.DHW, now); ok {
-		set(p.Temp, fmt.Sprintf("schema %s–%s: minstens %.0f °C", hhmm(p.From), hhmm(p.To), p.Temp))
-	}
-	rate := math.Max(2, l.DHWHeatRate)
-	h := now.Hour()
-
-	// nachtbeurt in de goedkoopste kwartieren, tenzij er morgen genoeg zon is
-	if h >= c.NightFrom && h < c.NightTo {
-		day := atMinute(now, 0)
-		sun := solarKWh(in.Solar, day.Add(10*time.Hour), day.Add(16*time.Hour))
-		if sun < c.SolarSkipKWh {
-			nf, nt := day.Add(time.Duration(c.NightFrom)*time.Hour), day.Add(time.Duration(c.NightTo)*time.Hour)
-			if _, ok := avgPrice(in.Prices, nf, nt); ok {
-				// vast aantal kwartieren (van ±de warmste periode van de dag tot de boost), zodat de keuze de hele
-				// nacht dezelfde blijft; een begonnen beurt loopt door tot de boiler warm is
-				ref := s.DHWBase
-				for _, p := range s.DHW[dayIndex(now)] {
-					ref = math.Max(ref, p.Temp)
-				}
-				need := int(clamp(math.Ceil((c.DHWBoost-ref+2)/rate*4), 2, 12))
-				if containsQuarter(cheapestQuarters(in.Prices, nf, nt, need), now) {
-					set(c.DHWBoost, fmt.Sprintf("nachtbeurt in de goedkoopste kwartieren (%.0f kWh zon verwacht)", sun))
-				} else if in.Prev == c.DHWBoost && in.Temp < c.DHWBoost-1 {
-					set(c.DHWBoost, "nachtbeurt loopt door tot de boiler warm is")
-				}
-			} else if m := now.Hour()*60 + now.Minute(); m >= c.NightFallbackFrom && m < c.NightFallbackTo {
-				set(c.DHWBoost, "nachtbeurt (vast uur, geen prijzen)")
-			}
+		if boost > p.Target {
+			p.Target, p.Why = boost, w
 		}
 	}
-
-	// voor een periode: zakt de boiler tegen het begin meer dan 2 °C onder de temperatuur van de periode (dan zou
-	// de warmtepomp zelf bijwarmen, met zijn eigen marge van 2 °C), dan al bijwarmen tot die temperatuur in de
-	// goedkoopste kwartieren ervoor. Niet warmer dan de periode vraagt.
-	if ps, p, ok := nextPeriod(s.DHW, now, s.DHWBase); ok && ps.Sub(now) <= time.Duration(c.PrepHours)*time.Hour {
-		if _, inside := periodAt(s.DHW, now); !inside || p.Temp > target {
-			prep := p.Temp
-			hours := ps.Sub(now).Hours()
-			atStart := in.Temp - l.coolRate()*hours
-			if atStart < p.Temp-2 {
-				need := int(clamp(math.Ceil((prep-atStart)/rate*4), 1, 16))
-				left := int(math.Ceil(ps.Sub(now.Truncate(15*time.Minute)).Minutes() / 15))
-				if left <= need || containsQuarter(cheapestQuarters(in.Prices, now, ps, need), now) {
-					set(prep, fmt.Sprintf("bijwarmen voor %s (dan verwacht %.0f °C)", ps.Format("15:04"), atStart))
-				}
-			}
-			if in.Prev == prep && in.Temp < prep-1 {
-				set(prep, fmt.Sprintf("bijwarmen voor %s loopt door", ps.Format("15:04")))
-			}
-		}
-	}
-	return target, why
+	return p
 }
 
 type HeatInput struct {

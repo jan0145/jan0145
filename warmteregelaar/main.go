@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	_ "time/tzdata" // tijdzone ingebakken: werkt ook op de Synology
@@ -74,9 +75,13 @@ type State struct {
 	SentDHWAt time.Time `json:"sentDHWAt"`
 	SentZ1At  time.Time `json:"sentZ1At"`
 	// lopende metingen om bij te leren
-	Preheat *preheatRun `json:"preheat,omitempty"`
-	DHWMark *mark       `json:"dhwMark,omitempty"`
-	LastLog time.Time   `json:"lastLog"`
+	Preheat      *preheatRun `json:"preheat,omitempty"`
+	DHWMark      *mark       `json:"dhwMark,omitempty"`
+	DHWQ         *dhwQuarter `json:"dhwQ,omitempty"` // lopend kwartier: om het verbruik per kwartier te leren
+	PVHotOn      bool        `json:"pvHotOn"`        // zonne-overschot tot 60 °C: blijft tot het overschot stopt
+	PlanLogged   string      `json:"planLogged"`     // laatst gelogde opwarmblokken
+	PlanLoggedAt time.Time   `json:"planLoggedAt"`
+	LastLog      time.Time   `json:"lastLog"`
 	// laadplan voor de auto (zie laden.go)
 	ChargePlan    ChargePlan `json:"chargePlan"`
 	ChargePlanFor time.Time  `json:"chargePlanFor"` // vertrektijd waarvoor het plan al gezet is
@@ -89,6 +94,12 @@ type preheatRun struct {
 	Target float64   `json:"target"`
 	ToutS  float64   `json:"toutSum"`
 	N      int       `json:"n"`
+}
+
+type dhwQuarter struct {
+	Start  time.Time `json:"start"`
+	Temp   float64   `json:"temp"`
+	Heated bool      `json:"heated"`
 }
 
 type mark struct {
@@ -105,6 +116,9 @@ type Status struct {
 		Temp, Target, Want float64
 		Why                string
 		Override           time.Time
+		Next               time.Time // volgende geplande opwarming
+		ForecastStart      time.Time
+		Forecast           []float64 // voorspelde temperatuur per kwartier vanaf ForecastStart
 	} `json:"dhw"`
 	Heat struct {
 		Tin, Tout, Set, Want float64
@@ -300,6 +314,32 @@ func readRates(kind string) []Rate {
 	return rates
 }
 
+// teruglevering nu (W, positief = naar het net) volgens evcc
+func readExport() (float64, bool) {
+	resp, err := client.Get(evccURL + "/api/state?jq=" + url.QueryEscape("{g: .grid.power, gp: .gridPower}"))
+	if err != nil {
+		return 0, false
+	}
+	defer resp.Body.Close()
+	var d struct {
+		G  *float64 `json:"g"`
+		GP *float64 `json:"gp"`
+		R  struct {
+			G  *float64 `json:"g"`
+			GP *float64 `json:"gp"`
+		} `json:"result"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&d) != nil {
+		return 0, false
+	}
+	for _, v := range []*float64{d.G, d.GP, d.R.G, d.R.GP} {
+		if v != nil {
+			return -*v, true
+		}
+	}
+	return 0, false
+}
+
 // ---------- één ronde ----------
 
 func step(now time.Time) {
@@ -314,7 +354,7 @@ func step(now time.Time) {
 		log.Print(s.Error)
 		return
 	}
-	prices, solar := readRates("grid"), readRates("solar")
+	prices, solar, feedin := readRates("grid"), readRates("solar"), readRates("feedin")
 	dhw, dhwSet := hm["DHW_Temp"], hm["DHW_Target_Temp"]
 	tin, tout, z1 := hm["Z1_Temp"], hm["Outside_Temp"], hm["Z1_Heat_Request_Temp"]
 	dhwHeating := hm["ThreeWay_Valve_State"] == 1 && hm["Compressor_Freq"] > 0
@@ -323,12 +363,37 @@ func step(now time.Time) {
 	}
 
 	learnDHW(now, dhw, dhwHeating)
+	learnDHWUse(now, dhw, dhwHeating)
 
 	// boiler
 	summer(now, sc, hm)
 
-	want, why := DHWTarget(cfg, sc, st.Learned, DHWInput{Now: now, Temp: dhw, PVBoost: st.PVBoost, Prev: st.PrevDHW, Prices: prices, Solar: solar})
-	st.PrevDHW = want
+	// veel zonne-overschot (≥ 3 kW teruglevering naast de boiler) of een negatieve terugleverprijs: tot 60 °C,
+	// ook met de elektrische bijverwarming; dat blijft zo tot evcc het overschot stopt
+	if !st.PVBoost {
+		st.PVHotOn = false
+	} else if !st.PVHotOn {
+		fp, okf := priceAt(feedin, now)
+		if exp, ok := readExport(); (ok && exp >= 3000) || (okf && fp <= 0) {
+			st.PVHotOn = true
+		}
+	}
+	din := DHWInput{Now: now, Temp: dhw, PVBoost: st.PVBoost, PVHot: st.PVHotOn, Prev: st.PrevDHW, Prices: prices, FeedIn: feedin, Solar: solar}
+	dp := DHWTarget(cfg, sc, st.Learned, din)
+	want, why := dp.Target, dp.Why
+	st.PrevDHW = dp.Planned
+	s.DHW.ForecastStart, s.DHW.Forecast, s.DHW.Next = now.Truncate(quarter), make([]float64, len(dp.Forecast)), time.Time{}
+	for i, v := range dp.Forecast {
+		s.DHW.Forecast[i] = math.Round(v*10) / 10
+	}
+	if len(dp.Heat) > 0 {
+		s.DHW.Next = dp.Heat[0]
+	}
+	// het plan in het logboek: alleen als de opwarmblokken veranderen, hoogstens om het kwartier
+	if b := planBlocks(dp); b != st.PlanLogged && now.Sub(st.PlanLoggedAt) >= quarter {
+		st.PlanLogged, st.PlanLoggedAt = b, now
+		log.Print("plan sww: " + planSummary(dp))
+	}
 	// zelf aangepast op de bediening (en blijft staan): voorrang, tot de boiler warm is of hoogstens 3 uur
 	if act && st.SentDHW != 0 && now.Sub(st.SentDHWAt) > graceAfterSend && math.Round(dhwSet) == math.Round(st.SeenDHW) && math.Round(dhwSet) != math.Round(st.SentDHW) &&
 		math.Round(dhwSet) != math.Round(want) && !now.Before(st.DHWOverride) {
@@ -464,6 +529,53 @@ func nextBoundary(now time.Time, p HeatPlan) time.Time {
 // ---------- bijleren ----------
 
 // Boiler: opwarmsnelheid tijdens een beurt en afkoeling (incl. verbruik) daarbuiten, als glijdend gemiddelde.
+// Verbruik per weekdag en kwartier: hoeveel zakte de boiler in een kwartier zonder opwarmen, min het
+// verwachte warmteverlies. De HeishaMon geeft hele graden, dus het gemiddelde over veel weken telt (glijdend
+// gemiddelde); een kwartier met 0 °C en een met 1 °C middelen samen uit. Rustige nachtkwartieren leren het
+// warmteverlies zelf.
+func learnDHWUse(now time.Time, temp float64, heating bool) {
+	qs := now.Truncate(quarter)
+	q := st.DHWQ
+	if q != nil && q.Start.Equal(qs) {
+		q.Heated = q.Heated || heating
+		return
+	}
+	if q != nil && qs.Sub(q.Start) == quarter && !q.Heated && !heating {
+		drop := q.Temp - temp
+		l := &st.Learned
+		u := l.use()
+		d, i := dayIndex(q.Start), q.Start.Hour()*4+q.Start.Minute()/15
+		u[d][i] = 0.75*u[d][i] + 0.25*(drop-l.lossPerQuarter(q.Temp))
+		l.DHWUse = &u
+		if h := q.Start.Hour(); h >= 1 && h < 5 && drop >= 0 && drop <= 1 && q.Temp > 30 {
+			l.DHWLoss = clamp(0.97*l.DHWLoss+0.03*(drop*4/(q.Temp-20)), 0.002, 0.05)
+		}
+	}
+	st.DHWQ = &dhwQuarter{Start: qs, Temp: temp, Heated: heating}
+}
+
+// opwarmblokken als tekst, bv. "03:30–05:00, 19:15–20:00"
+func planBlocks(p DHWPlan) string {
+	var parts []string
+	for i := 0; i < len(p.Heat); {
+		j := i
+		for j+1 < len(p.Heat) && p.Heat[j+1].Sub(p.Heat[j]) == quarter {
+			j++
+		}
+		parts = append(parts, p.Heat[i].Format("15:04")+"–"+p.Heat[j].Add(quarter).Format("15:04"))
+		i = j + 1
+	}
+	return strings.Join(parts, ", ")
+}
+
+// korte samenvatting van het plan voor het logboek: opwarmblokken en de krapste voorspelling
+func planSummary(p DHWPlan) string {
+	if len(p.Heat) == 0 {
+		return "geen opwarming nodig; " + p.Why
+	}
+	return fmt.Sprintf("opwarmen %s; %s", planBlocks(p), p.Why)
+}
+
 func learnDHW(now time.Time, temp float64, heating bool) {
 	m := st.DHWMark
 	if m == nil || m.Heating != heating {
@@ -478,10 +590,6 @@ func learnDHW(now time.Time, temp float64, heating bool) {
 		}
 		st.DHWMark = &mark{now, temp, heating}
 	} else if !heating && h >= 2 {
-		r := (m.Temp - temp) / h
-		if r >= 0 && r < 2 { // sneller = er werd warm water getapt, dat is geen afkoeling
-			st.Learned.DHWCoolRate = 0.8*st.Learned.DHWCoolRate + 0.2*r
-		}
 		st.DHWMark = &mark{now, temp, heating}
 	}
 }
@@ -667,14 +775,15 @@ func main() {
 	// standaardschema; zodra het in de app aangepast is, geldt dat (warmteregelaar-state.json)
 	sched = defaultSchedule(envFloat("COMFORT", 22), envFloat("ECO", 20), envFloat("BOILER", 40), envFloat("BOILER_AVOND", 48))
 	cfg.DHWBoost = envFloat("BOILER_BOOST", cfg.DHWBoost)
+	cfg.DHWBoostHot = envFloat("BOILER_BOOST_HOT", cfg.DHWBoostHot)
 	if _, err := url.Parse(hmURL); err != nil {
 		log.Fatal(err)
 	}
 	loadState()
 	log.Printf("start: HeishaMon %s, evcc %s, %s", hmURL, evccURL, map[bool]string{true: "STUURT", false: "PROEF (alleen loggen)"}[act])
 	sc := schedule()
-	log.Printf("stand %s · boiler gewoon %.0f °C, boost %.0f °C · kamer eco %.0f °C, vakantie %.0f °C (weekschema: /schedule)",
-		sc.Mode, sc.DHWBase, cfg.DHWBoost, sc.Eco, sc.Away)
+	log.Printf("stand %s · boiler gewoon %.0f °C, zonne-overschot %.0f °C (veel: %.0f °C) · kamer eco %.0f °C, vakantie %.0f °C (weekschema: /schedule)",
+		sc.Mode, sc.DHWBase, cfg.DHWBoost, cfg.DHWBoostHot, sc.Eco, sc.Away)
 	go pollHM()
 	go serve()
 	time.Sleep(3 * time.Second) // eerste HeishaMon-gegevens afwachten

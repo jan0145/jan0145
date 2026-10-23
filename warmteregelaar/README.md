@@ -6,16 +6,21 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
 
 ## Wat hij doet
 
-**Sanitair warm water**
-- Gewoon **40 °C**; in de periodes van het weekschema de temperatuur van die periode
-  (standaard elke dag **17–22 u minstens 48 °C**: koken, afwas, douche).
-- 's Nachts (00–07 u) één beurt tot **55 °C** in de **goedkoopste kwartieren** — niet als er de volgende dag
-  tussen 10 en 16 u veel zon verwacht wordt (≥ 12 kWh), want dan doet de zon het.
-- Bij **zonne-overschot** (evcc beslist, na de auto): 55 °C.
-- In de 5 uur vóór een periode: zakt de boiler tegen het begin meer dan 2 °C onder de temperatuur van de periode
-  (dan zou de warmtepomp zelf bijwarmen), dan al bijwarmen tot die temperatuur (niet warmer) in de goedkoopste
-  kwartieren ervoor. De geleerde afkoeling telt daarbij voor hoogstens 1 °C per uur (tappen is geen afkoeling).
+**Sanitair warm water** (zie `sww.go`)
+- De regelaar **voorspelt de boilertemperatuur** voor de komende 24 uur per kwartier: warmteverlies van het vat
+  (hoe warmer, hoe meer), het **verbruik** (douches, bad, afwas) zoals hij het per weekdag en kwartier geleerd
+  heeft, en hoe snel de warmtepomp de boiler opwarmt.
+- Eis: in elke periode van het weekschema minstens de temperatuur van die periode (min 2 °C: bij 48 °C is 46 °C
+  nog goed, zo werkt de warmtepomp ook), daarbuiten minstens 38 °C (gewoon 40 °C).
+- Waar de voorspelling te laag komt, kiest hij het goedkoopste kwartier ervóór om op te warmen: netprijs, of bij
+  verwachte zon de gemiste terugleververgoeding. Warmer opwarmen telt duurder (lagere COP), een aparte beurt ook.
+  Of het dus 's nachts tot 55 °C gaat en daarmee de hele dag, of 48 °C en later nog eens bij: dat rekent hij uit.
+- Het plan en de reden (met de voorspelde temperatuur) staan in het logboek ("plan sww: …").
+- Bij **zonne-overschot** (evcc beslist, na de auto): 55 °C. Bij veel overschot (≥ 3 kW teruglevering) of een
+  negatieve terugleverprijs: 60 °C, dan helpt de elektrische bijverwarming van de boiler (goedkoper dan gratis of
+  met verlies terugleveren).
 - Een begonnen beurt loopt door tot de boiler warm is (geen aan/uit-gependel).
+- Vóór er iets geleerd is, rekent hij met een voorzichtig profiel: 's ochtends 2 °C, 's avonds 5 °C (weekend 8 °C).
 
 **Verwarming**
 - In de periodes van het weekschema de temperatuur van die periode; daarbuiten eco (**20 °C**).
@@ -39,8 +44,8 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
   van daarvoor (meestal verwarmen + sanitair water).
 - Bij een andere stand vervallen de manuele aanpassingen.
 
-**Leren** (bewaard in `warmteregelaar-state.json`): hoe snel de boiler opwarmt en afkoelt, en hoe lang het
-huis nodig heeft om op te warmen. Elke 5 minuten komt er een regel in `warmte-JJJJ-MM.csv` (buiten, kamer,
+**Leren** (bewaard in `warmteregelaar-state.json`): hoe snel de boiler opwarmt, het warmteverlies van het vat,
+het warmwaterverbruik per weekdag en kwartier, en hoe lang het huis nodig heeft om op te warmen. Elke 5 minuten komt er een regel in `warmte-JJJJ-MM.csv` (buiten, kamer,
 boiler, doelen, vermogen, prijs) — daarmee kan het model later verfijnd worden.
 
 ## Installeren op de Synology
@@ -56,7 +61,7 @@ boiler, doelen, vermogen, prijs) — daarmee kan het model later verfijnd worden
 `ACT=0` = **proef**: hij beslist en logt, maar stuurt niets. Ziet het er goed uit: `ACT=1` en **Run**.
 Let op: in de proef warmt de boiler ook niet op bij zonne-overschot (dat loopt nu via de regelaar).
 
-Instellingen (in de taak vóór `./warmteregelaar`): `BOILER_BOOST=55`. `COMFORT=22 ECO=20 BOILER=40 BOILER_AVOND=48`
+Instellingen (in de taak vóór `./warmteregelaar`): `BOILER_BOOST=55` (zonne-overschot), `BOILER_BOOST_HOT=60`. `COMFORT=22 ECO=20 BOILER=40 BOILER_AVOND=48`
 bepalen alleen het standaardschema; zodra het schema in de app bewaard is, geldt dat (in `warmteregelaar-state.json`).
 
 Weekschema via HTTP: `GET /schedule` (lezen), `POST /schedule` (JSON, vervangen), `GET /mode?set=normaal|vakantie|zomer`.
@@ -82,3 +87,11 @@ Het laadpunt "Boiler" in `evcc.yaml` geeft het zonne-overschot door aan de regel
 go test ./...
 CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build -trimpath -ldflags="-s -w" -o warmteregelaar .
 ```
+
+## Laadplan voor de auto
+
+evcc kent zonder voertuig alleen een eenmalig plan ("x kWh tegen hh:mm"). Staat in de Stroom-app (Laadpaal) "elke
+nacht automatisch" aan, dan zet de regelaar dat plan elke keer opnieuw zodra de auto ingeplugd is
+(`GET/POST /laadplan`). Wist je het plan zelf, dan zet hij het voor die ochtend niet opnieuw.
+Opdrachten die een browser niet rechtstreeks naar evcc mag sturen (een plan of prijsgrens wissen), geeft hij door
+via `/evcc?m=DELETE&p=/api/…` (alleen laadpunten en prijsgrenzen).

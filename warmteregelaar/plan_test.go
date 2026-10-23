@@ -25,75 +25,113 @@ func prices(cheap map[time.Time]float64) []Rate {
 	return rs
 }
 
-func TestDHWWindows(t *testing.T) {
-	c, s, l := defaultConfig(), defaultSchedule(22, 20, 40, 48), defaultLearned()
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(11, 0), Temp: 45}); v != 40 {
-		t.Fatalf("overdag: %v", v)
-	}
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(18, 0), Temp: 47}); v != 48 {
-		t.Fatalf("avond: %v", v)
-	}
-	if v, w := DHWTarget(c, s, l, DHWInput{Now: at(11, 0), Temp: 45, PVBoost: true}); v != 55 || !strings.Contains(w, "zon") {
-		t.Fatalf("zonne-overschot: %v %s", v, w)
+// in elke periode minstens de eis (behalve als het echt niet haalbaar is)
+func assertFeasible(t *testing.T, s Schedule, p DHWPlan, what string) {
+	t.Helper()
+	for i, v := range p.Forecast {
+		start := p.Start
+		req, _ := dhwRequirement(s, start.Add(time.Duration(i)*quarter))
+		if v < req-1e-6 {
+			t.Fatalf("%s: om %s verwacht %.1f °C < %.0f °C (%s)", what, start.Add(time.Duration(i+1)*quarter).Format("Mon 15:04"), v, req, p.Why)
+		}
 	}
 }
 
-func TestDHWNight(t *testing.T) {
+func flat(p float64) []Rate {
+	var rs []Rate
+	for t := at(0, 0); t.Before(at(0, 0).AddDate(0, 0, 3)); t = t.Add(15 * time.Minute) {
+		rs = append(rs, Rate{t, t.Add(15 * time.Minute), p})
+	}
+	return rs
+}
+
+func TestDHWPlanBasics(t *testing.T) {
 	c, s, l := defaultConfig(), defaultSchedule(22, 20, 40, 48), defaultLearned()
-	// goedkoopst: 03:00–04:15 (5 kwartieren; nodig: (55-48+2)/8*4 = 4,5 → 5)
+	// 11:00, 45 °C: voor de avond (17–22 u ≥ 46 °C, douches 19–22 u) moet hij ergens opwarmen, maar niet nu
+	p := DHWTarget(c, s, l, DHWInput{Now: at(11, 0), Temp: 45, Prices: flat(0.30)})
+	if p.Target != 40 || len(p.Heat) == 0 || !strings.Contains(p.Why, "volgende opwarming") {
+		t.Fatalf("overdag: %+v", p.Why)
+	}
+	assertFeasible(t, s, p, "overdag")
+	// genoeg warm water: niets doen
+	p = DHWTarget(c, s, l, DHWInput{Now: at(15, 0), Temp: 55, Prices: flat(0.30)})
+	if p.Target != 40 || len(p.Heat) != 0 {
+		t.Fatalf("warm genoeg: %v %s", p.Heat, p.Why)
+	}
+	// zonne-overschot van evcc: 55, met veel overschot 60
+	if p := DHWTarget(c, s, l, DHWInput{Now: at(11, 0), Temp: 45, PVBoost: true}); p.Target != 55 || !strings.Contains(p.Why, "zon") {
+		t.Fatalf("zonne-overschot: %v %s", p.Target, p.Why)
+	}
+	if p := DHWTarget(c, s, l, DHWInput{Now: at(11, 0), Temp: 45, PVBoost: true, PVHot: true}); p.Target != 60 {
+		t.Fatalf("veel overschot: %v %s", p.Target, p.Why)
+	}
+	// een begonnen beurt loopt door
+	if p := DHWTarget(c, s, l, DHWInput{Now: at(11, 0), Temp: 49, Prev: 52, Prices: flat(0.30)}); p.Target != 52 || !strings.Contains(p.Why, "loopt door") {
+		t.Fatalf("doorlopen: %v %s", p.Target, p.Why)
+	}
+}
+
+func TestDHWPlanNightVsDay(t *testing.T) {
+	c, s, l := defaultConfig(), defaultSchedule(22, 20, 40, 48), defaultLearned()
+	// goedkoop 02:00–05:00, overdag duur: 's nachts warm genoeg maken voor de hele dag
 	cheap := map[time.Time]float64{}
-	for i := 0; i < 5; i++ {
-		cheap[at(3, 0).Add(time.Duration(i)*15*time.Minute)] = 0.10
+	for q := at(2, 0); q.Before(at(5, 0)); q = q.Add(15 * time.Minute) {
+		cheap[q] = 0.10
 	}
 	pr := prices(cheap)
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(1, 0), Temp: 44, Prices: pr}); v != 40 {
-		t.Fatalf("01:00 is duur: %v", v)
+	p := DHWTarget(c, s, l, DHWInput{Now: at(1, 0), Temp: 44, Prices: pr})
+	assertFeasible(t, s, p, "nacht")
+	// tot 55 °C in de goedkope uren; wat dan nog ontbreekt (warmteverlies over de dag), pas 's avonds
+	night := 0
+	for _, h := range p.Heat {
+		if !h.Before(at(2, 0)) && h.Before(at(5, 0)) {
+			night++
+		} else if h.Before(at(17, 0)) {
+			t.Fatalf("overdag opwarmen terwijl het 's nachts goedkoper was: %v (%s)", p.Heat, p.Why)
+		}
 	}
-	if v, w := DHWTarget(c, s, l, DHWInput{Now: at(3, 20), Temp: 44, Prices: pr}); v != 55 {
-		t.Fatalf("03:20 is goedkoop: %v %s", v, w)
+	if night < len(p.Heat)*2/3 {
+		t.Fatalf("te weinig 's nachts: %v (%s)", p.Heat, p.Why)
 	}
-	// begonnen beurt loopt door als het goedkope blok voorbij is
-	if v, w := DHWTarget(c, s, l, DHWInput{Now: at(4, 20), Temp: 50, Prev: 55, Prices: pr}); v != 55 || !strings.Contains(w, "loopt door") {
-		t.Fatalf("doorlopen: %v %s", v, w)
+	// op het geplande moment echt opwarmen, tot ruim boven 48 °C (de hele dag moet ermee toe)
+	first := p.Heat[0]
+	if q := DHWTarget(c, s, l, DHWInput{Now: first.Add(5 * time.Minute), Temp: 44, Prices: pr}); q.Target < 50 {
+		t.Fatalf("om %s opwarmen: %v %s", first.Format("15:04"), q.Target, q.Why)
 	}
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(4, 20), Temp: 54.5, Prev: 55, Prices: pr}); v != 40 {
-		t.Fatalf("warm genoeg: %v", v)
+	// zon verwacht 12–15 u en een lage terugleverprijs: dan liever overdag
+	sun := []Rate{{at(12, 0), at(15, 0), 4000}}
+	feed := flat(0.03)
+	p = DHWTarget(c, s, l, DHWInput{Now: at(1, 0), Temp: 46, Prices: flat(0.30), Solar: sun, FeedIn: feed})
+	assertFeasible(t, s, p, "zon")
+	for _, h := range p.Heat {
+		if h.Before(at(12, 0)) || !h.Before(at(15, 0)) && h.Before(at(22, 0)) {
+			t.Fatalf("zon: opwarmen buiten 12–15 u: %v (%s)", p.Heat, p.Why)
+		}
 	}
-	// veel zon verwacht morgen → geen nachtbeurt
-	sun := []Rate{{at(10, 0), at(16, 0), 3000}} // 18 kWh
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(3, 20), Temp: 44, Prices: pr, Solar: sun}); v != 40 {
-		t.Fatalf("zon morgen: %v", v)
-	}
-	// geen prijzen → vaste nachtbeurt 01:00–02:30
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(1, 30), Temp: 44}); v != 55 {
-		t.Fatalf("vast uur: %v", v)
+	// weekend: meer douches 's avonds → warmer opwarmen dan op een weekdag
+	sat := func(h, m int) time.Time { return time.Date(2026, 11, 7, h, m, 0, 0, bru) }
+	wd := DHWTarget(c, s, l, DHWInput{Now: at(16, 0), Temp: 44, Prices: flat(0.30)})
+	we := DHWTarget(c, s, l, DHWInput{Now: sat(16, 0), Temp: 44, Prices: flat(0.30)})
+	if len(we.Heat) <= len(wd.Heat) {
+		t.Fatalf("weekend %d kwartieren, weekdag %d", len(we.Heat), len(wd.Heat))
 	}
 }
 
-func TestDHWBeforeEvening(t *testing.T) {
+func TestDHWLearnedUse(t *testing.T) {
 	c, s, l := defaultConfig(), defaultSchedule(22, 20, 40, 48), defaultLearned()
-	// 44 °C om 15:00, afkoeling 0,4/u → 43,2 om 17 u (< 48 − 2): bijwarmen tot 48, nodig 2 kwartieren
-	cheap := map[time.Time]float64{at(15, 0): 0.05, at(15, 15): 0.05, at(15, 30): 0.05, at(15, 45): 0.05, at(16, 0): 0.05}
-	pr := prices(cheap)
-	if v, w := DHWTarget(c, s, l, DHWInput{Now: at(15, 5), Temp: 44, Prices: pr}); v != 48 {
-		t.Fatalf("bijwarmen: %v %s", v, w)
+	// geleerd: dinsdagavond (dag 1) een bad om 20:00 dat de boiler 12 °C doet zakken
+	u := defaultDHWUse()
+	u[1][80] = 12
+	l.DHWUse = &u
+	tue := func(h, m int) time.Time { return time.Date(2026, 11, 3, h, m, 0, 0, bru) }
+	p := DHWTarget(c, s, l, DHWInput{Now: tue(12, 0), Temp: 50, Prices: flat(0.30)})
+	// vlak voor het bad zo warm als de warmtepomp kan (55 °C), en meteen erna weer opwarmen
+	i := int(tue(19, 45).Sub(p.Start) / quarter)
+	if p.Forecast[i] < 54 {
+		t.Fatalf("bad: om 20:00 maar %.1f °C (%s)", p.Forecast[i], p.Why)
 	}
-	// warm genoeg: niets doen (ook 46,5 °C volstaat: de warmtepomp warmt zelf pas bij onder 46 °C)
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(15, 5), Temp: 51, Prices: pr}); v != 40 {
-		t.Fatalf("warm genoeg: %v", v)
-	}
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(15, 5), Temp: 47, Prices: pr}); v != 40 {
-		t.Fatalf("warm genoeg: %v", v)
-	}
-	// een grote geleerde afkoeling (bad, douche) mag niet tot een overdreven voorspelling leiden
-	big := l
-	big.DHWCoolRate = 5
-	if v, w := DHWTarget(c, s, big, DHWInput{Now: at(15, 5), Temp: 49, Prices: pr}); v != 40 {
-		t.Fatalf("afkoeling begrensd: %v %s", v, w)
-	}
-	// te laat om te wachten: meteen
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(16, 30), Temp: 42, Prices: prices(nil)}); v != 48 {
-		t.Fatalf("laatste moment: %v", v)
+	if len(p.Heat) > 16 {
+		t.Fatalf("bad: nutteloos veel opwarmen: %d kwartieren", len(p.Heat))
 	}
 }
 
@@ -166,28 +204,24 @@ func TestScheduleModes(t *testing.T) {
 	if p := HeatTarget(c, s, l, HeatInput{Now: at(10, 30), Tin: 21, Tout: 5}); p.Target != 19 {
 		t.Fatalf("eigen periode: %+v", p)
 	}
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(7, 30), Temp: 52}); v != 50 {
-		t.Fatalf("eigen boilerperiode: %v", v)
+	if p := DHWTarget(c, s, l, DHWInput{Now: at(7, 0), Temp: 46}); p.Target < 48 {
+		t.Fatalf("eigen boilerperiode (07–08 u ≥ 50 °C, nu 46): %v %s", p.Target, p.Why)
 	}
 	// vakantie: 16 °C, boiler gewoon, ook 's avonds en 's nachts
 	s.Mode = ModeVacation
 	if p := HeatTarget(c, s, l, HeatInput{Now: at(18, 0), Tin: 21, Tout: 5}); p.Target != 16 {
 		t.Fatalf("vakantie: %+v", p)
 	}
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(1, 30), Temp: 44}); v != 40 {
-		t.Fatalf("vakantie nachtbeurt: %v", v)
-	}
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(18, 0), Temp: 44}); v != 40 {
-		t.Fatalf("vakantie avond: %v", v)
+	if p := DHWTarget(c, s, l, DHWInput{Now: at(1, 30), Temp: 50}); p.Target != 40 || len(p.Heat) != 0 {
+		t.Fatalf("vakantie: %v %s", p.Heat, p.Why)
 	}
 	// zomer: verwarming uit, boiler volgens het schema
 	s.Mode = ModeSummer
 	if p := HeatTarget(c, s, l, HeatInput{Now: at(18, 0), Tin: 21, Tout: 5}); p.Target != 0 {
 		t.Fatalf("zomer: %+v", p)
 	}
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(18, 0), Temp: 47}); v != 48 {
-		t.Fatalf("zomer boiler: %v", v)
-	}
+	p := DHWTarget(c, s, l, DHWInput{Now: at(16, 0), Temp: 44})
+	assertFeasible(t, s, p, "zomer")
 }
 
 func TestScheduleJSON(t *testing.T) {
@@ -246,5 +280,26 @@ func TestChargePlan(t *testing.T) {
 	p.Time = "24:00"
 	if p.Validate() == nil {
 		t.Fatal("24:00 aanvaard")
+	}
+}
+
+func TestLearnDHWUse(t *testing.T) {
+	st = State{Learned: defaultLearned()}
+	// dinsdag 20:00–20:15: de boiler zakt van 50 naar 44 °C zonder op te warmen (douche)
+	tue := time.Date(2026, 11, 3, 20, 0, 0, 0, bru)
+	learnDHWUse(tue.Add(time.Minute), 50, false)
+	learnDHWUse(tue.Add(8*time.Minute), 47, false)
+	learnDHWUse(tue.Add(15*time.Minute), 44, false)
+	u := st.Learned.use()
+	prior := defaultDHWUse()[1][80]
+	want := 0.75*prior + 0.25*(6-st.Learned.lossPerQuarter(50))
+	if d := u[1][80] - want; d > 1e-9 || d < -1e-9 {
+		t.Fatalf("verbruik geleerd: %.3f, verwacht %.3f", u[1][80], want)
+	}
+	// een kwartier met opwarmen leert niets
+	learnDHWUse(tue.Add(16*time.Minute), 44, true)
+	learnDHWUse(tue.Add(30*time.Minute), 48, false)
+	if st.Learned.use()[1][81] != prior {
+		t.Fatalf("opwarmkwartier geleerd: %v", st.Learned.use()[1][81])
 	}
 }
