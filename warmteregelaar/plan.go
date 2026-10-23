@@ -34,6 +34,7 @@ type Learned struct {
 	DHWCoolRate float64         `json:"dhwCoolRate"`      // (oud, niet meer gebruikt)
 	DHWLoss     float64         `json:"dhwLoss"`          // warmteverlies: °C per uur per °C boven 20 °C
 	DHWUse      *[7][96]float64 `json:"dhwUse,omitempty"` // verbruik: °C per kwartier, per weekdag (0 = maandag)
+	RoomLoss    float64         `json:"roomLoss"`         // afkoeling huis: °C per uur per °C verschil met buiten
 	Preheat     []PreheatSample `json:"preheat"`          // hoe lang opwarmen duurde, bij welke buitentemperatuur
 }
 

@@ -81,6 +81,9 @@ type State struct {
 	PVHotOn      bool        `json:"pvHotOn"`        // zonne-overschot tot 60 °C: blijft tot het overschot stopt
 	PlanLogged   string      `json:"planLogged"`     // laatst gelogde opwarmblokken
 	PlanLoggedAt time.Time   `json:"planLoggedAt"`
+	Current      Forecast    `json:"-"`         // voorspelling van deze ronde (voor de grafieken)
+	Forecasts    []Forecast  `json:"forecasts"` // elk uur bewaard: om later te vergelijken met wat er gebeurde
+	RoomMark     *roomMark   `json:"roomMark,omitempty"`
 	LastLog      time.Time   `json:"lastLog"`
 	// laadplan voor de auto (zie laden.go)
 	ChargePlan    ChargePlan `json:"chargePlan"`
@@ -445,6 +448,14 @@ func step(now time.Time) {
 		s.Heat.Why = "de warmtepomp werkt met een stooklijnverschuiving: kamertemperatuur niet gestuurd"
 	}
 	s.Heat.Override = st.Override
+
+	// voorspelling voor de grafieken (en elk uur bewaren)
+	room, rset := forecastRoom(cfg, sc, st.Learned, now, tin, tout, plan.Target, prices)
+	st.Current = Forecast{Start: dp.Start, Room: room, RoomSet: rset, DHW: s.DHW.Forecast, DHWSet: dhwSetpoints(sc, dp)}
+	keepForecast(st.Current)
+	if z1 >= 10 {
+		learnRoomLoss(now, tin, tout, z1)
+	}
 	s.Learned = st.Learned
 
 	if now.Sub(st.LastLog) >= 5*time.Minute {
@@ -756,6 +767,7 @@ func serve() {
 		fmt.Fprint(w, mode)
 	})
 	serveCharge(h)
+	serveForecast(h)
 	h.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		b, _ := json.Marshal(st.Status)

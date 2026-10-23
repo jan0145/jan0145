@@ -241,6 +241,9 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .kv dt { color: var(--text-2); }
 .kv dd { margin: 0; font-weight: 600; text-align: right; }
 .chart-wrap .ref { font-size: 10px; }
+.tlegend { flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+.tlegend i.dash { background: none !important; border-top: 2px dashed; height: 0; }
+.tlegend i.dot { background: none !important; border-top: 2px dotted; height: 0; }
 .dhead { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
 .dico { width: 40px; height: 40px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; color: #fff; }
 .dico svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -546,11 +549,13 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
         <p class="hint" id="planHint"></p>
       </div>
       <div class="ctlblk">
-        <div class="ctlh">Laden onder een prijs</div>
-        <div class="setlbl2">Auto: altijd laden onder</div>
+        <div class="ctlh">Auto laden onder een prijs</div>
+        <div class="setlbl2">Altijd laden als de stroom goedkoper is dan</div>
         <div class="setrow"><button class="pm" id="limLpMinus" aria-label="Lager">−</button><div class="setval num" id="limLpVal">–</div><button class="pm" id="limLpPlus" aria-label="Hoger">+</button><button class="btn small" id="limLpOff">Uit</button><button class="btn small primary" id="limLpSet">Instellen</button></div>
-        <div class="setlbl2" style="margin-top:10px">Thuisbatterij: laden uit het net onder</div>
-        <div class="setrow"><button class="pm" id="limBatMinus" aria-label="Lager">−</button><div class="setval num" id="limBatVal">–</div><button class="pm" id="limBatPlus" aria-label="Hoger">+</button><button class="btn small" id="limBatOff">Uit</button><button class="btn small primary" id="limBatSet">Instellen</button></div>
+        <div class="setrow" id="limBatRow" hidden style="margin-top:10px">
+          <span class="setlbl2" style="flex:1;margin:0">Thuisbatterij laadt uit het net onder <b id="limBatCur"></b></span>
+          <button class="btn small" id="limBatOff">Uit</button>
+        </div>
         <p class="hint" id="limHint" style="margin-top:8px"></p>
       </div>
     </section>
@@ -594,6 +599,23 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="card-head"><h2>Warmteregelaar</h2></div>
       <div id="regInfo"></div>
     </section>
+    <section class="card" id="tcRoomCard" hidden>
+      <div class="card-head"><h2>Temperatuur in huis</h2></div>
+      <div class="legend tlegend" id="tcRoomLeg"></div>
+      <div class="chart-wrap" id="tcRoomWrap">
+        <svg id="tcRoom" role="img" aria-label="Kamertemperatuur en ingestelde temperatuur, gemeten en voorspeld"></svg>
+        <div class="tip" id="tcRoomTip"></div>
+      </div>
+    </section>
+    <section class="card" id="tcDhwCard" hidden>
+      <div class="card-head"><h2>Sanitair warm water</h2></div>
+      <div class="legend tlegend" id="tcDhwLeg"></div>
+      <div class="chart-wrap" id="tcDhwWrap">
+        <svg id="tcDhw" role="img" aria-label="Boilertemperatuur en ingestelde temperatuur, gemeten en voorspeld"></svg>
+        <div class="tip" id="tcDhwTip"></div>
+      </div>
+    </section>
+    <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten. Grijs: voorspeld door de warmteregelaar; rechts van "nu" de huidige voorspelling, links (gestippeld) wat 24 uur geleden voorspeld werd.</p>
     <div class="seg wide" role="group" aria-label="Periode" id="hpSeg">
       <button data-p="day" aria-pressed="true">Dag</button>
       <button data-p="week" aria-pressed="false">Week</button>
@@ -1918,6 +1940,104 @@ function renderHpInfo() {
   ]);
 }
 
+/* ---------- temperatuurgrafieken: gemeten (kleur) en voorspeld (grijs), 24 u terug en 24 u vooruit ---------- */
+
+let tc = null;  // antwoord van /grafiek
+async function loadTempCharts() {
+  const b = regBase();
+  if (!b) { tc = null; return; }
+  try { tc = await getJson(b + '/grafiek'); } catch (e) { tc = null; }
+}
+// lijnen: { name, color, pts: [[t, v]], dash, step, w }
+function drawTempChart(svg, tip, t0, t1, lines, unit) {
+  const W = svg.clientWidth || 340, H = 206, m = { l: 34, r: 8, t: 20, b: 22 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  let lo = Infinity, hi = -Infinity;
+  lines.forEach((L) => L.pts.forEach(([, v]) => { lo = Math.min(lo, v); hi = Math.max(hi, v); }));
+  if (!isFinite(lo)) { svg.innerHTML = `<text class="axis" x="${W / 2}" y="${H / 2}" text-anchor="middle">Nog geen gegevens</text>`; return; }
+  const span = Math.max(2, hi - lo), stepY = span > 16 ? 5 : span > 7 ? 2 : 1;
+  lo = Math.floor((lo - 0.5) / stepY) * stepY; hi = Math.ceil((hi + 0.5) / stepY) * stepY;
+  const x = (t) => m.l + (t - t0) / (t1 - t0) * iw, y = (v) => m.t + (hi - v) / (hi - lo) * ih;
+  let g = '';
+  for (let v = lo; v <= hi + 1e-9; v += stepY) {
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  }
+  g += `<text class="axis" x="${m.l - 6}" y="8" text-anchor="end">${unit}</text>`;
+  const first = Math.ceil(t0 / 21600) * 21600;
+  for (let t = first; t <= t1; t += 21600) {
+    const hh = new Date(t * 1000).getHours();
+    g += `<line x1="${x(t)}" x2="${x(t)}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--grid)"/><text class="axis num" x="${x(t)}" y="${H - 6}" text-anchor="middle">${String(hh).padStart(2, '0')}u</text>`;
+  }
+  const now = Date.now() / 1000;
+  lines.forEach((L) => {
+    let d = '', prev = null;
+    L.pts.forEach(([t, v]) => {
+      if (t < t0 || t > t1) { prev = null; return; }
+      if (prev && t - prev[0] > 1500) prev = null; // gat in de gegevens
+      if (!prev) d += `M${x(t).toFixed(1)},${y(v).toFixed(1)}`;
+      else if (L.step) d += `H${x(t).toFixed(1)}V${y(v).toFixed(1)}`;
+      else d += `L${x(t).toFixed(1)},${y(v).toFixed(1)}`;
+      prev = [t, v];
+    });
+    if (d) g += `<path d="${d}" fill="none" stroke="${L.color}" stroke-width="${L.w || 2}" ${L.dash ? `stroke-dasharray="${L.dash}"` : ''} stroke-linejoin="round" stroke-linecap="round"/>`;
+  });
+  g += `<line x1="${x(now)}" x2="${x(now)}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--text-2)" stroke-width="1"/>`
+    + `<text class="axis" x="${x(now) + 3}" y="${m.t - 6}">nu</text>`;
+  g += `<line id="${svg.id}-hl" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="var(--text-3)" visibility="hidden"/>`;
+  svg.innerHTML = g;
+  svg._tc = { x, t0, t1, m, iw, lines, unit };
+}
+function tempPointer(svg, tip, ev) {
+  const c = svg._tc; if (!c) return;
+  const rect = svg.getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
+  const t = c.t0 + (px - c.m.l) / c.iw * (c.t1 - c.t0);
+  if (t < c.t0 || t > c.t1) return;
+  const parts = [];
+  c.lines.forEach((L) => {
+    let best = null, bd = 1200;
+    L.pts.forEach(([pt, v]) => { const dd = Math.abs(pt - t); if (dd < bd) { bd = dd; best = v; } });
+    if (best !== null) parts.push(`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${L.color};margin-right:4px"></span>${esc(L.name)} <b>${nf1.format(best)} ${c.unit}</b>`);
+  });
+  const hl = document.getElementById(svg.id + '-hl');
+  hl.setAttribute('x1', px); hl.setAttribute('x2', px); hl.setAttribute('visibility', 'visible');
+  const d = new Date(t * 1000);
+  tip.innerHTML = `<div style="margin-bottom:2px">${d.toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</div>` + (parts.join('<br>') || 'geen gegevens');
+  tip.classList.add('on');
+  const w = tip.offsetWidth;
+  tip.style.left = Math.min(rect.width - w / 2, Math.max(w / 2, px)) + 'px';
+  tip.style.top = '0px';
+}
+function tempOut(svg, tip) {
+  tip.classList.remove('on');
+  const hl = document.getElementById(svg.id + '-hl'); if (hl) hl.setAttribute('visibility', 'hidden');
+}
+function renderTempCharts() {
+  if ($('hpView').hidden) return;
+  const ok = !!(tc && (tc.history && tc.history.length || tc.forecast));
+  $('tcRoomCard').hidden = $('tcDhwCard').hidden = $('tcHint').hidden = !ok;
+  if (!ok) return;
+  const now = Date.now() / 1000, t0 = now - 86400, t1 = now + 86400;
+  const H = tc.history || [], ts = (r) => new Date(r.t).getTime() / 1000;
+  // voorspelling: temperatuur aan het einde van elk kwartier, ingesteld vanaf het begin
+  const fpts = (f, key, end) => (f && f[key] ? f[key].map((v, i) => [new Date(f.start).getTime() / 1000 + (i + (end ? 1 : 0)) * 900, v]).filter(([, v]) => v > 0) : []);
+  const grey = 'var(--text-3)';
+  const mk = (tempKey, setKey, fTemp, fSet, cTemp, cSet, nTemp, nSet) => [
+    { name: nTemp + ' (voorspeld 24 u geleden)', color: grey, pts: fpts(tc.past, fTemp, true).filter(([t]) => t <= now), dash: '2 3', w: 1.5, legend: 'dot' },
+    { name: nSet + ' (voorspeld 24 u geleden)', color: grey, pts: fpts(tc.past, fSet, false).filter(([t]) => t <= now), dash: '2 3', w: 1, step: true, legend: '' },
+    { name: nTemp + ' (voorspeld)', color: grey, pts: fpts(tc.forecast, fTemp, true).filter(([t]) => t >= now - 900), w: 2, legend: 'line' },
+    { name: nSet + ' (voorspeld)', color: grey, pts: fpts(tc.forecast, fSet, false).filter(([t]) => t >= now - 900), dash: '5 3', w: 1.5, step: true, legend: 'dash' },
+    { name: nSet, color: cSet, pts: H.filter((r) => r[setKey] > 0).map((r) => [ts(r), r[setKey]]), dash: '5 3', w: 1.5, step: true, legend: 'dash' },
+    { name: nTemp, color: cTemp, pts: H.filter((r) => r[tempKey] > -50).map((r) => [ts(r), r[tempKey]]), w: 2.2, legend: 'line' },
+  ];
+  const leg = (lines) => lines.filter((L) => L.legend).map((L) => `<span><i class="${L.legend === 'line' ? '' : L.legend}" style="background:${L.color};border-color:${L.color}"></i>${esc(L.name)}</span>`).join('');
+  const room = mk('room', 'roomSet', 'room', 'roomSet', 'var(--c0)', 'var(--sun)', 'Kamer', 'Ingesteld');
+  const dhw = mk('dhw', 'dhwSet', 'dhw', 'dhwSet', 'var(--c7)', 'var(--c3)', 'Boiler', 'Ingesteld');
+  $('tcRoomLeg').innerHTML = leg(room); $('tcDhwLeg').innerHTML = leg(dhw);
+  drawTempChart($('tcRoom'), $('tcRoomTip'), t0, t1, room, '°C');
+  drawTempChart($('tcDhw'), $('tcDhwTip'), t0, t1, dhw, '°C');
+}
+
 /* ---------- warmteregelaar (op de Synology, poort 7080): wat hij van plan is ---------- */
 
 let reg = null;
@@ -2377,7 +2497,7 @@ function renderLpInfo() {
 
 /* ---------- laden bedienen (evcc-API; wissen via de warmteregelaar, een browser mag geen DELETE naar evcc sturen) ---------- */
 
-const ctl = { kwh: null, time: null, limLp: undefined, limBat: undefined, busy: false, msg: '', auto: null };
+const ctl = { kwh: null, time: null, limLp: undefined, busy: false, msg: '', auto: null };
 const fEur = (v) => (v === null || v === undefined ? 'uit' : nf2.format(v) + ' €');
 const hhmmOf = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 const validTime = (t) => t && new Date(t).getFullYear() > 2000;
@@ -2448,8 +2568,11 @@ function renderLpCtl() {
   $('planHint').textContent = ph;
   // prijsgrenzen
   if (ctl.limLp === undefined) ctl.limLp = x.smartCostLimit;
-  if (ctl.limBat === undefined) ctl.limBat = gw.batteryGridChargeLimit;
-  [['limLp', x.smartCostLimit], ['limBat', gw.batteryGridChargeLimit]].forEach(([id, cur]) => {
+  // thuisbatterij: geen vaste prijsgrens (evcc moet zelf plannen); staat er toch nog een, dan hier uitzetten
+  $('limBatRow').hidden = gw.batteryGridChargeLimit === null;
+  $('limBatCur').textContent = fEur(gw.batteryGridChargeLimit) + '/kWh';
+  $('limBatOff').disabled = ctl.busy;
+  [['limLp', x.smartCostLimit]].forEach(([id, cur]) => {
     const v = ctl[id];
     $(id + 'Val').textContent = fEur(v);
     $(id + 'Minus').disabled = ctl.busy; $(id + 'Plus').disabled = ctl.busy;
@@ -2457,7 +2580,7 @@ function renderLpCtl() {
     $(id + 'Off').disabled = ctl.busy || cur === null;
   });
   $('limHint').textContent = (gw.price !== null ? `Prijs nu: ${nf2.format(gw.price)} €/kWh` : 'Geen prijs van evcc.')
-    + ' (Bolt-formule; tot 1 november gesimuleerd). Ingesteld: auto ' + fEur(x.smartCostLimit) + ', batterij ' + fEur(gw.batteryGridChargeLimit) + '.';
+    + ' (Bolt-formule; tot 1 november gesimuleerd). Ingesteld: ' + fEur(x.smartCostLimit) + '.';
 }
 function stepLim(id, d) {
   const v = ctl[id];
@@ -2532,7 +2655,7 @@ async function changeLp(period, k) {
 
 function openView(id) { $(id).hidden = false; document.body.style.overflow = 'hidden'; }
 function closeView(id) { $(id).hidden = true; document.body.style.overflow = ''; }
-function openHp() { openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); }
+function openHp() { openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); loadTempCharts().then(renderTempCharts); }
 
 const TABS = { elek: 'tabElek', verw: 'tabVerw', lp: 'tabLp' };
 function showTab(t) {
@@ -2548,7 +2671,7 @@ function showTab(t) {
   }
   if (config.tab === 'lp') {
     renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {});
-    Object.assign(ctl, { kwh: null, time: null, limLp: undefined, limBat: undefined });
+    Object.assign(ctl, { kwh: null, time: null, limLp: undefined });
     loadAutoPlan().then(renderLpCtl); renderLpCtl();
   }
 }
@@ -2624,6 +2747,7 @@ async function tickDay() {
     loadSessions().catch(() => {});
     if (!$('devView').hidden && dev.mode !== 'now' && dev.k === 0) { await loadDev(); renderDev(); }
     if (!$('hpView').hidden && hpv.k === 0) { await loadHpHist(); renderHpView(); }
+    if (!$('hpView').hidden) { await loadTempCharts(); renderTempCharts(); }
     if (!$('tabLp').hidden && lpv.k === 0) { await loadLpHist(); renderLpView(); }
     if (!$('tabVerw').hidden) { await loadSched(); renderSched(); }
   } catch (e) { showError(e); }
@@ -2855,12 +2979,11 @@ $('planKwhPlus').onclick = () => { ctl.kwh = Math.min(80, ctl.kwh + 1); renderLp
 $('planSet').onclick = setPlan;
 $('planDel').onclick = delPlan;
 $('planAuto').onchange = () => setAuto($('planAuto').checked);
-['limLp', 'limBat'].forEach((id) => {
-  $(id + 'Minus').onclick = () => stepLim(id, -0.01);
-  $(id + 'Plus').onclick = () => stepLim(id, 0.01);
-  $(id + 'Set').onclick = () => setLim(id, false);
-  $(id + 'Off').onclick = () => setLim(id, true);
-});
+$('limLpMinus').onclick = () => stepLim('limLp', -0.01);
+$('limLpPlus').onclick = () => stepLim('limLp', 0.01);
+$('limLpSet').onclick = () => setLim('limLp', false);
+$('limLpOff').onclick = () => setLim('limLp', true);
+$('limBatOff').onclick = () => setLim('limBat', true);
 $('openSettings').onclick = openSettings;
 $('cancelSettings').onclick = closeSettings;
 $('sheetBg').onclick = closeSettings;
@@ -2869,7 +2992,12 @@ const cw = $('chartWrap');
 cw.addEventListener('pointermove', (e) => chartPointer($('chart'), $('tip'), e));
 cw.addEventListener('pointerdown', (e) => chartPointer($('chart'), $('tip'), e));
 cw.addEventListener('pointerleave', () => chartOut($('chart'), $('tip')));
-window.addEventListener('resize', () => { renderHist(); renderDev(); renderHpView(); renderLpView(); });
+window.addEventListener('resize', () => { renderHist(); renderDev(); renderHpView(); renderLpView(); renderTempCharts(); });
+[['tcRoomWrap', 'tcRoom', 'tcRoomTip'], ['tcDhwWrap', 'tcDhw', 'tcDhwTip']].forEach(([w, c, t]) => {
+  $(w).addEventListener('pointermove', (e) => tempPointer($(c), $(t), e));
+  $(w).addEventListener('pointerdown', (e) => tempPointer($(c), $(t), e));
+  $(w).addEventListener('pointerleave', () => tempOut($(c), $(t)));
+});
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
 
 showTab(config.tab);

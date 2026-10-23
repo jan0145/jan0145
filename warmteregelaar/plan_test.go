@@ -303,3 +303,24 @@ func TestLearnDHWUse(t *testing.T) {
 		t.Fatalf("opwarmkwartier geleerd: %v", st.Learned.use()[1][81])
 	}
 }
+
+func TestForecastRoom(t *testing.T) {
+	c, s, l := defaultConfig(), defaultSchedule(22, 20, 40, 48), defaultLearned()
+	room, set := forecastRoom(c, s, l, at(13, 0), 20, 5, 20, nil)
+	idx := func(h, m int) int { return int(at(h, m).Sub(at(13, 0)) / quarter) }
+	if set[idx(13, 0)] != 20 || set[idx(13, 45)] != 22 {
+		t.Fatalf("ingesteld: %v", set[:12])
+	}
+	if room[idx(15, 45)] < 21.9 {
+		t.Fatalf("om 16:00 nog maar %.1f °C", room[idx(15, 45)])
+	}
+	// na 22 u eco: langzaam afkoelen, nooit onder de ingestelde 20 °C
+	if r := room[idx(23, 45)]; r > 22 || r < 21 {
+		t.Fatalf("afkoelen: 00:00 %.1f °C", r)
+	}
+	for i, r := range room {
+		if r < 20-1e-9 {
+			t.Fatalf("onder eco op kwartier %d: %.1f", i, r)
+		}
+	}
+}

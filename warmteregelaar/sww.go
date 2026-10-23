@@ -10,7 +10,7 @@ package main
 // - opwarmen: geleerde opwarmsnelheid (°C per uur).
 //
 // Eisen: in een periode van het weekschema minstens de temperatuur van die periode (min 2 °C: zo werkt de
-// warmtepomp ook, hij warmt pas bij te koud), daarbuiten minstens de gewone temperatuur (40 °C).
+// warmtepomp ook, hij warmt pas bij te koud), daarbuiten altijd minstens de gewone temperatuur (40 °C).
 // Waar de voorspelling te laag komt, voegt de regelaar het goedkoopste kwartier ervóór toe om op te warmen
 // (netprijs, of bij verwachte zon de gemiste terugleververgoeding; warmer opwarmen telt duurder, want de
 // warmtepomp werkt dan minder zuinig). Dat herhaalt hij tot alles klopt. Of het dus 's nachts 55 °C wordt en
@@ -83,7 +83,7 @@ func dhwRequirement(s Schedule, t time.Time) (float64, bool) {
 			return p.Temp - dhwHysteresis, true
 		}
 	}
-	return s.DHWBase - dhwHysteresis, false
+	return s.DHWBase, false // buiten de periodes altijd minstens de gewone temperatuur (40 °C)
 }
 
 // kost van opwarmen in een kwartier (€/kWh, relatief): netprijs, of bij verwachte zon de terugleververgoeding

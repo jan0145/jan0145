@@ -11,7 +11,7 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
   (hoe warmer, hoe meer), het **verbruik** (douches, bad, afwas) zoals hij het per weekdag en kwartier geleerd
   heeft, en hoe snel de warmtepomp de boiler opwarmt.
 - Eis: in elke periode van het weekschema minstens de temperatuur van die periode (min 2 °C: bij 48 °C is 46 °C
-  nog goed, zo werkt de warmtepomp ook), daarbuiten minstens 38 °C (gewoon 40 °C).
+  nog goed, zo werkt de warmtepomp ook), daarbuiten altijd minstens 40 °C.
 - Waar de voorspelling te laag komt, kiest hij het goedkoopste kwartier ervóór om op te warmen: netprijs, of bij
   verwachte zon de gemiste terugleververgoeding. Warmer opwarmen telt duurder (lagere COP), een aparte beurt ook.
   Of het dus 's nachts tot 55 °C gaat en daarmee de hele dag, of 48 °C en later nog eens bij: dat rekent hij uit.
@@ -95,3 +95,11 @@ nacht automatisch" aan, dan zet de regelaar dat plan elke keer opnieuw zodra de 
 (`GET/POST /laadplan`). Wist je het plan zelf, dan zet hij het voor die ochtend niet opnieuw.
 Opdrachten die een browser niet rechtstreeks naar evcc mag sturen (een plan of prijsgrens wissen), geeft hij door
 via `/evcc?m=DELETE&p=/api/…` (alleen laadpunten en prijsgrenzen).
+
+## Grafieken
+
+`GET /grafiek` geeft de laatste 24 uur (kamer, ingestelde kamertemperatuur, boiler, ingestelde boilertemperatuur,
+uit de maandbestanden), de voorspelling voor de komende 24 uur en de voorspelling die 24 uur geleden gemaakt werd
+(elk uur bewaard). De Stroom-app toont dat bij de warmtepomp: gemeten in kleur, voorspeld in grijs.
+De kamervoorspelling: ingestelde temperatuur volgens het schema (met voorverwarmen), opwarmen met de geleerde
+snelheid, afkoelen naar buiten toe met een geleerde afkoeling (uit de eco-uren).
