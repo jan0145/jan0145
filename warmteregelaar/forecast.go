@@ -159,6 +159,9 @@ type histRow struct {
 	RoomSet float64   `json:"roomSet"`
 	DHW     float64   `json:"dhw"`
 	DHWSet  float64   `json:"dhwSet"`
+	// zelf ingesteld (bediening of app) in plaats van de regelaar
+	RoomManual bool `json:"roomManual,omitempty"`
+	DHWManual  bool `json:"dhwManual,omitempty"`
 }
 
 // geschiedenis uit de maandbestanden warmte-JJJJ-MM.csv (elke 5 min een regel)
@@ -180,7 +183,11 @@ func readHistory(from, to time.Time) []histRow {
 				continue
 			}
 			num := func(s string) float64 { v, _ := strconv.ParseFloat(s, 64); return v }
-			rows = append(rows, histRow{T: t, Tout: num(c[1]), Room: num(c[2]), RoomSet: num(c[3]), DHW: num(c[5]), DHWSet: num(c[6])})
+			row := histRow{T: t, Tout: num(c[1]), Room: num(c[2]), RoomSet: num(c[3]), DHW: num(c[5]), DHWSet: num(c[6])}
+			if len(c) >= 15 { // oudere regels hebben deze kolommen niet
+				row.RoomManual, row.DHWManual = c[13] == "1", c[14] == "1"
+			}
+			rows = append(rows, row)
 		}
 		f.Close()
 	}

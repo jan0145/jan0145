@@ -131,8 +131,9 @@ type Status struct {
 		LeadMinutes          float64
 		Override             time.Time
 	} `json:"heat"`
-	Learned Learned `json:"learned"`
-	Error   string  `json:"error,omitempty"`
+	Learned Learned   `json:"learned"`
+	Battery battState `json:"battery"`
+	Error   string    `json:"error,omitempty"`
 }
 
 var (
@@ -460,7 +461,7 @@ func step(now time.Time) {
 
 	if now.Sub(st.LastLog) >= 5*time.Minute {
 		p, _ := priceAt(prices, now)
-		writeCSV(now, hm, tin, want, plan.Target, p)
+		writeCSV(now, hm, tin, want, plan.Target, p, now.Before(st.Override), now.Before(st.DHWOverride))
 		st.LastLog = now
 	}
 	saveState()
@@ -633,7 +634,7 @@ func learnPreheat(now time.Time, tin, tout float64, p HeatPlan, set, eco float64
 
 // ---------- logboek (CSV, per maand) ----------
 
-func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64) {
+func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64, roomManual, dhwManual bool) {
 	fn := filepath.Join(dataDir, "warmte-"+now.Format("2006-01")+".csv")
 	_, err := os.Stat(fn)
 	f, e2 := os.OpenFile(fn, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -642,12 +643,19 @@ func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64) {
 	}
 	defer f.Close()
 	if os.IsNotExist(err) {
-		fmt.Fprintln(f, "tijd;buiten;kamer;kamer_doel;kamer_regelaar;boiler;boiler_doel;boiler_regelaar;driewegklep;compressor_hz;warmte_w;elektrisch_w;prijs")
+		fmt.Fprintln(f, "tijd;buiten;kamer;kamer_doel;kamer_regelaar;boiler;boiler_doel;boiler_regelaar;driewegklep;compressor_hz;warmte_w;elektrisch_w;prijs;kamer_manueel;boiler_manueel")
 	}
-	fmt.Fprintf(f, "%s;%.1f;%.1f;%.0f;%.0f;%.1f;%.0f;%.0f;%.0f;%.0f;%.0f;%.0f;%.4f\n", now.Format("2006-01-02 15:04"),
+	b01 := func(b bool) int {
+		if b {
+			return 1
+		}
+		return 0
+	}
+	fmt.Fprintf(f, "%s;%.1f;%.1f;%.0f;%.0f;%.1f;%.0f;%.0f;%.0f;%.0f;%.0f;%.0f;%.4f;%d;%d\n", now.Format("2006-01-02 15:04"),
 		hm["Outside_Temp"], tin, hm["Z1_Heat_Request_Temp"], heatWant, hm["DHW_Temp"], hm["DHW_Target_Temp"], dhwWant,
 		hm["ThreeWay_Valve_State"], hm["Compressor_Freq"],
-		hm["Heat_Power_Production"]+hm["DHW_Power_Production"], hm["Heat_Power_Consumption"]+hm["DHW_Power_Consumption"], price)
+		hm["Heat_Power_Production"]+hm["DHW_Power_Production"], hm["Heat_Power_Consumption"]+hm["DHW_Power_Consumption"], price,
+		b01(roomManual), b01(dhwManual))
 }
 
 // ---------- HTTP: voor evcc (boiler bij zonne-overschot) en de Stroom-app ----------
@@ -770,6 +778,7 @@ func serve() {
 	serveForecast(h)
 	h.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
+		st.Status.Battery = batt
 		b, _ := json.Marshal(st.Status)
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -796,7 +805,9 @@ func main() {
 	sc := schedule()
 	log.Printf("stand %s · boiler gewoon %.0f °C, zonne-overschot %.0f °C (veel: %.0f °C) · kamer eco %.0f °C, vakantie %.0f °C (weekschema: /schedule)",
 		sc.Mode, sc.DHWBase, cfg.DHWBoost, cfg.DHWBoostHot, sc.Eco, sc.Away)
+	log.Printf("thuisbatterij: volgt het advies van de evcc-optimizer, %s", map[bool]string{true: "STUURT (BATT=1)", false: "PROEF (BATT=0, alleen loggen)"}[battAct])
 	go pollHM()
+	go battLoop()
 	go serve()
 	time.Sleep(3 * time.Second) // eerste HeishaMon-gegevens afwachten
 	for {

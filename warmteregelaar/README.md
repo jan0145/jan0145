@@ -103,3 +103,16 @@ uit de maandbestanden), de voorspelling voor de komende 24 uur en de voorspellin
 (elk uur bewaard). De Stroom-app toont dat bij de warmtepomp: gemeten in kleur, voorspeld in grijs.
 De kamervoorspelling: ingestelde temperatuur volgens het schema (met voorverwarmen), opwarmen met de geleerde
 snelheid, afkoelen naar buiten toe met een geleerde afkoeling (uit de eco-uren).
+
+## Thuisbatterij volgens de optimizer van evcc
+
+De optimizer van evcc (experimenteel, met sponsor-token) rekent met prijzen, zonneprognose, verwacht verbruik en de
+kwartierpiek uit wanneer de batterij best uit het net laadt, de lading vasthoudt of gewoon werkt. In evcc 0.316 is
+dat nog alleen een advies. De regelaar volgt het (`batterij.go`):
+
+- `BATT=0` (standaard): proef, in het logboek staat wat hij zou doen ("batterij (proef): …");
+- `BATT=1`: hij zet de batterijmodus van evcc (`/api/batterymode/…`) en herhaalt dat elke 30 s. evcc zet een
+  extern gezette modus na 1 minuut zelf terug naar normaal: valt de regelaar weg, dan werkt de batterij gewoon.
+- Nooit uit het net laden als de afname al boven 4,5 kW zit (kwartierpiek); ontladen naar het net doet hij niet.
+
+Voorwaarde: in evcc menu → Instellingen → "Experimentele functies" aan, daarna menu → Configuratie → "Optimizer" aan.

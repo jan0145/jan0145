@@ -615,7 +615,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
         <div class="tip" id="tcDhwTip"></div>
       </div>
     </section>
-    <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten. Grijs: voorspeld door de warmteregelaar; rechts van "nu" de huidige voorspelling, links (gestippeld) wat 24 uur geleden voorspeld werd.</p>
+    <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten. Grijs: voorspeld door de warmteregelaar (links van "nu" wat er 24 uur geleden voorspeld werd). Rood: zelf ingestelde temperatuur.</p>
     <div class="seg wide" role="group" aria-label="Periode" id="hpSeg">
       <button data-p="day" aria-pressed="true">Dag</button>
       <button data-p="week" aria-pressed="false">Week</button>
@@ -1954,7 +1954,7 @@ function drawTempChart(svg, tip, t0, t1, lines, unit) {
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   let lo = Infinity, hi = -Infinity;
-  lines.forEach((L) => L.pts.forEach(([, v]) => { lo = Math.min(lo, v); hi = Math.max(hi, v); }));
+  lines.forEach((L) => L.pts.forEach(([, v]) => { if (v !== null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
   if (!isFinite(lo)) { svg.innerHTML = `<text class="axis" x="${W / 2}" y="${H / 2}" text-anchor="middle">Nog geen gegevens</text>`; return; }
   const span = Math.max(2, hi - lo), stepY = span > 16 ? 5 : span > 7 ? 2 : 1;
   lo = Math.floor((lo - 0.5) / stepY) * stepY; hi = Math.ceil((hi + 0.5) / stepY) * stepY;
@@ -1973,7 +1973,7 @@ function drawTempChart(svg, tip, t0, t1, lines, unit) {
   lines.forEach((L) => {
     let d = '', prev = null;
     L.pts.forEach(([t, v]) => {
-      if (t < t0 || t > t1) { prev = null; return; }
+      if (t < t0 || t > t1 || v === null) { prev = null; return; }
       if (prev && t - prev[0] > 1500) prev = null; // gat in de gegevens
       if (!prev) d += `M${x(t).toFixed(1)},${y(v).toFixed(1)}`;
       else if (L.step) d += `H${x(t).toFixed(1)}V${y(v).toFixed(1)}`;
@@ -1996,8 +1996,8 @@ function tempPointer(svg, tip, ev) {
   const parts = [];
   c.lines.forEach((L) => {
     let best = null, bd = 1200;
-    L.pts.forEach(([pt, v]) => { const dd = Math.abs(pt - t); if (dd < bd) { bd = dd; best = v; } });
-    if (best !== null) parts.push(`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${L.color};margin-right:4px"></span>${esc(L.name)} <b>${nf1.format(best)} ${c.unit}</b>`);
+    L.pts.forEach(([pt, v]) => { const dd = Math.abs(pt - t); if (v !== null && dd < bd) { bd = dd; best = v; } });
+    if (best !== null && !L.noTip) parts.push(`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${L.color};margin-right:4px"></span>${esc(L.name)} <b>${nf1.format(best)} ${c.unit}</b>`);
   });
   const hl = document.getElementById(svg.id + '-hl');
   hl.setAttribute('x1', px); hl.setAttribute('x2', px); hl.setAttribute('visibility', 'visible');
@@ -2022,17 +2022,26 @@ function renderTempCharts() {
   // voorspelling: temperatuur aan het einde van elk kwartier, ingesteld vanaf het begin
   const fpts = (f, key, end) => (f && f[key] ? f[key].map((v, i) => [new Date(f.start).getTime() / 1000 + (i + (end ? 1 : 0)) * 900, v]).filter(([, v]) => v > 0) : []);
   const grey = 'var(--text-3)';
-  const mk = (tempKey, setKey, fTemp, fSet, cTemp, cSet, nTemp, nSet) => [
-    { name: nTemp + ' (voorspeld 24 u geleden)', color: grey, pts: fpts(tc.past, fTemp, true).filter(([t]) => t <= now), dash: '2 3', w: 1.5, legend: 'dot' },
-    { name: nSet + ' (voorspeld 24 u geleden)', color: grey, pts: fpts(tc.past, fSet, false).filter(([t]) => t <= now), dash: '2 3', w: 1, step: true, legend: '' },
-    { name: nTemp + ' (voorspeld)', color: grey, pts: fpts(tc.forecast, fTemp, true).filter(([t]) => t >= now - 900), w: 2, legend: 'line' },
-    { name: nSet + ' (voorspeld)', color: grey, pts: fpts(tc.forecast, fSet, false).filter(([t]) => t >= now - 900), dash: '5 3', w: 1.5, step: true, legend: 'dash' },
-    { name: nSet, color: cSet, pts: H.filter((r) => r[setKey] > 0).map((r) => [ts(r), r[setKey]]), dash: '5 3', w: 1.5, step: true, legend: 'dash' },
-    { name: nTemp, color: cTemp, pts: H.filter((r) => r[tempKey] > -50).map((r) => [ts(r), r[tempKey]]), w: 2.2, legend: 'line' },
-  ];
+  // voorspelling: altijd een volle grijze lijn, ook het stuk dat al voorbij is (de voorspelling van 24 u geleden);
+  // gemeten in kleur, de ingestelde temperatuur in rood waar ze zelf ingesteld werd
+  const mk = (tempKey, setKey, manKey, cTemp, cSet, nTemp, nSet) => {
+    const pastT = fpts(tc.past, tempKey, true).filter(([t]) => t <= now), curT = fpts(tc.forecast, tempKey, true).filter(([t]) => t >= now - 900);
+    const pastS = fpts(tc.past, setKey, false).filter(([t]) => t <= now), curS = fpts(tc.forecast, setKey, false).filter(([t]) => t >= now - 900);
+    const setH = H.filter((r) => r[setKey] > 0);
+    const man = setH.some((r) => r[manKey]);
+    return [
+      { name: 'Voorspeld', color: grey, pts: pastS, w: 1.2, step: true, noTip: true },
+      { name: 'Voorspeld ingesteld', color: grey, pts: curS, w: 1.2, step: true },
+      { name: 'Voorspeld (24 u geleden)', color: grey, pts: pastT, w: 2 },
+      { name: 'Voorspeld', color: grey, pts: curT, w: 2, legend: 'line' },
+      { name: nSet, color: cSet, pts: setH.map((r) => [ts(r), r[manKey] ? null : r[setKey]]), dash: '5 3', w: 1.5, step: true, legend: 'dash' },
+      { name: 'Zelf ingesteld', color: 'var(--bad)', pts: setH.map((r) => [ts(r), r[manKey] ? r[setKey] : null]), w: 2, step: true, legend: man ? 'line' : '' },
+      { name: nTemp, color: cTemp, pts: H.filter((r) => r[tempKey] > -50).map((r) => [ts(r), r[tempKey]]), w: 2.2, legend: 'line' },
+    ];
+  };
   const leg = (lines) => lines.filter((L) => L.legend).map((L) => `<span><i class="${L.legend === 'line' ? '' : L.legend}" style="background:${L.color};border-color:${L.color}"></i>${esc(L.name)}</span>`).join('');
-  const room = mk('room', 'roomSet', 'room', 'roomSet', 'var(--c0)', 'var(--sun)', 'Kamer', 'Ingesteld');
-  const dhw = mk('dhw', 'dhwSet', 'dhw', 'dhwSet', 'var(--c7)', 'var(--c3)', 'Boiler', 'Ingesteld');
+  const room = mk('room', 'roomSet', 'roomManual', 'var(--c0)', 'var(--sun)', 'Kamer', 'Ingesteld');
+  const dhw = mk('dhw', 'dhwSet', 'dhwManual', 'var(--c6)', 'var(--c3)', 'Boiler', 'Ingesteld');
   $('tcRoomLeg').innerHTML = leg(room); $('tcDhwLeg').innerHTML = leg(dhw);
   drawTempChart($('tcRoom'), $('tcRoomTip'), t0, t1, room, '°C');
   drawTempChart($('tcDhw'), $('tcDhwTip'), t0, t1, dhw, '°C');

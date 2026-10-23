@@ -324,3 +324,23 @@ func TestForecastRoom(t *testing.T) {
 		}
 	}
 }
+
+func TestBattDecide(t *testing.T) {
+	for _, c := range []struct {
+		advice string
+		grid   float64
+		mode   string
+	}{
+		{"charge", 1200, "charge"},
+		{"charge", 4800, "hold"}, // kwartierpiek: niet nog extra laden
+		{"hold", 300, "hold"},
+		{"holdcharge", -2000, "holdcharge"},
+		{"discharge", -500, ""},
+		{"normal", 0, ""},
+		{"", 0, ""},
+	} {
+		if m, _ := battDecide(c.advice, c.grid); m != c.mode {
+			t.Fatalf("%s bij %v W: %q", c.advice, c.grid, m)
+		}
+	}
+}
