@@ -12,8 +12,9 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
 - 's Nachts (00–07 u) één beurt tot **55 °C** in de **goedkoopste kwartieren** — niet als er de volgende dag
   tussen 10 en 16 u veel zon verwacht wordt (≥ 12 kWh), want dan doet de zon het.
 - Bij **zonne-overschot** (evcc beslist, na de auto): 55 °C.
-- In de 5 uur vóór een periode: zakt de boiler zo dat hij bij het begin de temperatuur niet zou halen, dan
-  bijwarmen tot 4 °C erboven (bv. 52 °C voor 48 °C) in de goedkoopste kwartieren ervoor.
+- In de 5 uur vóór een periode: zakt de boiler tegen het begin meer dan 2 °C onder de temperatuur van de periode
+  (dan zou de warmtepomp zelf bijwarmen), dan al bijwarmen tot die temperatuur (niet warmer) in de goedkoopste
+  kwartieren ervoor. De geleerde afkoeling telt daarbij voor hoogstens 1 °C per uur (tappen is geen afkoeling).
 - Een begonnen beurt loopt door tot de boiler warm is (geen aan/uit-gependel).
 
 **Verwarming**
@@ -23,6 +24,7 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
   **leert** hij: elke keer meet hij hoeveel minuten het huis nodig had per °C, bij welke buitentemperatuur.
   Zolang er nog geen 4 metingen zijn, rekent hij met een voorzichtige schatting.
 - Is het tot een uur vroeger beginnen goedkoper, dan doet hij dat (rekening houdend met het extra verbruik).
+- Een begonnen voorverwarming loopt door tot het begin van de periode (geen aan/uit-gependel).
 - Zet iemand zelf de thermostaat anders (bediening of Stroom-app), dan geldt dat tot het volgende omslagpunt.
 - Zet iemand zelf de boiler anders (bv. hoger voor een bad), dan volgt de regelaar dat tot de boiler warm is,
   hoogstens 3 uur. Na een eigen commando wacht de regelaar 2 minuten voor hij een afwijking als "zelf ingesteld"

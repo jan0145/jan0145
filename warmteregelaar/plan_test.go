@@ -72,18 +72,27 @@ func TestDHWNight(t *testing.T) {
 
 func TestDHWBeforeEvening(t *testing.T) {
 	c, s, l := defaultConfig(), defaultSchedule(22, 20, 40, 48), defaultLearned()
-	// 44 °C om 15:00, afkoeling 0,4/u → 43,2 om 17 u: bijwarmen tot 52, nodig 5 kwartieren
+	// 44 °C om 15:00, afkoeling 0,4/u → 43,2 om 17 u (< 48 − 2): bijwarmen tot 48, nodig 2 kwartieren
 	cheap := map[time.Time]float64{at(15, 0): 0.05, at(15, 15): 0.05, at(15, 30): 0.05, at(15, 45): 0.05, at(16, 0): 0.05}
 	pr := prices(cheap)
-	if v, w := DHWTarget(c, s, l, DHWInput{Now: at(15, 5), Temp: 44, Prices: pr}); v != 52 {
+	if v, w := DHWTarget(c, s, l, DHWInput{Now: at(15, 5), Temp: 44, Prices: pr}); v != 48 {
 		t.Fatalf("bijwarmen: %v %s", v, w)
 	}
-	// warm genoeg: niets doen
+	// warm genoeg: niets doen (ook 46,5 °C volstaat: de warmtepomp warmt zelf pas bij onder 46 °C)
 	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(15, 5), Temp: 51, Prices: pr}); v != 40 {
 		t.Fatalf("warm genoeg: %v", v)
 	}
+	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(15, 5), Temp: 47, Prices: pr}); v != 40 {
+		t.Fatalf("warm genoeg: %v", v)
+	}
+	// een grote geleerde afkoeling (bad, douche) mag niet tot een overdreven voorspelling leiden
+	big := l
+	big.DHWCoolRate = 5
+	if v, w := DHWTarget(c, s, big, DHWInput{Now: at(15, 5), Temp: 49, Prices: pr}); v != 40 {
+		t.Fatalf("afkoeling begrensd: %v %s", v, w)
+	}
 	// te laat om te wachten: meteen
-	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(16, 30), Temp: 42, Prices: prices(nil)}); v != 52 {
+	if v, _ := DHWTarget(c, s, l, DHWInput{Now: at(16, 30), Temp: 42, Prices: prices(nil)}); v != 48 {
 		t.Fatalf("laatste moment: %v", v)
 	}
 }
@@ -103,6 +112,14 @@ func TestHeat(t *testing.T) {
 	}
 	if p := HeatTarget(c, s, l, HeatInput{Now: at(13, 45), Tin: 20, Tout: 5}); p.Target != 22 {
 		t.Fatalf("voorverwarmen: %+v", p)
+	}
+	// begonnen voorverwarming loopt door, ook als de kamer al warmer is en de opwarmtijd dus korter
+	if p := HeatTarget(c, s, l, HeatInput{Now: at(14, 30), Tin: 21.5, Tout: 5, Prev: 22}); p.Target != 22 || !strings.Contains(p.Why, "voorverwarmen") {
+		t.Fatalf("voorverwarmen loopt door: %+v", p)
+	}
+	// maar niet uren op voorhand (na het ochtendvenster)
+	if p := HeatTarget(c, s, l, HeatInput{Now: at(7, 35), Tin: 22, Tout: 5, Prev: 22}); p.Target != 20 {
+		t.Fatalf("na het venster: %+v", p)
 	}
 	// goedkoper 30 min vroeger → vroeger starten
 	cheap := map[time.Time]float64{}

@@ -52,6 +52,10 @@ type PreheatSample struct {
 
 func defaultLearned() Learned { return Learned{DHWHeatRate: 8, DHWCoolRate: 0.4} }
 
+// afkoeling om vooruit te rekenen: hoogstens 1 °C per uur (een geïsoleerde boiler zonder tappen koelt trager;
+// een bad of douche is geen afkoeling en mag de voorspelling niet laten ontsporen)
+func (l Learned) coolRate() float64 { return clamp(l.DHWCoolRate, 0, 1) }
+
 // LeadMinutes: hoeveel minuten voor het venster de verwarming hoger moet om op tijd warm te zijn.
 // Zonder metingen een voorzichtige schatting; met ≥ 4 metingen een rechte door de metingen
 // (minuten per °C bijwarmen, afhankelijk van de buitentemperatuur).
@@ -226,14 +230,15 @@ func DHWTarget(c Config, s Schedule, l Learned, in DHWInput) (float64, string) {
 		}
 	}
 
-	// voor een periode: haalt de boiler bij het begin de temperatuur niet, dan bijwarmen in de goedkoopste
-	// kwartieren ervoor (tot 4 °C boven de periode, zodat hij de hele periode volstaat)
+	// voor een periode: zakt de boiler tegen het begin meer dan 2 °C onder de temperatuur van de periode (dan zou
+	// de warmtepomp zelf bijwarmen, met zijn eigen marge van 2 °C), dan al bijwarmen tot die temperatuur in de
+	// goedkoopste kwartieren ervoor. Niet warmer dan de periode vraagt.
 	if ps, p, ok := nextPeriod(s.DHW, now, s.DHWBase); ok && ps.Sub(now) <= time.Duration(c.PrepHours)*time.Hour {
 		if _, inside := periodAt(s.DHW, now); !inside || p.Temp > target {
-			prep := math.Min(c.DHWBoost, p.Temp+4)
+			prep := p.Temp
 			hours := ps.Sub(now).Hours()
-			atStart := in.Temp - math.Max(0, l.DHWCoolRate)*hours
-			if atStart < p.Temp+1 {
+			atStart := in.Temp - l.coolRate()*hours
+			if atStart < p.Temp-2 {
 				need := int(clamp(math.Ceil((prep-atStart)/rate*4), 1, 16))
 				left := int(math.Ceil(ps.Sub(now.Truncate(15*time.Minute)).Minutes() / 15))
 				if left <= need || containsQuarter(cheapestQuarters(in.Prices, now, ps, need), now) {
@@ -252,6 +257,7 @@ type HeatInput struct {
 	Now    time.Time
 	Tin    float64
 	Tout   float64
+	Prev   float64 // doel van de vorige ronde: een begonnen voorverwarming loopt door
 	Prices []Rate
 }
 
@@ -307,7 +313,10 @@ func HeatTarget(c Config, s Schedule, l Learned, in HeatInput) HeatPlan {
 		}
 	}
 	plan.PreheatStart = best
-	if !now.Before(best) {
+	// begonnen voorverwarming loopt door tot het begin van de periode: naarmate de kamer warmer wordt, wordt de
+	// berekende opwarmtijd korter en zou het startmoment anders telkens verschuiven (aan/uit-gependel)
+	started := in.Prev == next.Temp && ws.Sub(now) <= time.Duration(lead+float64(c.MaxEarlyMinutes)+60)*time.Minute
+	if !now.Before(best) || started {
 		plan.Target = next.Temp
 		plan.Why = fmt.Sprintf("voorverwarmen naar %.0f °C voor %s (±%.0f min nodig)", next.Temp, ws.Format("15:04"), lead)
 	}

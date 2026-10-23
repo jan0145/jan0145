@@ -63,6 +63,7 @@ type State struct {
 	SentDHW  float64   `json:"sentDHW"`
 	SentZ1   float64   `json:"sentZ1"`
 	PrevDHW  float64   `json:"prevDHW"`
+	PrevZ1   float64   `json:"prevZ1"`   // vorig doel van de regelaar voor de kamer
 	Override time.Time `json:"override"` // tot wanneer een manuele aanpassing van de kamertemperatuur voorgaat
 	// manuele aanpassing van de boiler (bv. voor een bad): geldt tot de boiler warm is, hoogstens 3 uur
 	DHWOverride time.Time `json:"dhwOverride"`
@@ -343,7 +344,8 @@ func step(now time.Time) {
 	}
 
 	// verwarming (alleen als de warmtepomp met een kamertemperatuur werkt, niet met een stooklijnverschuiving)
-	plan := HeatTarget(cfg, sc, st.Learned, HeatInput{Now: now, Tin: tin, Tout: tout, Prices: prices})
+	plan := HeatTarget(cfg, sc, st.Learned, HeatInput{Now: now, Tin: tin, Tout: tout, Prev: st.PrevZ1, Prices: prices})
+	st.PrevZ1 = plan.Target
 	s.Heat.Tin, s.Heat.Tout, s.Heat.Set, s.Heat.Want, s.Heat.Why = tin, tout, z1, plan.Target, plan.Why
 	s.Heat.NextWindow, s.Heat.PreheatStart, s.Heat.LeadMinutes = plan.NextWindow, plan.PreheatStart, plan.LeadMinutes
 	if plan.Target == 0 {
@@ -470,7 +472,7 @@ func learnDHW(now time.Time, temp float64, heating bool) {
 		st.DHWMark = &mark{now, temp, heating}
 	} else if !heating && h >= 2 {
 		r := (m.Temp - temp) / h
-		if r >= 0 && r < 5 {
+		if r >= 0 && r < 2 { // sneller = er werd warm water getapt, dat is geen afkoeling
 			st.Learned.DHWCoolRate = 0.8*st.Learned.DHWCoolRate + 0.2*r
 		}
 		st.DHWMark = &mark{now, temp, heating}
@@ -581,7 +583,7 @@ func serve() {
 			markDHWOverride(now, v)
 		}
 		if v, err := strconv.ParseFloat(q.Get("SetZ1HeatRequestTemperature"), 64); err == nil {
-			plan := HeatTarget(cfg, schedule(), st.Learned, HeatInput{Now: now, Tin: st.Status.Heat.Tin, Tout: st.Status.Heat.Tout, Prices: readRates("grid")})
+			plan := HeatTarget(cfg, schedule(), st.Learned, HeatInput{Now: now, Tin: st.Status.Heat.Tin, Tout: st.Status.Heat.Tout, Prev: st.PrevZ1, Prices: readRates("grid")})
 			st.Override, st.SentZ1, st.SentZ1At = nextBoundary(now, plan), v, now
 			log.Printf("kamertemperatuur zelf op %.0f °C gezet: de regelaar wacht tot %s", v, st.Override.Format("02/01 15:04"))
 		}
