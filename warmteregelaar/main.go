@@ -77,7 +77,10 @@ type State struct {
 	Preheat *preheatRun `json:"preheat,omitempty"`
 	DHWMark *mark       `json:"dhwMark,omitempty"`
 	LastLog time.Time   `json:"lastLog"`
-	Status  Status      `json:"-"`
+	// laadplan voor de auto (zie laden.go)
+	ChargePlan    ChargePlan `json:"chargePlan"`
+	ChargePlanFor time.Time  `json:"chargePlanFor"` // vertrektijd waarvoor het plan al gezet is
+	Status        Status     `json:"-"`
 }
 
 type preheatRun struct {
@@ -134,8 +137,12 @@ func statePath() string { return filepath.Join(dataDir, "warmteregelaar-state.js
 
 func loadState() {
 	st.Learned = defaultLearned()
+	st.ChargePlan = defaultChargePlan()
 	if b, err := os.ReadFile(statePath()); err == nil {
 		_ = json.Unmarshal(b, &st)
+	}
+	if st.ChargePlan.KWh == 0 {
+		st.ChargePlan = defaultChargePlan()
 	}
 }
 func saveState() {
@@ -640,6 +647,7 @@ func serve() {
 		mu.Unlock()
 		fmt.Fprint(w, mode)
 	})
+	serveCharge(h)
 	h.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		b, _ := json.Marshal(st.Status)
@@ -672,6 +680,7 @@ func main() {
 	time.Sleep(3 * time.Second) // eerste HeishaMon-gegevens afwachten
 	for {
 		step(time.Now())
+		checkChargePlan(time.Now())
 		time.Sleep(tick)
 	}
 }

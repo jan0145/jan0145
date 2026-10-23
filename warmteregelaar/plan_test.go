@@ -214,3 +214,37 @@ func TestScheduleJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestChargePlan(t *testing.T) {
+	if v := nextPlanTime(at(22, 0), "07:00"); !v.Equal(time.Date(2026, 11, 3, 7, 0, 0, 0, bru)) {
+		t.Fatalf("avond: %v", v)
+	}
+	if v := nextPlanTime(at(1, 0), "07:00"); !v.Equal(at(7, 0)) {
+		t.Fatalf("nacht: %v", v)
+	}
+	if v := nextPlanTime(at(6, 45), "07:00"); !v.Equal(time.Date(2026, 11, 3, 7, 0, 0, 0, bru)) {
+		t.Fatalf("te kort dag: %v", v)
+	}
+	for _, c := range []struct {
+		m, p string
+		ok   bool
+	}{
+		{"DELETE", "/api/loadpoints/1/plan/energy", true},
+		{"POST", "/api/batterygridchargelimit/0.2", true},
+		{"GET", "/api/loadpoints/1/plan", false},
+		{"POST", "/api/config/site", false},
+		{"DELETE", "/api/loadpoints/../config", false},
+	} {
+		if evccProxyAllowed(c.m, c.p) != c.ok {
+			t.Fatalf("proxy %s %s", c.m, c.p)
+		}
+	}
+	p := ChargePlan{On: true, KWh: 16, Time: "07:00"}
+	if p.Validate() != nil {
+		t.Fatal("geldig plan geweigerd")
+	}
+	p.Time = "24:00"
+	if p.Validate() == nil {
+		t.Fatal("24:00 aanvaard")
+	}
+}

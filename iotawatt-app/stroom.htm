@@ -275,6 +275,14 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .setrow .btn { flex: none; padding: 8px 10px; font-size: 13px; border-radius: 10px; margin-left: 2px; }
 .setrow .btn:disabled, .setrow .pm:disabled { opacity: .45; cursor: default; }
 .setblk[hidden] { display: none; }
+.ctlblk { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+.ctlh { font-size: 15px; font-weight: 650; margin-bottom: 8px; }
+.setlbl2 { font-size: 14px; color: var(--text-2); margin-bottom: 6px; }
+.ctlsel { font: inherit; font-size: 16px; padding: 7px 6px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+.setrow .btn.small { padding: 8px 10px; }
+.tog { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 10px; color: var(--text-2); }
+.tog[hidden] { display: none; }
+.tog input { width: 20px; height: 20px; accent-color: var(--use); }
 .setblk + .setblk { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
 .setblk .hint { margin: 6px 0 0; }
 .setblk .hint:empty { display: none; }
@@ -513,6 +521,37 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
         <div class="dhead"><span class="dico lp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="2.5" width="10" height="19" rx="2.5"/><path d="M9.6 6.5 7 11.5h3l-2.4 5"/><path d="M13.5 9h2.2a1.8 1.8 0 0 1 1.8 1.8v5.4a1.5 1.5 0 0 0 3 0V8.2L18.4 6"/></svg></span><div><div class="dtitle">Laadpaal<span id="srcLp"></span></div><div class="dstate" id="tLpLbl">–</div></div></div>
         <div class="val num" id="tLp">–</div>
         <div class="sub" id="tLpSub">&nbsp;</div>
+      </div>
+    </section>
+    <section class="card" id="lpCtl" hidden>
+      <div class="card-head"><h2>Laden</h2></div>
+      <div class="seg wide" role="group" aria-label="Laadmodus" id="lpModeSeg" style="margin:0 0 6px">
+        <button data-m="smart" aria-pressed="false">Slim</button>
+        <button data-m="now" aria-pressed="false">Nu laden</button>
+        <button data-m="off" aria-pressed="false">Uit</button>
+      </div>
+      <p class="hint" id="lpModeHint"></p>
+      <div class="ctlblk">
+        <div class="ctlh">Laadplan</div>
+        <div class="setrow">
+          <span class="setlbl">Klaar om</span>
+          <select class="ctlsel" id="planTime" aria-label="Klaar om"></select>
+          <button class="pm" id="planKwhMinus" aria-label="Lager">−</button><div class="setval num" id="planKwhVal">–</div><button class="pm" id="planKwhPlus" aria-label="Hoger">+</button>
+        </div>
+        <div class="btns" style="margin-top:8px">
+          <button class="btn small" style="flex:1" id="planDel">Plan wissen</button>
+          <button class="btn small primary" style="flex:1" id="planSet">Plan instellen</button>
+        </div>
+        <label class="tog"><input type="checkbox" id="planAuto"> Elke nacht automatisch, zodra de auto ingeplugd is</label>
+        <p class="hint" id="planHint"></p>
+      </div>
+      <div class="ctlblk">
+        <div class="ctlh">Laden onder een prijs</div>
+        <div class="setlbl2">Auto: altijd laden onder</div>
+        <div class="setrow"><button class="pm" id="limLpMinus" aria-label="Lager">−</button><div class="setval num" id="limLpVal">–</div><button class="pm" id="limLpPlus" aria-label="Hoger">+</button><button class="btn small" id="limLpOff">Uit</button><button class="btn small primary" id="limLpSet">Instellen</button></div>
+        <div class="setlbl2" style="margin-top:10px">Thuisbatterij: laden uit het net onder</div>
+        <div class="setrow"><button class="pm" id="limBatMinus" aria-label="Lager">−</button><div class="setval num" id="limBatVal">–</div><button class="pm" id="limBatPlus" aria-label="Hoger">+</button><button class="btn small" id="limBatOff">Uit</button><button class="btn small primary" id="limBatSet">Instellen</button></div>
+        <p class="hint" id="limHint" style="margin-top:8px"></p>
       </div>
     </section>
     <section class="card"><div id="lpInfo"></div></section>
@@ -787,7 +826,7 @@ const select = (cols) => '[' + cols.join(',') + ']';
 
 let gwKind = { url: null, kind: null };
 // Alleen de velden die de app nodig heeft (sneller op een trage NAS).
-const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext, pv: [.pv[]? | {name, power}], loadpoints: [.loadpoints[]? | {title, chargePower, mode, connected, charging, chargedEnergy, phasesActive, chargeCurrent, enabled, vehicleSoc, chargerFeatureHeating}], circuits: .circuits}';
+const EVCC_JQ = '{grid: .grid, gridPower: .gridPower, battery: .battery, batteryPower: .batteryPower, batterySoc: .batterySoc, ext: .ext, pv: [.pv[]? | {name, power}], loadpoints: [.loadpoints[]? | {title, chargePower, mode, connected, charging, chargedEnergy, phasesActive, chargeCurrent, enabled, vehicleSoc, chargerFeatureHeating, planEnergy, planTime, planActive, planProjectedStart, planProjectedEnd, smartCostLimit}], circuits: .circuits, tariffGrid: .tariffGrid, batteryGridChargeLimit: .batteryGridChargeLimit, currency: .currency}';
 
 // Naar een ander apparaat: geen cache-optie meegeven (Safari stuurt dan een extra
 // CORS-voorvraag die evcc niet kent), maar de cache omzeilen met een tijdstempel.
@@ -825,11 +864,14 @@ function fromEvcc(raw) {
     // boiler (warmtepomp, sanitair water): niet als extra verbruik tellen, de IoTaWatt meet de warmtepomp al
     if (lp && lp.chargerFeatureHeating) { boiler = { title: lp.title, mode: lp.mode, enabled: !!lp.enabled, charging: !!lp.charging, power: lp.chargePower, temp: lp.vehicleSoc }; return; }
     if (lp && typeof lp.chargePower === 'number') ext.push({ name: lp.title || 'Laadpaal ' + (i + 1), power: lp.chargePower,
-      lp: { mode: lp.mode, connected: lp.connected, charging: lp.charging, chargedEnergy: lp.chargedEnergy, phases: lp.phasesActive, current: lp.chargeCurrent } });
+      lp: { id: i + 1, mode: lp.mode, connected: lp.connected, charging: lp.charging, chargedEnergy: lp.chargedEnergy, phases: lp.phasesActive, current: lp.chargeCurrent,
+        planEnergy: num(lp.planEnergy), planTime: lp.planTime, planActive: !!lp.planActive, planStart: lp.planProjectedStart, planEnd: lp.planProjectedEnd,
+        smartCostLimit: num(lp.smartCostLimit) } });
   });
   // zonnepanelen per omvormer (evcc "pv": [{ name, power }])
   const pv = Array.isArray(d.pv) ? d.pv.filter((m) => m && typeof m.power === 'number').map((m) => ({ name: m.name || '', power: m.power })) : [];
-  return { ok: true, grid_w: grid, battery_w: batW, battery_soc: soc, ext, limit, boiler, pv };
+  return { ok: true, grid_w: grid, battery_w: batW, battery_soc: soc, ext, limit, boiler, pv,
+    price: num(d.tariffGrid), batteryGridChargeLimit: num(d.batteryGridChargeLimit) };
 }
 
 async function loadGoodWe() {
@@ -2303,7 +2345,7 @@ async function saveSched() {
 
 /* ---------- laadpaal (evcc) ---------- */
 
-const LP_MODE = { off: 'Uit', now: 'Snel', minpv: 'Min+Zon', pv: 'Zon', smart: 'Slim' };
+const LP_MODE = { off: 'Uit', now: 'Nu laden', minpv: 'Min+Zon', pv: 'Zon', smart: 'Slim' };
 const lpNow = () => (gw && gw.ext ? gw.ext.find((m) => m.lp) : null);
 const lpState = (lp) => (lp.lp.charging && lp.power > 50 ? 'laadt' : lp.lp.connected ? 'auto aangesloten' : 'geen auto');
 function renderLpTile() {
@@ -2331,6 +2373,127 @@ function renderLpInfo() {
     ['Deze laadbeurt', typeof x.chargedEnergy === 'number' && x.chargedEnergy > 0 ? txt(fmtEnergy(x.chargedEnergy)) : null],
     ['Kwartierpiek-grens', gw && gw.limit ? txt(fmtPower(gw.limit)) : null],
   ]]]);
+}
+
+/* ---------- laden bedienen (evcc-API; wissen via de warmteregelaar, een browser mag geen DELETE naar evcc sturen) ---------- */
+
+const ctl = { kwh: null, time: null, limLp: undefined, limBat: undefined, busy: false, msg: '', auto: null };
+const fEur = (v) => (v === null || v === undefined ? 'uit' : nf2.format(v) + ' €');
+const hhmmOf = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+const validTime = (t) => t && new Date(t).getFullYear() > 2000;
+// eerstvolgende "hh:mm" (vandaag of morgen; minder dan een halfuur: morgen), zoals de regelaar
+function nextAt(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number), now = new Date(), t = new Date(now);
+  t.setHours(h, m, 0, 0);
+  if (t - now < 30 * 60000) t.setDate(t.getDate() + 1);
+  return t;
+}
+async function evccCall(method, path) {
+  let r;
+  if (method === 'POST') r = await fetch(evccBase() + path, { method: 'POST' });  // zonder body: geen CORS-voorvraag
+  else {
+    const b = regBase();
+    if (!b) throw new Error('wissen kan alleen via de warmteregelaar (poort 7080)');
+    r = await fetch(`${b}/evcc?m=${method}&p=${encodeURIComponent(path)}`);
+  }
+  if (!r.ok) throw new Error((await r.text()).trim() || 'HTTP ' + r.status);
+}
+async function loadAutoPlan() {
+  const b = regBase();
+  if (!b) { ctl.auto = null; return; }
+  try { ctl.auto = await getJson(b + '/laadplan'); } catch (e) { /* vorige houden */ }
+}
+async function ctlRun(fn, okMsg) {
+  if (ctl.busy) return;
+  ctl.busy = true; ctl.msg = 'Versturen…'; renderLpCtl();
+  try { await fn(); ctl.msg = okMsg; } catch (e) { ctl.msg = 'Niet gelukt: ' + (e.message || e); }
+  await loadGoodWe();
+  ctl.busy = false;
+  renderLpCtl(); renderLpTile(); renderLpInfo();
+  setTimeout(() => { if (ctl.msg === okMsg) { ctl.msg = ''; renderLpCtl(); } }, 6000);
+}
+function renderLpCtl() {
+  const lp = lpNow(), card = $('lpCtl');
+  card.hidden = !lp || !evccBase();
+  if (card.hidden) return;
+  const x = lp.lp, mode = x.mode === 'pv' || x.mode === 'minpv' ? 'smart' : x.mode;
+  $('lpModeSeg').querySelectorAll('button').forEach((b) => { b.setAttribute('aria-pressed', b.dataset.m === mode); b.disabled = ctl.busy; });
+  $('lpModeHint').textContent = ctl.msg || {
+    smart: 'Laadt met zonne-overschot, volgens het laadplan, of als de prijs onder de grens zakt.',
+    now: 'Laadt meteen, zo snel als de kwartierpiek-grens toelaat. Zet daarna terug op Slim.',
+    off: 'Laden staat uit.',
+  }[mode] || '';
+  // laadplan
+  const auto = ctl.auto;
+  if (ctl.time === null) ctl.time = auto ? auto.time : '07:00';
+  if (ctl.kwh === null) ctl.kwh = x.planEnergy > 0 ? Math.round(x.planEnergy) : auto ? auto.kwh : 16;
+  if (!$('planTime').options.length) {
+    let o = ''; for (let m = 0; m < 1440; m += 30) { const v = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); o += `<option>${v}</option>`; }
+    $('planTime').innerHTML = o;
+  }
+  $('planTime').value = ctl.time;
+  $('planKwhVal').textContent = nf0.format(ctl.kwh) + ' kWh';
+  $('planKwhMinus').disabled = ctl.kwh <= 1; $('planKwhPlus').disabled = ctl.kwh >= 80;
+  $('planDel').disabled = ctl.busy || !(x.planEnergy > 0);
+  $('planSet').disabled = ctl.busy;
+  $('planAuto').checked = !!(auto && auto.on);
+  $('planAuto').disabled = ctl.busy || !auto;
+  $('planAuto').parentElement.hidden = !auto;
+  let ph = x.planEnergy > 0 && validTime(x.planTime)
+    ? `Plan: ${nf0.format(x.planEnergy)} kWh tegen ${new Date(x.planTime).toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`
+      + (validTime(x.planStart) ? ` · laadt vanaf ${hhmmOf(x.planStart)}` : '') + (x.planActive ? ' · bezig' : '')
+    : 'Geen laadplan.';
+  if (auto && auto.on) ph += ` Elke nacht automatisch ${nf0.format(auto.kwh)} kWh tegen ${auto.time}.`;
+  if (!x.connected) ph += ' De auto is niet ingeplugd.';
+  $('planHint').textContent = ph;
+  // prijsgrenzen
+  if (ctl.limLp === undefined) ctl.limLp = x.smartCostLimit;
+  if (ctl.limBat === undefined) ctl.limBat = gw.batteryGridChargeLimit;
+  [['limLp', x.smartCostLimit], ['limBat', gw.batteryGridChargeLimit]].forEach(([id, cur]) => {
+    const v = ctl[id];
+    $(id + 'Val').textContent = fEur(v);
+    $(id + 'Minus').disabled = ctl.busy; $(id + 'Plus').disabled = ctl.busy;
+    $(id + 'Set').disabled = ctl.busy || v === null || v === cur;
+    $(id + 'Off').disabled = ctl.busy || cur === null;
+  });
+  $('limHint').textContent = (gw.price !== null ? `Prijs nu: ${nf2.format(gw.price)} €/kWh` : 'Geen prijs van evcc.')
+    + ' (Bolt-formule; tot 1 november gesimuleerd). Ingesteld: auto ' + fEur(x.smartCostLimit) + ', batterij ' + fEur(gw.batteryGridChargeLimit) + '.';
+}
+function stepLim(id, d) {
+  const v = ctl[id];
+  ctl[id] = Math.round(((v === null || v === undefined ? (gw.price !== null ? gw.price : 0.2) : v) + d) * 100) / 100;
+  ctl[id] = Math.max(-0.5, Math.min(1, ctl[id]));
+  renderLpCtl();
+}
+function setLpMode(m) {
+  const lp = lpNow(); if (!lp) return;
+  ctlRun(() => evccCall('POST', `/api/loadpoints/${lp.lp.id}/mode/${m}`), '✓ Modus ' + { smart: 'Slim', now: 'Nu laden', off: 'Uit' }[m] + '.');
+}
+function setPlan() {
+  const lp = lpNow(); if (!lp) return;
+  const t = nextAt(ctl.time), iso = t.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  ctlRun(() => evccCall('POST', `/api/loadpoints/${lp.lp.id}/plan/energy/${ctl.kwh}/${iso}`), `✓ Plan: ${ctl.kwh} kWh tegen ${ctl.time}.`);
+}
+function delPlan() {
+  const lp = lpNow(); if (!lp) return;
+  ctlRun(() => evccCall('DELETE', `/api/loadpoints/${lp.lp.id}/plan/energy`), '✓ Plan gewist.');
+}
+function setAuto(on) {
+  const b = regBase(); if (!b) return;
+  if (ctl.auto) ctl.auto = { ...ctl.auto, on };  // meteen tonen, het antwoord van de regelaar bevestigt
+  ctlRun(async () => {
+    const r = await fetch(b + '/laadplan', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ on, kwh: ctl.kwh, time: ctl.time }) });
+    if (!r.ok) throw new Error((await r.text()).trim());
+    ctl.auto = await r.json();
+  }, on ? `✓ Elke nacht ${ctl.kwh} kWh tegen ${ctl.time}.` : '✓ Automatisch plan uit.');
+}
+function setLim(id, off) {
+  const lp = lpNow(); if (!lp) return;
+  const path = id === 'limLp' ? `/api/loadpoints/${lp.lp.id}/smartcostlimit` : '/api/batterygridchargelimit';
+  ctlRun(async () => {
+    await evccCall(off ? 'DELETE' : 'POST', off ? path : `${path}/${ctl[id]}`);
+    ctl[id] = off ? null : ctl[id];
+  }, off ? '✓ Prijsgrens uit.' : '✓ Prijsgrens ' + fEur(ctl[id]) + '/kWh.');
 }
 
 // Geschiedenis van de laadpaal: per kwartier het gemiddelde laadvermogen (dag), of kWh per dag.
@@ -2383,7 +2546,11 @@ function showTab(t) {
     renderHM();
     Promise.all([loadReg(), loadSched()]).then(() => { renderReg(); renderSched(); });
   }
-  if (config.tab === 'lp') { renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {}); }
+  if (config.tab === 'lp') {
+    renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {});
+    Object.assign(ctl, { kwh: null, time: null, limLp: undefined, limBat: undefined });
+    loadAutoPlan().then(renderLpCtl); renderLpCtl();
+  }
 }
 
 const PEAK_MIN = 2500; // Vlaanderen: het capaciteitstarief rekent minstens 2,5 kW
@@ -2440,6 +2607,7 @@ async function tickLive() {
     renderLpTile();
     renderHpInfo();
     renderLpInfo();
+    if (!$('tabLp').hidden) renderLpCtl();
     if (!$('hpView').hidden || !$('tabVerw').hidden) loadReg().then(renderReg);
     showOk();
     renderTiles();
@@ -2680,6 +2848,19 @@ document.querySelectorAll('[data-copy]').forEach((b) => { b.onclick = () => copy
 $('schedCancel').onclick = closeSched;
 $('schedBg').onclick = closeSched;
 $('schedSave').onclick = saveSched;
+document.querySelectorAll('#lpModeSeg button').forEach((b) => { b.onclick = () => setLpMode(b.dataset.m); });
+$('planTime').onchange = () => { ctl.time = $('planTime').value; };
+$('planKwhMinus').onclick = () => { ctl.kwh = Math.max(1, ctl.kwh - 1); renderLpCtl(); };
+$('planKwhPlus').onclick = () => { ctl.kwh = Math.min(80, ctl.kwh + 1); renderLpCtl(); };
+$('planSet').onclick = setPlan;
+$('planDel').onclick = delPlan;
+$('planAuto').onchange = () => setAuto($('planAuto').checked);
+['limLp', 'limBat'].forEach((id) => {
+  $(id + 'Minus').onclick = () => stepLim(id, -0.01);
+  $(id + 'Plus').onclick = () => stepLim(id, 0.01);
+  $(id + 'Set').onclick = () => setLim(id, false);
+  $(id + 'Off').onclick = () => setLim(id, true);
+});
 $('openSettings').onclick = openSettings;
 $('cancelSettings').onclick = closeSettings;
 $('sheetBg').onclick = closeSettings;
