@@ -96,7 +96,10 @@ func evccDo(method, path string) ([]byte, int, error) {
 
 // checkChargePlan: auto ingeplugd en nog geen plan → plan zetten, één keer per vertrektijd
 // (wist iemand het plan zelf, dan zet de regelaar het voor die nacht niet opnieuw).
-func checkChargePlan(now time.Time) {
+func checkChargePlan(now time.Time) { setChargePlan(now, false) }
+
+// setChargePlan: force = ook een bestaand plan vervangen (het nachtdoel werd net aangepast)
+func setChargePlan(now time.Time, force bool) {
 	mu.Lock()
 	p := st.ChargePlan
 	mu.Unlock()
@@ -104,14 +107,14 @@ func checkChargePlan(now time.Time) {
 		return
 	}
 	id, lp, err := readCarLoadpoint()
-	if err != nil || !lp.Connected || lp.PlanEnergy > 0 {
+	if err != nil || !lp.Connected || (lp.PlanEnergy > 0 && !force) {
 		return
 	}
 	at := nextPlanTime(now, p.Time)
 	mu.Lock()
 	done := st.ChargePlanFor.Equal(at)
 	mu.Unlock()
-	if done {
+	if done && !force {
 		return
 	}
 	path := fmt.Sprintf("/api/loadpoints/%d/plan/energy/%g/%s", id, p.KWh, at.UTC().Format(time.RFC3339))
@@ -159,7 +162,7 @@ func serveCharge(h *http.ServeMux) {
 			saveState()
 			mu.Unlock()
 			log.Printf("laadplan: %s", map[bool]string{true: fmt.Sprintf("elke nacht %g kWh tegen %s", p.KWh, p.Time), false: "uit"}[p.On])
-			go checkChargePlan(time.Now())
+			go setChargePlan(time.Now(), p.On)
 		}
 		mu.Lock()
 		b, _ := json.Marshal(st.ChargePlan)

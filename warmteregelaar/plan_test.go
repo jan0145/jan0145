@@ -344,3 +344,22 @@ func TestBattDecide(t *testing.T) {
 		}
 	}
 }
+
+func TestDST(t *testing.T) {
+	// zondag 25 oktober 2026: om 03:00 wordt het 02:00 (wintertijd)
+	sat := time.Date(2026, 10, 24, 22, 0, 0, 0, bru)
+	if v := nextPlanTime(sat, "07:00"); v.Hour() != 7 || v.Day() != 25 {
+		t.Fatalf("laadplan op de wintertijddag: %v", v)
+	}
+	sun := time.Date(2026, 10, 25, 12, 0, 0, 0, bru)
+	if v := atMinute(sun, 16*60); v.Hour() != 16 {
+		t.Fatalf("16:00 op de wintertijddag: %v", v)
+	}
+	if v := atMinute(sun, 1440); !v.Equal(time.Date(2026, 10, 26, 0, 0, 0, 0, bru)) {
+		t.Fatalf("24:00: %v", v)
+	}
+	// maart: zomertijd
+	if v := atMinute(time.Date(2026, 3, 29, 12, 0, 0, 0, bru), 7*60); v.Hour() != 7 {
+		t.Fatalf("07:00 op de zomertijddag: %v", v)
+	}
+}

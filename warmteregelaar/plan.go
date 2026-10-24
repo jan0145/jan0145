@@ -85,9 +85,11 @@ func (l Learned) LeadMinutes(tout, rise float64) float64 {
 
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 
+// atMinute: dag om hh:mm op de klok (m minuten na middernacht). Niet "middernacht + m minuten": op de dagen
+// van de zomer-/wintertijd zou dat een uur verschuiven.
 func atMinute(day time.Time, m int) time.Time {
 	y, mo, d := day.Date()
-	return time.Date(y, mo, d, 0, 0, 0, 0, day.Location()).Add(time.Duration(m) * time.Minute)
+	return time.Date(y, mo, d, m/60, m%60, 0, 0, day.Location())
 }
 
 // priceAt: prijs van het kwartier waarin t valt (ok=false als onbekend).

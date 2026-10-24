@@ -278,6 +278,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .setrow .btn { flex: none; padding: 8px 10px; font-size: 13px; border-radius: 10px; margin-left: 2px; }
 .setrow .btn:disabled, .setrow .pm:disabled { opacity: .45; cursor: default; }
 .setblk[hidden] { display: none; }
+.ctlblk[hidden], .btns[hidden] { display: none; }
 .ctlblk { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
 .ctlh { font-size: 15px; font-weight: 650; margin-bottom: 8px; }
 .setlbl2 { font-size: 14px; color: var(--text-2); margin-bottom: 6px; }
@@ -536,27 +537,30 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <p class="hint" id="lpModeHint"></p>
       <div class="ctlblk">
         <div class="ctlh">Laadplan</div>
+        <label class="tog" style="margin:0 0 10px"><input type="checkbox" id="planAuto"> Elke nacht automatisch, zodra de auto ingeplugd is</label>
         <div class="setrow">
           <span class="setlbl">Klaar om</span>
           <select class="ctlsel" id="planTime" aria-label="Klaar om"></select>
           <button class="pm" id="planKwhMinus" aria-label="Lager">−</button><div class="setval num" id="planKwhVal">–</div><button class="pm" id="planKwhPlus" aria-label="Hoger">+</button>
         </div>
-        <div class="btns" style="margin-top:8px">
+        <div class="btns" style="margin-top:8px" id="planBtns">
           <button class="btn small" style="flex:1" id="planDel">Plan wissen</button>
           <button class="btn small primary" style="flex:1" id="planSet">Plan instellen</button>
         </div>
-        <label class="tog"><input type="checkbox" id="planAuto"> Elke nacht automatisch, zodra de auto ingeplugd is</label>
+        <div class="btns" style="margin-top:8px" id="autoBtns" hidden>
+          <button class="btn small primary" style="flex:1" id="autoSave">Elke nacht zo laden</button>
+        </div>
         <p class="hint" id="planHint"></p>
       </div>
-      <div class="ctlblk">
+      <div class="ctlblk" id="limBlk">
         <div class="ctlh">Auto laden onder een prijs</div>
         <div class="setlbl2">Altijd laden als de stroom goedkoper is dan</div>
         <div class="setrow"><button class="pm" id="limLpMinus" aria-label="Lager">−</button><div class="setval num" id="limLpVal">–</div><button class="pm" id="limLpPlus" aria-label="Hoger">+</button><button class="btn small" id="limLpOff">Uit</button><button class="btn small primary" id="limLpSet">Instellen</button></div>
-        <div class="setrow" id="limBatRow" hidden style="margin-top:10px">
-          <span class="setlbl2" style="flex:1;margin:0">Thuisbatterij laadt uit het net onder <b id="limBatCur"></b></span>
-          <button class="btn small" id="limBatOff">Uit</button>
-        </div>
         <p class="hint" id="limHint" style="margin-top:8px"></p>
+      </div>
+      <div class="setrow ctlblk" id="limBatRow" hidden>
+        <span class="setlbl2" style="flex:1;margin:0">Thuisbatterij laadt uit het net onder <b id="limBatCur"></b></span>
+        <button class="btn small" id="limBatOff">Uit</button>
       </div>
     </section>
     <section class="card"><div id="lpInfo"></div></section>
@@ -2601,14 +2605,23 @@ function renderLpCtl() {
   $('planKwhMinus').disabled = ctl.kwh <= 1; $('planKwhPlus').disabled = ctl.kwh >= 80;
   $('planDel').disabled = ctl.busy || !(x.planEnergy > 0);
   $('planSet').disabled = ctl.busy;
-  $('planAuto').checked = !!(auto && auto.on);
+  const autoOn = !!(auto && auto.on);
+  $('planAuto').checked = autoOn;
   $('planAuto').disabled = ctl.busy || !auto;
   $('planAuto').parentElement.hidden = !auto;
-  let ph = x.planEnergy > 0 && validTime(x.planTime)
+  // elke nacht automatisch: alleen het nachtdoel tonen; een eenmalig plan en de prijsgrens pas zonder
+  $('planBtns').hidden = autoOn;
+  $('autoBtns').hidden = !autoOn;
+  $('autoSave').disabled = ctl.busy || !autoOn || (auto.kwh === ctl.kwh && auto.time === ctl.time);
+  $('limBlk').hidden = autoOn;
+  let ph = autoOn ? '' : x.planEnergy > 0 && validTime(x.planTime)
     ? `Plan: ${nf0.format(x.planEnergy)} kWh tegen ${new Date(x.planTime).toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`
       + (validTime(x.planStart) ? ` · laadt vanaf ${hhmmOf(x.planStart)}` : '') + (x.planActive ? ' · bezig' : '')
     : 'Geen laadplan.';
-  if (auto && auto.on) ph += ` Elke nacht automatisch ${nf0.format(auto.kwh)} kWh tegen ${auto.time}.`;
+  if (autoOn) {
+    ph = `Elke nacht ${nf0.format(auto.kwh)} kWh tegen ${auto.time}, in de goedkoopste kwartieren.`;
+    if (x.planEnergy > 0 && validTime(x.planTime)) ph += ` Deze nacht: tegen ${hhmmOf(x.planTime)}` + (validTime(x.planStart) ? `, laadt vanaf ${hhmmOf(x.planStart)}.` : '.');
+  }
   if (!x.connected) ph += ' De auto is niet ingeplugd.';
   $('planHint').textContent = ph;
   // prijsgrenzen
@@ -2649,10 +2662,13 @@ function delPlan() {
 function setAuto(on) {
   const b = regBase(); if (!b) return;
   if (ctl.auto) ctl.auto = { ...ctl.auto, on };  // meteen tonen, het antwoord van de regelaar bevestigt
+  const lp = lpNow();
   ctlRun(async () => {
     const r = await fetch(b + '/laadplan', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ on, kwh: ctl.kwh, time: ctl.time }) });
     if (!r.ok) throw new Error((await r.text()).trim());
     ctl.auto = await r.json();
+    // met een prijsgrens laadt evcc meteen als de prijs eronder zit, ook in de duurdere uren: weg ermee
+    if (on && lp && lp.lp.smartCostLimit !== null) await evccCall('DELETE', `/api/loadpoints/${lp.lp.id}/smartcostlimit`);
   }, on ? `✓ Elke nacht ${ctl.kwh} kWh tegen ${ctl.time}.` : '✓ Automatisch plan uit.');
 }
 function setLim(id, off) {
@@ -3024,6 +3040,7 @@ $('planKwhPlus').onclick = () => { ctl.kwh = Math.min(80, ctl.kwh + 1); renderLp
 $('planSet').onclick = setPlan;
 $('planDel').onclick = delPlan;
 $('planAuto').onchange = () => setAuto($('planAuto').checked);
+$('autoSave').onclick = () => setAuto(true);
 $('limLpMinus').onclick = () => stepLim('limLp', -0.01);
 $('limLpPlus').onclick = () => stepLim('limLp', 0.01);
 $('limLpSet').onclick = () => setLim('limLp', false);
