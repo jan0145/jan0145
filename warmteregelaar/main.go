@@ -57,10 +57,11 @@ type State struct {
 	Schedule *Schedule `json:"schedule,omitempty"` // weekschema (leeg = standaardschema)
 	PVBoost  bool      `json:"pvBoost"`
 	// zomerstand: de regelaar zette de warmtepomp op "alleen sanitair water"; daarna terug naar SummerPrev
-	SummerOn   bool      `json:"summerOn"`
-	SummerPrev float64   `json:"summerPrev"`
-	SummerAt   time.Time `json:"summerAt"`
-	ModeFixAt  time.Time `json:"modeFixAt"` // wanneer de regelaar sanitair water weer bij de stand zette
+	SummerOn    bool      `json:"summerOn"`
+	SummerPrev  float64   `json:"summerPrev"`
+	SummerAt    time.Time `json:"summerAt"`
+	ModeFixAt   time.Time `json:"modeFixAt"`   // wanneer de regelaar sanitair water weer bij de stand zette
+	DHWAskSince time.Time `json:"dhwAskSince"` // sinds wanneer de boiler opwarmen moet zonder dat de warmtepomp het doet
 	// laatste doelen die de regelaar stuurde (om manuele aanpassingen te herkennen)
 	SentDHW  float64   `json:"sentDHW"`
 	SentZ1   float64   `json:"sentZ1"`
@@ -390,7 +391,15 @@ func step(now time.Time) {
 	din := DHWInput{Now: now, Temp: dhw, PVBoost: st.PVBoost, PVHot: st.PVHotOn, Prev: st.PrevDHW, Prices: prices, FeedIn: feedin, Solar: solar}
 	dp := DHWTarget(cfg, sc, st.Learned, din)
 	want, why := dp.Target, dp.Why
+	prevPlanned := st.PrevDHW
 	st.PrevDHW = dp.Planned
+	// geen nieuwe boilerbeurt beginnen terwijl het huis al veel afneemt (kwartierpiek): even uitstellen
+	if dp.Planned > 0 && prevPlanned == 0 && !st.PVBoost {
+		if exp, _, ok := readExport(); ok && -exp > dhwPeakImport {
+			want, why = sc.DHWBase, fmt.Sprintf("opwarmen uitgesteld: het huis neemt nu al %.0f W af (kwartierpiek)", -exp)
+			st.PrevDHW = 0
+		}
+	}
 	s.DHW.ForecastStart, s.DHW.Forecast, s.DHW.Next = now.Truncate(quarter), make([]float64, len(dp.Forecast)), time.Time{}
 	for i, v := range dp.Forecast {
 		s.DHW.Forecast[i] = math.Round(v*10) / 10
@@ -418,6 +427,18 @@ func step(now time.Time) {
 		want, why = st.DHWManual, "zelf ingesteld, geldt tot "+st.DHWOverride.Format("15:04")+" of tot de boiler warm is"
 	}
 	s.DHW.Temp, s.DHW.Target, s.DHW.Want, s.DHW.Why, s.DHW.Override = dhw, dhwSet, want, why, st.DHWOverride
+	// warmt de warmtepomp de boiler wel op? (bv. niet als hij op "alleen verwarmen" staat)
+	if dhwSet >= dhw+dhwHysteresis && hm["ThreeWay_Valve_State"] != 1 && hm["Heatpump_State"] == 1 {
+		if st.DHWAskSince.IsZero() {
+			st.DHWAskSince = now
+		} else if now.Sub(st.DHWAskSince) > 45*time.Minute {
+			logChange("dhwstuck", fmt.Sprintf("⚠ de boiler staat al %.0f min op %.0f °C (nu %.0f °C) maar de warmtepomp warmt hem niet op (stand %.0f, driewegklep op verwarming)",
+				now.Sub(st.DHWAskSince).Minutes(), dhwSet, dhw, hm["Operating_Mode_State"]))
+		}
+	} else {
+		st.DHWAskSince = time.Time{}
+		lastMsg["dhwstuck"] = ""
+	}
 	if fresh {
 		// net zelf aangepast: eerst kijken of het blijft staan (dan geldt het als eigen keuze), niet overschrijven
 	} else if math.Round(dhwSet) != math.Round(want) && (math.Round(st.SentDHW) != math.Round(want) || now.Sub(st.SentDHWAt) > resendAfter) {
@@ -477,6 +498,9 @@ func step(now time.Time) {
 	}
 	saveState()
 }
+
+// boven deze afname (W) begint de regelaar geen nieuwe boilerbeurt (kwartierpiek-grens 5 kW)
+const dhwPeakImport = 3500
 
 // na een eigen commando zo lang niet besluiten dat iemand anders de temperatuur aanpaste
 const graceAfterSend = 2 * time.Minute
@@ -658,6 +682,8 @@ func learnPreheat(now time.Time, tin, tout float64, p HeatPlan, set, eco float64
 	r.ToutS += tout
 	r.N++
 	switch {
+	case tin >= r.Target-0.5 && now.Sub(r.Start) > 4*time.Hour:
+		st.Preheat = nil // te lang: meetfout (hele graden) of de warmtepomp werkte niet mee, niet leren
 	case tin >= r.Target-0.5:
 		min := now.Sub(r.Start).Minutes()
 		smp := PreheatSample{Time: now, Tout: r.ToutS / float64(r.N), Rise: r.Target - r.Tin, Minutes: min}

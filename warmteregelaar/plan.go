@@ -55,15 +55,19 @@ func (l Learned) LeadMinutes(tout, rise float64) float64 {
 		return 0
 	}
 	cold := math.Max(0, 15-tout)
-	if len(l.Preheat) < 4 {
+	// metingen van meer dan 4 uur zijn meetfouten (de kamer wordt in hele graden gemeten): niet meetellen
+	var ok []PreheatSample
+	for _, s := range l.Preheat {
+		if s.Rise > 0 && s.Minutes <= 240 {
+			ok = append(ok, s)
+		}
+	}
+	if len(ok) < 4 {
 		return clamp((30+4*cold)*rise, 45, 240)
 	}
 	// minuten per °C = a + b·cold, kleinste kwadraten
 	var n, sx, sy, sxx, sxy float64
-	for _, s := range l.Preheat {
-		if s.Rise <= 0 {
-			continue
-		}
+	for _, s := range ok {
 		x, y := math.Max(0, 15-s.Tout), s.Minutes/s.Rise
 		n++
 		sx += x
