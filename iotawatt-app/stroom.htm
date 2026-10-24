@@ -449,7 +449,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="tip" id="tip"></div>
     </div>
     <div class="htot" id="hTot"></div>
-    <p class="hint" id="hSignHint" style="margin-top:6px">Negatief = naar het net. De batterij staat als laadtoestand (%) op de rechteras.</p>
+    <p class="hint" id="hSignHint" style="margin-top:6px">Negatief = naar het net. Op de rechteras: de laadtoestand van de batterij en hoever de auto geladen is (%).</p>
   </section>
 
   <button class="navcard" id="openDevices">
@@ -1293,7 +1293,9 @@ async function loadHist() {
     let rows;
     if (hist.k === 0) rows = dayRows;
     else { const r = range('day', hist.k); rows = await queryDayLine(r.begin, r.end, false); }
-    const ev = await evccHistory(from, to, '15m');
+    // 12 uur vroeger beginnen: een laadbeurt die de avond ervoor begon, telt mee voor het % van de auto
+    const ev = await evccHistory(from - 43200, to, '15m');
+    const carPct = carPercent(ev, from);
     // 5-minutenpunten van de IoTaWatt (W); net/batterij/huis uit evcc per kwartier (kWh → gemiddeld W)
     hist.buckets = rows.filter((r) => r.use !== null).map((r) => {
       const q = Math.floor(r.t / 900) * 900;
@@ -1302,6 +1304,7 @@ async function loadHist() {
         use: h ? h.e * 4000 : r.use, sun: r.sun,
         grid: g ? netKwh(g) * 4000 : null, battery: bt ? batKwh(bt) * 4000 : null,
         soc: bt && typeof bt.soc === 'number' ? bt.soc : null,
+        car: carPct.has(q) ? carPct.get(q) : null,
       } };
     });
     if (hist.k === 0 && gw && typeof gw.battery_soc === 'number' && hist.buckets.length) {
@@ -1321,6 +1324,33 @@ async function loadHist() {
     return { t: r.t, vals: { use: h ? h.e * 1000 : use, sun, grid: g ? netKwh(g) * 1000 : null, battery: bt ? batKwh(bt) * 1000 : null } };
   });
   hist.ev = ev;
+}
+
+// Auto: hoeveel % van het laaddoel (standaard 16 kWh, anders dat van het laadplan) is geladen, per kwartier.
+// Een laadbeurt loopt tot er 3 uur niet meer geladen werd; daarna begint de teller opnieuw.
+function carTargetKwh() {
+  const lp = lpNow();
+  if (lp && lp.lp.planEnergy > 0) return lp.lp.planEnergy;
+  return ctl.auto && ctl.auto.kwh > 0 ? ctl.auto.kwh : 16;
+}
+function carPercent(ev, from) {
+  const out = new Map();
+  const name = evccMeterNames().find((n) => /laad|charge|wallbox/i.test(n));
+  const map = ev && name && ev[name];
+  if (!map) return out;
+  const target = carTargetKwh(), keys = Object.keys(map).map(Number);
+  if (!keys.length) return out;
+  let cum = 0, last = -Infinity;
+  const end = Math.min(Date.now() / 1000, from + 86400);
+  for (let t = Math.floor(Math.min(...keys) / 900) * 900; t < end; t += 900) {
+    const kwh = map[t] ? map[t].e || 0 : 0;
+    if (kwh >= 0.02) {
+      if (t - last > 3 * 3600) cum = 0;
+      cum += kwh; last = t;
+    }
+    if (t >= from && cum > 0 && t - last <= 3 * 3600) out.set(t, Math.min(100, cum / target * 100));
+  }
+  return out;
 }
 
 // Kwartierpiek: gemiddelde afname van het net per kwartier (uit evcc, de P1-meter). Het capaciteitstarief
@@ -1388,11 +1418,14 @@ function renderHist() {
   const has = (k) => hist.buckets.some((b) => typeof b.vals[k] === 'number');
   // de batterij staat in de grafiek als laadtoestand (%) op de rechteras, niet als vermogen
   const series = MAIN_SERIES.filter((s) => s.key !== 'battery' && (s.key === 'use' || s.key === 'sun' || has(s.key)));
-  const socSeries = day && has('soc') ? { key: 'soc', name: 'Batterij', color: 'var(--c2)', max: 100, fmt: (v) => ({ v: nf0.format(v), u: '%' }) } : null;
-  $('hLegend').innerHTML = [...series, ...(socSeries ? [{ ...socSeries, name: 'Batterij (%)' }] : [])]
+  const pctFmt = (v) => ({ v: nf0.format(v), u: '%' });
+  const socSeries = day && has('soc') ? { key: 'soc', name: 'Batterij', color: 'var(--c2)', max: 100, fmt: pctFmt } : null;
+  const carSeries = day && has('car') ? { key: 'car', name: 'Auto', color: 'var(--c4)', max: 100, fmt: pctFmt, dash: '2 3' } : null;
+  const rights = [socSeries, carSeries].filter(Boolean);
+  $('hLegend').innerHTML = [...series, ...rights.map((r) => ({ ...r, name: r.key === 'car' ? `Auto (% van ${nf0.format(carTargetKwh())} kWh)` : 'Batterij (%)' }))]
     .map((s) => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
   drawChart($('chart'), hist.buckets, series, day
-    ? { kind: 'lines', unit: 'W', period: 'day', t0: unixRange('day', hist.k)[0], area: 'use', right: socSeries }
+    ? { kind: 'lines', unit: 'W', period: 'day', t0: unixRange('day', hist.k)[0], area: 'use', right: rights }
     : { kind: chartKind(), unit: 'Wh', period: hist.period });
 
   // totalen (kWh); bij de dag: W-punten omrekenen naar energie
@@ -1628,7 +1661,7 @@ function closeDevices() {
    opt: { kind: 'bars'|'lines', stacked, unit: 'Wh'|'W', period, t0 (tijd-as voor één dag), area } */
 function drawChart(svg, buckets, series, opt) {
   const W = svg.clientWidth || 340, H = 210;
-  const m = { l: 42, r: opt.right ? 34 : 8, t: 20, b: 22 };
+  const m = { l: 42, r: (Array.isArray(opt.right) ? opt.right.length : opt.right) ? 34 : 8, t: 20, b: 22 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const val = (b, k) => { const v = b.vals[k]; return typeof v === 'number' && isFinite(v) ? v : null; };
@@ -1713,19 +1746,22 @@ function drawChart(svg, buckets, series, opt) {
     g += `<text class="axis ref" x="${i % 2 ? m.l + 4 : W - m.r - 2}" y="${(y(r.v) - 3).toFixed(1)}" text-anchor="${i % 2 ? 'start' : 'end'}" style="fill:${r.color};paint-order:stroke;stroke:var(--card);stroke-width:3px">${esc(r.label)}</text>`;
   });
   // rechteras (bv. laadtoestand batterij 0–100 %): 0 % op dezelfde lijn als 0 links
-  if (opt.right) {
-    const R = opt.right, y0 = y(0), y2 = (v) => y0 - v / R.max * (y0 - m.t);
+  const RS = Array.isArray(opt.right) ? opt.right.filter(Boolean) : opt.right ? [opt.right] : [];
+  if (RS.length) {
+    const R = RS[0], y0 = y(0), y2 = (v) => y0 - v / R.max * (y0 - m.t);
     for (let v = 0; v <= R.max; v += R.max / 4) {
       g += `<text class="axis num" x="${W - m.r + 4}" y="${y2(v) + 4}" text-anchor="start">${nf0.format(v)}</text>`;
     }
     g += `<text class="axis" x="${W}" y="10" text-anchor="end">%</text>`;
-    let d = '', pen = false;
-    buckets.forEach((b, i) => {
-      const v = val(b, R.key);
-      if (v === null) { pen = false; return; }
-      d += (pen ? 'L' : 'M') + xc(i).toFixed(1) + ',' + y2(Math.min(R.max, Math.max(0, v))).toFixed(1); pen = true;
+    RS.forEach((R) => {
+      let d = '', pen = false;
+      buckets.forEach((b, i) => {
+        const v = val(b, R.key);
+        if (v === null) { pen = false; return; }
+        d += (pen ? 'L' : 'M') + xc(i).toFixed(1) + ',' + y2(Math.min(R.max, Math.max(0, v))).toFixed(1); pen = true;
+      });
+      if (d) g += `<path d="${d}" fill="none" stroke="${R.color}" stroke-width="2" stroke-dasharray="${R.dash || '5 3'}" stroke-linejoin="round"/>`;
     });
-    if (d) g += `<path d="${d}" fill="none" stroke="${R.color}" stroke-width="2" stroke-dasharray="5 3" stroke-linejoin="round"/>`;
   }
   if (!buckets.length) g += `<text class="axis" x="${m.l + iw / 2}" y="${m.t + ih / 2}" text-anchor="middle">Geen gegevens</text>`;
   g += opt.kind === 'bars'
@@ -1755,10 +1791,11 @@ function chartPointer(svg, tip, ev) {
       const v = b.vals[s.key], h = SIGN_HINT[s.key];
       return `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:4px"></span>${esc(s.name)} <b>${txt(fmt(v))}</b>${h && Math.abs(v) > 1 ? ` <span style="opacity:.7">${v > 0 ? h[0] : h[1]}</span>` : ''}`;
     });
-  const R = sc.opt.right;
-  if (R && typeof b.vals[R.key] === 'number') {
-    parts.push(`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${R.color};margin-right:4px"></span>${esc(R.name)} <b>${txt(R.fmt(b.vals[R.key]))}</b>`);
-  }
+  (Array.isArray(sc.opt.right) ? sc.opt.right : [sc.opt.right]).filter(Boolean).forEach((R) => {
+    if (typeof b.vals[R.key] === 'number') {
+      parts.push(`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${R.color};margin-right:4px"></span>${esc(R.name)} <b>${txt(R.fmt(b.vals[R.key]))}</b>`);
+    }
+  });
   tip.innerHTML = `<div style="margin-bottom:2px">${title}</div>` + (parts.join('<br>') || 'niets') + (b.note ? `<div style="opacity:.7">${esc(b.note)}</div>` : '');
   tip.style.whiteSpace = 'nowrap';
   tip.classList.add('on');

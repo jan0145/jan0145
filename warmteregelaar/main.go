@@ -60,6 +60,7 @@ type State struct {
 	SummerOn   bool      `json:"summerOn"`
 	SummerPrev float64   `json:"summerPrev"`
 	SummerAt   time.Time `json:"summerAt"`
+	ModeFixAt  time.Time `json:"modeFixAt"` // wanneer de regelaar sanitair water weer bij de stand zette
 	// laatste doelen die de regelaar stuurde (om manuele aanpassingen te herkennen)
 	SentDHW  float64   `json:"sentDHW"`
 	SentZ1   float64   `json:"sentZ1"`
@@ -318,30 +319,33 @@ func readRates(kind string) []Rate {
 	return rates
 }
 
-// teruglevering nu (W, positief = naar het net) volgens evcc
-func readExport() (float64, bool) {
-	resp, err := client.Get(evccURL + "/api/state?jq=" + url.QueryEscape("{g: .grid.power, gp: .gridPower}"))
+// teruglevering nu (W, positief = naar het net) en laadtoestand van de thuisbatterij (%, -1 = onbekend) volgens evcc
+func readExport() (float64, float64, bool) {
+	resp, err := client.Get(evccURL + "/api/state?jq=" + url.QueryEscape("{g: .grid.power, gp: .gridPower, soc: .battery.soc, bs: .batterySoc}"))
 	if err != nil {
-		return 0, false
+		return 0, -1, false
 	}
 	defer resp.Body.Close()
-	var d struct {
-		G  *float64 `json:"g"`
-		GP *float64 `json:"gp"`
-		R  struct {
-			G  *float64 `json:"g"`
-			GP *float64 `json:"gp"`
-		} `json:"result"`
-	}
+	var d map[string]any
 	if json.NewDecoder(resp.Body).Decode(&d) != nil {
-		return 0, false
+		return 0, -1, false
 	}
-	for _, v := range []*float64{d.G, d.GP, d.R.G, d.R.GP} {
-		if v != nil {
-			return -*v, true
+	if r, ok := d["result"].(map[string]any); ok {
+		d = r
+	}
+	num := func(k string) (float64, bool) { v, ok := d[k].(float64); return v, ok }
+	soc := -1.0
+	if v, ok := num("soc"); ok {
+		soc = v
+	} else if v, ok := num("bs"); ok {
+		soc = v
+	}
+	for _, k := range []string{"g", "gp"} {
+		if v, ok := num(k); ok {
+			return -v, soc, true
 		}
 	}
-	return 0, false
+	return 0, soc, false
 }
 
 // ---------- één ronde ----------
@@ -373,12 +377,13 @@ func step(now time.Time) {
 	summer(now, sc, hm)
 
 	// veel zonne-overschot (≥ 3 kW teruglevering naast de boiler) of een negatieve terugleverprijs: tot 60 °C,
-	// ook met de elektrische bijverwarming; dat blijft zo tot evcc het overschot stopt
+	// ook met de elektrische bijverwarming; dat blijft zo tot evcc het overschot stopt.
+	// Voorrang: eerst de thuisbatterij (moet ≥ 95 % zijn), dan de auto (evcc), dan pas het sanitair water.
 	if !st.PVBoost {
 		st.PVHotOn = false
 	} else if !st.PVHotOn {
 		fp, okf := priceAt(feedin, now)
-		if exp, ok := readExport(); (ok && exp >= 3000) || (okf && fp <= 0) {
+		if exp, soc, ok := readExport(); soc >= 95 && ((ok && exp >= 3000) || (okf && fp <= 0)) {
 			st.PVHotOn = true
 		}
 	}
@@ -403,6 +408,7 @@ func step(now time.Time) {
 		math.Round(dhwSet) != math.Round(want) && !now.Before(st.DHWOverride) {
 		markDHWOverride(now, dhwSet)
 	}
+	fresh := !now.Before(st.DHWOverride) && freshChange(dhwSet, st.SeenDHW, st.SentDHW, st.SentDHWAt, now)
 	st.SeenDHW = dhwSet
 	if now.Before(st.DHWOverride) && st.DHWManual > want && dhw >= st.DHWManual-1 {
 		st.DHWOverride = time.Time{} // boiler is warm: terug naar het eigen plan
@@ -412,7 +418,9 @@ func step(now time.Time) {
 		want, why = st.DHWManual, "zelf ingesteld, geldt tot "+st.DHWOverride.Format("15:04")+" of tot de boiler warm is"
 	}
 	s.DHW.Temp, s.DHW.Target, s.DHW.Want, s.DHW.Why, s.DHW.Override = dhw, dhwSet, want, why, st.DHWOverride
-	if math.Round(dhwSet) != math.Round(want) && (math.Round(st.SentDHW) != math.Round(want) || now.Sub(st.SentDHWAt) > resendAfter) {
+	if fresh {
+		// net zelf aangepast: eerst kijken of het blijft staan (dan geldt het als eigen keuze), niet overschrijven
+	} else if math.Round(dhwSet) != math.Round(want) && (math.Round(st.SentDHW) != math.Round(want) || now.Sub(st.SentDHWAt) > resendAfter) {
 		logChange("dhw", fmt.Sprintf("boiler %.0f → %.0f °C: %s", dhwSet, want, why))
 		if err := sendHM("SetDHWTemp", want); err == nil {
 			st.SentDHW, st.SentDHWAt = want, now
@@ -435,6 +443,9 @@ func step(now time.Time) {
 		if now.Before(st.Override) {
 			s.Heat.Want = z1
 			s.Heat.Why = "zelf ingesteld, geldt tot " + st.Override.Format("15:04")
+		} else if freshChange(z1, st.SeenZ1, st.SentZ1, st.SentZ1At, now) {
+			// net zelf aangepast (bediening): eerst nog een ronde kijken of het blijft staan, niet meteen overschrijven
+			s.Heat.Want, s.Heat.Why = z1, "zelf aangepast? even afwachten"
 		} else if math.Round(z1) != math.Round(plan.Target) && (math.Round(st.SentZ1) != math.Round(plan.Target) || now.Sub(st.SentZ1At) > resendAfter) {
 			logChange("z1", fmt.Sprintf("kamer %.0f → %.0f °C: %s", z1, plan.Target, plan.Why))
 			if err := sendHM("SetZ1HeatRequestTemperature", plan.Target); err == nil {
@@ -508,6 +519,18 @@ func summer(now time.Time, sc Schedule, hm hmData) {
 		if err := sendHM("SetOperationMode", 3); err == nil {
 			st.SummerOn, st.SummerAt = true, now
 		}
+	} else if sc.Mode != ModeSummer && !st.SummerOn && (op == 0 || op == 1 || op == 2) && !noBoiler(hm) {
+		// stand zonder sanitair water (0 verwarmen, 1 koelen, 2 auto): dan negeert de warmtepomp de boiler.
+		// Zet er sanitair water bij (4, 5, 6). Zet iemand hem binnen 6 uur toch weer terug, dan niet blijven vechten.
+		want := op + 4
+		if now.Sub(st.ModeFixAt) < 6*time.Hour {
+			logChange("opmode", fmt.Sprintf("⚠ warmtepomp staat opnieuw op stand %.0f (zonder sanitair water): boiler wordt niet opgewarmd. Zet hem op de bediening op verwarmen + sanitair water.", op))
+			return
+		}
+		logChange("opmode", fmt.Sprintf("warmtepomp stond op stand %.0f (zonder sanitair water, de boiler werd niet opgewarmd): naar stand %.0f", op, want))
+		if err := sendHM("SetOperationMode", want); err == nil {
+			st.ModeFixAt, st.SummerAt = now, now
+		}
 	} else if sc.Mode != ModeSummer && st.SummerOn {
 		prev := st.SummerPrev
 		if prev == 3 || prev == 0 { // niets zinnigs om naar terug te gaan: verwarmen + sanitair water
@@ -524,10 +547,27 @@ func summer(now time.Time, sc Schedule, hm hmData) {
 	}
 }
 
-// volgende omslag: einde/begin van een periode of voorverwarmen
+// de warmtepomp meldt uitdrukkelijk dat er geen boiler is
+func noBoiler(hm hmData) bool { v, ok := hm["DHW_Installed"]; return ok && v == 0 }
+
+// freshChange: de waarde op de warmtepomp is net veranderd, niet door de regelaar (die stuurde iets anders,
+// en niet in de laatste 2 minuten): wellicht iemand aan de bediening
+func freshChange(cur, seen, sent float64, sentAt, now time.Time) bool {
+	return act && math.Round(cur) != math.Round(seen) && math.Round(cur) != math.Round(sent) && now.Sub(sentAt) > graceAfterSend
+}
+
+// Tot wanneer een zelf ingestelde kamertemperatuur geldt: tot de volgende verandering in het programma.
+// In een periode, of tijdens het voorverwarmen ervoor: tot het einde van die periode. Daarbuiten: tot het
+// programma weer iets anders wil (voorverwarmen of het begin van de volgende periode).
 func nextBoundary(now time.Time, p HeatPlan) time.Time {
-	if per, ok := periodAt(schedule().Heat, now); ok {
+	sc := schedule()
+	if per, ok := periodAt(sc.Heat, now); ok {
 		return atMinute(now, per.To)
+	}
+	if !p.NextWindow.IsZero() && !now.Before(p.PreheatStart) && p.Target > sc.Eco {
+		if per, ok := periodAt(sc.Heat, p.NextWindow); ok { // voorverwarmen loopt: tot het einde van die periode
+			return atMinute(p.NextWindow, per.To)
+		}
 	}
 	if !p.PreheatStart.IsZero() && p.PreheatStart.After(now) {
 		return p.PreheatStart

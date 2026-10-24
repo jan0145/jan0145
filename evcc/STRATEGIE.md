@@ -28,7 +28,7 @@ als enige sturing. Per regel: hoe het gebeurt en wat er nog nodig is.
 
 | # | Regel | Hoe | Nodig / status |
 |---|---|---|---|
-| 1 | PV-overschot: huis → auto → SWW-boost → batterij | evcc-prioriteiten: auto 2, boiler 1; batterij-voorrang (prioritySoc) **laag** zetten zodat de batterij als laatste komt | ✅ kan nu (instelling in het evcc-scherm) |
+| 1 | PV-overschot: huis → batterij → auto → SWW | evcc: batterij-voorrang (prioritySoc) **100 %** (de batterij eerst vol), daarna auto (prioriteit 2) en boiler (prioriteit 1); 60 °C met bijverwarming pas als de batterij ≥ 95 % is | instelling in het evcc-scherm (batterij-instellingen) |
 | 2 | Piekbudget winter 5 kW / zomer 3,5 kW; binnen het budget huis/WP → auto → batterij | circuit `maxPower` (auto); optimizer gebruikt dezelfde grens als harde importgrens; piekbewaker voor de WP | ✅ winter; zomer: `maxPower` in april naar 3500 |
 | 3 | Nachtladen in de goedkoopste kwartieren | auto: **laadplan** (bv. 16 kWh tegen 07:00, kiest zelf de goedkoopste kwartieren); batterij: optimizer of "laden uit het net onder prijs X" | Bolt-tarief (1 nov), batterij onder evcc (stap 3) |
 | 3b | Batterij niet leeg laten lopen in de auto | evcc "ontladen blokkeren tijdens snel/gepland laden" | stap 3 (batterij onder evcc) |
@@ -54,7 +54,7 @@ ontladen blokkeren) plus een eigen regelaar voor reserve en ontladen in de duurs
 
 ## Volgorde
 
-1. Nu: batterij-voorrang laag (regel 1), piekbewaker in proefmodus laten lopen.
+1. Nu: batterij-voorrang 100 % (regel 1), piekbewaker in proefmodus laten lopen.
 2. 1 november: Bolt-tarief aan; auto met laadplan.
 3. ✅ HeishaMon actief (CZ-TAW1 eruit, commando's werken) → boiler, kamertemperatuur en piekbewaker.
 4. ✅ EVA uit (20/10/2026), batterij onder evcc (goodwe-hybrid, laden uit het net max. 3,5 kW zodat huis + batterij onder

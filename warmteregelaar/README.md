@@ -18,7 +18,7 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
 - Het plan en de reden (met de voorspelde temperatuur) staan in het logboek ("plan sww: …").
 - Bij **zonne-overschot** (evcc beslist, na de auto): 55 °C. Bij veel overschot (≥ 3 kW teruglevering) of een
   negatieve terugleverprijs: 60 °C, dan helpt de elektrische bijverwarming van de boiler (goedkoper dan gratis of
-  met verlies terugleveren).
+  met verlies terugleveren), maar pas als de thuisbatterij ≥ 95 % is (voorrang: batterij → auto → boiler).
 - Een begonnen beurt loopt door tot de boiler warm is (geen aan/uit-gependel).
 - Vóór er iets geleerd is, rekent hij met een voorzichtig profiel: 's ochtends 2 °C, 's avonds 5 °C (weekend 8 °C).
 
@@ -30,7 +30,12 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
   Zolang er nog geen 4 metingen zijn, rekent hij met een voorzichtige schatting.
 - Is het tot een uur vroeger beginnen goedkoper, dan doet hij dat (rekening houdend met het extra verbruik).
 - Een begonnen voorverwarming loopt door tot het begin van de periode (geen aan/uit-gependel).
-- Zet iemand zelf de thermostaat anders (bediening of Stroom-app), dan geldt dat tot het volgende omslagpunt.
+- Zet iemand zelf de thermostaat anders (bediening of Stroom-app), dan geldt dat tot de volgende verandering in
+  het programma: in een periode (of tijdens het voorverwarmen ervoor) tot het einde van die periode, daarbuiten tot
+  het programma weer iets anders wil. Een nieuwe waarde op de bediening wordt niet meteen overschreven: de
+  regelaar kijkt eerst of ze blijft staan.
+- Staat de warmtepomp op een stand zonder sanitair water (bv. alleen verwarmen), dan zet de regelaar er sanitair
+  water bij (behalve in de stand zomer); anders wordt de boiler nooit opgewarmd.
 - Zet iemand zelf de boiler anders (bv. hoger voor een bad), dan volgt de regelaar dat tot de boiler warm is,
   hoogstens 3 uur. Na een eigen commando wacht de regelaar 2 minuten voor hij een afwijking als "zelf ingesteld"
   beschouwt (de HeishaMon toont een nieuwe waarde pas na 10–60 s).
