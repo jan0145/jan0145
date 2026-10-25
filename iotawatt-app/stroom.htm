@@ -177,7 +177,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .legend { display: flex; gap: 14px; font-size: 13px; color: var(--text-2); margin-bottom: 4px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
-.chart-wrap { position: relative; touch-action: pan-y; }
+.chart-wrap { position: relative; touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .chart-wrap svg { display: block; width: 100%; height: 210px; overflow: visible; }
 .chart-wrap .axis { font-size: 11px; fill: var(--text-3); }
 .tip {
@@ -450,7 +450,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="tip" id="tip"></div>
     </div>
     <div class="htot" id="hTot"></div>
-    <p class="hint" id="hSignHint" style="margin-top:6px">Negatief = naar het net. Op de rechteras: de laadtoestand van de batterij en hoever de auto geladen is (%).</p>
+    <p class="hint" id="hSignHint" style="margin-top:6px">Negatief = naar het net. Op de rechteras: de laadtoestand van de batterij (%).</p>
   </section>
 
   <button class="navcard" id="openDevices">
@@ -505,17 +505,23 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
         <p class="hint" id="setDHWHint"></p>
       </div>
     </section>
-    <section class="card" id="schedCard" hidden>
-      <div class="card-head"><h2>Weekschema</h2></div>
-      <div class="seg wide" role="group" aria-label="Stand" id="modeSeg" style="margin:0 0 6px">
-        <button data-m="normaal" aria-pressed="true">Normaal</button>
-        <button data-m="vakantie" aria-pressed="false">Vakantie</button>
-        <button data-m="zomer" aria-pressed="false">Zomer</button>
+    <section class="card" id="tcRoomCard" hidden>
+      <div class="card-head"><h2>Temperatuur in huis</h2></div>
+      <div class="legend tlegend" id="tcRoomLeg"></div>
+      <div class="chart-wrap" id="tcRoomWrap">
+        <svg id="tcRoom" role="img" aria-label="Kamertemperatuur en ingestelde temperatuur, gemeten en voorspeld"></svg>
+        <div class="tip" id="tcRoomTip"></div>
       </div>
-      <p class="hint" id="modeHint"></p>
-      <div id="schedWeek"></div>
-      <p class="hint" id="schedHint" style="margin-top:8px">Tik op een dag om het schema aan te passen.</p>
     </section>
+    <section class="card" id="tcDhwCard" hidden>
+      <div class="card-head"><h2>Sanitair warm water</h2></div>
+      <div class="legend tlegend" id="tcDhwLeg"></div>
+      <div class="chart-wrap" id="tcDhwWrap">
+        <svg id="tcDhw" role="img" aria-label="Boilertemperatuur en ingestelde temperatuur, gemeten en voorspeld"></svg>
+        <div class="tip" id="tcDhwTip"></div>
+      </div>
+    </section>
+    <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten. Grijs: voorspeld door de warmteregelaar (links van "nu" wat er 24 uur geleden voorspeld werd). Stippellijn: ingestelde temperatuur (oranje gemeten, lichtgrijs gepland, rood zelf ingesteld).</p>
     <p class="empty" id="hpEmpty" hidden>Nog geen warmtepomp. Vul bij ⚙︎ het adres van de warmteregelaar of de HeishaMon in.</p>
   </div>
 
@@ -599,27 +605,21 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     </div>
     <section class="card hpsum" id="hpSum"></section>
     <section class="card"><div id="hpInfo"></div></section>
+    <section class="card" id="schedCard" hidden>
+      <div class="card-head"><h2>Weekschema</h2></div>
+      <div class="seg wide" role="group" aria-label="Stand" id="modeSeg" style="margin:0 0 6px">
+        <button data-m="normaal" aria-pressed="true">Normaal</button>
+        <button data-m="vakantie" aria-pressed="false">Vakantie</button>
+        <button data-m="zomer" aria-pressed="false">Zomer</button>
+      </div>
+      <p class="hint" id="modeHint"></p>
+      <div id="schedWeek"></div>
+      <p class="hint" id="schedHint" style="margin-top:8px">Tik op een dag om het schema aan te passen.</p>
+    </section>
     <section class="card" id="regCard" hidden>
       <div class="card-head"><h2>Warmteregelaar</h2></div>
       <div id="regInfo"></div>
     </section>
-    <section class="card" id="tcRoomCard" hidden>
-      <div class="card-head"><h2>Temperatuur in huis</h2></div>
-      <div class="legend tlegend" id="tcRoomLeg"></div>
-      <div class="chart-wrap" id="tcRoomWrap">
-        <svg id="tcRoom" role="img" aria-label="Kamertemperatuur en ingestelde temperatuur, gemeten en voorspeld"></svg>
-        <div class="tip" id="tcRoomTip"></div>
-      </div>
-    </section>
-    <section class="card" id="tcDhwCard" hidden>
-      <div class="card-head"><h2>Sanitair warm water</h2></div>
-      <div class="legend tlegend" id="tcDhwLeg"></div>
-      <div class="chart-wrap" id="tcDhwWrap">
-        <svg id="tcDhw" role="img" aria-label="Boilertemperatuur en ingestelde temperatuur, gemeten en voorspeld"></svg>
-        <div class="tip" id="tcDhwTip"></div>
-      </div>
-    </section>
-    <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten. Grijs: voorspeld door de warmteregelaar (links van "nu" wat er 24 uur geleden voorspeld werd). Stippellijn: ingestelde temperatuur (oranje gemeten, lichtgrijs gepland, rood zelf ingesteld).</p>
     <div class="seg wide" role="group" aria-label="Periode" id="hpSeg">
       <button data-p="day" aria-pressed="true">Dag</button>
       <button data-p="week" aria-pressed="false">Week</button>
@@ -1297,9 +1297,8 @@ async function loadHist() {
     let rows;
     if (hist.k === 0) rows = dayRows;
     else { const r = range('day', hist.k); rows = await queryDayLine(r.begin, r.end, false); }
-    // 12 uur vroeger beginnen: een laadbeurt die de avond ervoor begon, telt mee voor het % van de auto
-    const ev = await evccHistory(from - 43200, to, '15m');
-    const carPct = carPercent(ev, from);
+    const ev = await evccHistory(from, to, '15m');
+    const carMap = carHistory(ev);
     // 5-minutenpunten van de IoTaWatt (W); net/batterij/huis uit evcc per kwartier (kWh → gemiddeld W)
     hist.buckets = rows.filter((r) => r.use !== null).map((r) => {
       const q = Math.floor(r.t / 900) * 900;
@@ -1308,15 +1307,36 @@ async function loadHist() {
         use: h ? h.e * 4000 : r.use, sun: r.sun,
         grid: g ? netKwh(g) * 4000 : null, battery: bt ? batKwh(bt) * 4000 : null,
         soc: bt && typeof bt.soc === 'number' ? bt.soc : null,
-        car: carPct.has(q) ? carPct.get(q) : null,
+        car: carMap ? (carMap[q] ? carMap[q].e * 4000 : 0) : null,
       } };
     });
     if (hist.k === 0 && gw && typeof gw.battery_soc === 'number' && hist.buckets.length) {
       hist.buckets[hist.buckets.length - 1].vals.soc = gw.battery_soc;
     }
-    hist.ev = ev;
+    hist.ev = ev; hist.lines = true; hist.slot = 300;
     return;
   }
+  if (chartKind() === 'lines') {
+    // doorlopende lijn: week per kwartier, maand per uur, uit evcc (gemiddeld vermogen per tijdslot)
+    const agg = hist.period === 'week' ? '15m' : 'hour', slot = agg === '15m' ? 900 : 3600, k = 3600 / slot * 1000;
+    const ev = await evccHistory(from, to, agg);
+    if (ev && (ev.home || ev.grid)) {
+      const carMap = carHistory(ev), end = Math.min(to, Date.now() / 1000);
+      hist.buckets = [];
+      for (let t = from; t < end; t += slot) {
+        const g = findSlot(ev.grid, t, 60), bt = findSlot(ev.battery, t, 60), h = findSlot(ev.home, t, 60), pv = findSlot(ev.pv, t, 60);
+        hist.buckets.push({ t, vals: {
+          use: h ? h.e * k : null, sun: pv ? pv.e * k : null,
+          grid: g ? netKwh(g) * k : null, battery: bt ? batKwh(bt) * k : null,
+          soc: bt && typeof bt.soc === 'number' ? bt.soc : null,
+          car: carMap ? (carMap[t] ? carMap[t].e * k : 0) : null,
+        } });
+      }
+      hist.slot = slot; hist.ev = ev; hist.lines = true;
+      return;
+    }
+  }
+  hist.lines = false;
   const loads = loadNames(), suns = solarNames();
   const rows = await queryWh(hist.period, hist.k, '1d', [...loads, ...suns]);
   const ev = await evccHistory(from, to, 'day');
@@ -1330,31 +1350,10 @@ async function loadHist() {
   hist.ev = ev;
 }
 
-// Auto: hoeveel % van het laaddoel (standaard 16 kWh, anders dat van het laadplan) is geladen, per kwartier.
-// Een laadbeurt loopt tot er 3 uur niet meer geladen werd; daarna begint de teller opnieuw.
-function carTargetKwh() {
-  const lp = lpNow();
-  if (lp && lp.lp.planEnergy > 0) return lp.lp.planEnergy;
-  return ctl.auto && ctl.auto.kwh > 0 ? ctl.auto.kwh : 16;
-}
-function carPercent(ev, from) {
-  const out = new Map();
+// laadvermogen van de auto: de evcc-meter van de laadpaal (kWh per kwartier/uur)
+function carHistory(ev) {
   const name = evccMeterNames().find((n) => /laad|charge|wallbox/i.test(n));
-  const map = ev && name && ev[name];
-  if (!map) return out;
-  const target = carTargetKwh(), keys = Object.keys(map).map(Number);
-  if (!keys.length) return out;
-  let cum = 0, last = -Infinity;
-  const end = Math.min(Date.now() / 1000, from + 86400);
-  for (let t = Math.floor(Math.min(...keys) / 900) * 900; t < end; t += 900) {
-    const kwh = map[t] ? map[t].e || 0 : 0;
-    if (kwh >= 0.02) {
-      if (t - last > 3 * 3600) cum = 0;
-      cum += kwh; last = t;
-    }
-    if (t >= from && cum > 0 && t - last <= 3 * 3600) out.set(t, Math.min(100, cum / target * 100));
-  }
-  return out;
+  return ev && name ? ev[name] || {} : null;
 }
 
 // Kwartierpiek: gemiddelde afname van het net per kwartier (uit evcc, de P1-meter). Het capaciteitstarief
@@ -1418,24 +1417,26 @@ function renderHist() {
   $('hKind').hidden = hist.period === 'day';
   $('hLabel').textContent = periodLabel(hist.period, hist.k);
   $('hNext').disabled = hist.k === 0;
-  const day = hist.period === 'day';
+  const day = hist.period === 'day', cont = day || hist.lines;  // doorlopende tijdas
   const has = (k) => hist.buckets.some((b) => typeof b.vals[k] === 'number');
+  const hasCar = hist.buckets.some((b) => b.vals.car > 50);
   // de batterij staat in de grafiek als laadtoestand (%) op de rechteras, niet als vermogen
   const series = MAIN_SERIES.filter((s) => s.key !== 'battery' && (s.key === 'use' || s.key === 'sun' || has(s.key)));
+  if (cont && hasCar) series.push({ key: 'car', name: 'Auto', color: 'var(--c4)' });
   const pctFmt = (v) => ({ v: nf0.format(v), u: '%' });
-  const socSeries = day && has('soc') ? { key: 'soc', name: 'Batterij', color: 'var(--c2)', max: 100, fmt: pctFmt } : null;
-  const carSeries = day && has('car') ? { key: 'car', name: 'Auto', color: 'var(--c4)', max: 100, fmt: pctFmt, dash: '2 3' } : null;
-  const rights = [socSeries, carSeries].filter(Boolean);
-  $('hLegend').innerHTML = [...series, ...rights.map((r) => ({ ...r, name: r.key === 'car' ? `Auto (% van ${nf0.format(carTargetKwh())} kWh)` : 'Batterij (%)' }))]
+  const socSeries = cont && has('soc') ? { key: 'soc', name: 'Batterij', color: 'var(--c2)', max: 100, fmt: pctFmt } : null;
+  const rights = [socSeries].filter(Boolean);
+  $('hLegend').innerHTML = [...series, ...rights.map((r) => ({ ...r, name: 'Batterij (%)' }))]
     .map((s) => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
-  drawChart($('chart'), hist.buckets, series, day
-    ? { kind: 'lines', unit: 'W', period: 'day', t0: unixRange('day', hist.k)[0], area: 'use', right: rights }
+  const [r0, r1] = unixRange(hist.period, hist.k);
+  drawChart($('chart'), hist.buckets, series, cont
+    ? { kind: 'lines', unit: 'W', period: hist.period, t0: r0, span: r1 - r0, area: 'use', right: rights }
     : { kind: chartKind(), unit: 'Wh', period: hist.period });
 
   // totalen (kWh); bij de dag: W-punten omrekenen naar energie
   const f = day ? (b, i) => {
     const nx = hist.buckets[i + 1]; const dt = Math.min(nx ? nx.t - b.t : 300, 900); return dt / 3600;
-  } : () => 1;
+  } : hist.lines ? () => hist.slot / 3600 : () => 1;
   let use = 0, sun = 0, imp = 0, exp = 0, dis = 0, chg = 0;
   hist.buckets.forEach((b, i) => {
     const w = f(b, i), v = b.vals;
@@ -1685,7 +1686,8 @@ function drawChart(svg, buckets, series, opt) {
   const y = (v) => m.t + (yMax - v) / (yMax - yMin) * ih;
   const n = Math.max(1, buckets.length), band = iw / n;
   const timeAxis = opt.t0 !== undefined;
-  const xt = (t) => m.l + (t - opt.t0) / 86400 * iw;
+  const span = opt.span || 86400;
+  const xt = (t) => m.l + (t - opt.t0) / span * iw;
   const xc = (i) => timeAxis ? xt(buckets[i].t) : m.l + (i + .5) * band;
   const lab = opt.lab || (opt.unit === 'W'
     ? (v) => Math.abs(v) >= 1000 ? nf1.format(v / 1000).replace(',0', '') + 'k' : nf0.format(v)
@@ -1698,13 +1700,27 @@ function drawChart(svg, buckets, series, opt) {
     g += `<text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${lab(v)}</text>`;
   }
   g += `<text class="axis" x="0" y="10">${opt.axis || (opt.unit === 'W' ? 'W' : 'kWh')}</text>`;
-  if (timeAxis) {
-    for (let h = 0; h <= 24; h += 6) {
-      g += `<text class="axis num" x="${xt(opt.t0 + h * 3600)}" y="${H - 4}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${String(h).padStart(2, '0')}:00</text>`;
+  // x-as met lichtgrijze verticale lijnen op de ticks
+  const vline = (x) => `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--grid)" stroke-width="1"/>`;
+  if (timeAxis && span <= 86400) {
+    for (let h = 0; h <= 24; h += 3) {
+      g += vline(xt(opt.t0 + h * 3600));
+      if (h % 6 === 0) g += `<text class="axis num" x="${xt(opt.t0 + h * 3600)}" y="${H - 4}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${String(h).padStart(2, '0')}:00</text>`;
+    }
+  } else if (timeAxis) {
+    // week: elke dag een lijn en een label; maand: elke dag een lijn, om de 7 dagen een label
+    const days = Math.round(span / 86400), lblEvery = days > 10 ? 7 : 1;
+    for (let d = 0; d <= days; d++) {
+      const t = new Date(opt.t0 * 1000); t.setDate(t.getDate() + d); const ts = t.getTime() / 1000;
+      g += vline(xt(ts));
+      if (d < days && d % lblEvery === 0) {
+        const lbl = days > 10 ? String(t.getDate()) : t.toLocaleDateString('nl-NL', { weekday: 'short' }).replace('.', '');
+        g += `<text class="axis num" x="${xt(ts + (days > 10 ? 0 : 43200))}" y="${H - 4}" text-anchor="${days > 10 ? 'start' : 'middle'}">${lbl}</text>`;
+      }
     }
   } else {
     const every = Math.ceil(n / 8);
-    buckets.forEach((b, i) => { if (i % every === 0) g += `<text class="axis num" x="${xc(i)}" y="${H - 4}" text-anchor="middle">${bucketLabel(opt.period, b.t)}</text>`; });
+    buckets.forEach((b, i) => { if (i % every === 0) g += vline(xc(i)) + `<text class="axis num" x="${xc(i)}" y="${H - 4}" text-anchor="middle">${bucketLabel(opt.period, b.t)}</text>`; });
   }
 
   if (opt.kind === 'bars') {
@@ -1788,7 +1804,9 @@ function chartPointer(svg, tip, ev) {
   if (sc.opt.kind === 'bars') hl.setAttribute('x', sc.m.l + i * sc.band); else { hl.setAttribute('x1', cx); hl.setAttribute('x2', cx); }
   hl.setAttribute('visibility', 'visible');
   const fmt = sc.opt.fmt || (sc.opt.unit === 'W' ? fmtPower : fmtEnergy);
-  const title = sc.opt.t0 !== undefined ? new Date(b.t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : bucketTitle(sc.opt.period, b.t);
+  const title = sc.opt.t0 === undefined ? bucketTitle(sc.opt.period, b.t)
+    : (sc.opt.span || 86400) > 86400 ? new Date(b.t * 1000).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : new Date(b.t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
   const parts = sc.series.filter((s) => typeof b.vals[s.key] === 'number' && (!sc.opt.stacked || b.vals[s.key]))
     .sort((a, c) => Math.abs(b.vals[c.key]) - Math.abs(b.vals[a.key]))
     .map((s) => {
@@ -1898,10 +1916,13 @@ function hpDoing() {
 // voor verwarming en boiler
 function hpGridHtml() {
   const T = (n) => { const x = hv(n); return x === null ? '–' : nf1.format(x).replace(/,0$/, '') + ' °C'; };
-  const on = hv('Heatpump_State') === 1;
+  // één driewegklep: de warmtepomp verwarmt het huis óf de boiler, nooit allebei tegelijk
+  const on = hv('Heatpump_State') === 1, run = on && (hv('Compressor_Freq') || 0) > 0;
+  const what = !on ? 'uit' : hv('Defrosting_State') === 1 ? 'ontdooit' : !run ? 'stand-by'
+    : hv('ThreeWay_Valve_State') === 1 ? 'boiler aan' : 'verwarming aan';
   const z1set = hv('Z1_Heat_Request_Temp');
   return `<div class="hpline">
-      <div><div class="k">Warmtepomp</div><div class="v${on ? ' on' : ''}">${on ? 'aan' : 'uit'}</div></div>
+      <div><div class="k">Warmtepomp</div><div class="v${run ? ' on' : ''}">${what}</div></div>
       <div><div class="k">Buiten</div><div class="v">${T('Outside_Temp')}</div></div>
     </div>
     <table class="hptab num">
@@ -2054,7 +2075,7 @@ function tempOut(svg, tip) {
   const hl = document.getElementById(svg.id + '-hl'); if (hl) hl.setAttribute('visibility', 'hidden');
 }
 function renderTempCharts() {
-  if ($('hpView').hidden) return;
+  if ($('tabVerw').hidden) return;
   const ok = !!(tc && (tc.history && tc.history.length || tc.forecast));
   $('tcRoomCard').hidden = $('tcDhwCard').hidden = $('tcHint').hidden = !ok;
   if (!ok) return;
@@ -2716,7 +2737,7 @@ async function changeLp(period, k) {
 
 function openView(id) { $(id).hidden = false; document.body.style.overflow = 'hidden'; }
 function closeView(id) { $(id).hidden = true; document.body.style.overflow = ''; }
-function openHp() { openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); loadTempCharts().then(renderTempCharts); }
+function openHp() { openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); loadSched().then(renderSched); }
 
 const TABS = { elek: 'tabElek', verw: 'tabVerw', lp: 'tabLp' };
 function showTab(t) {
@@ -2728,7 +2749,7 @@ function showTab(t) {
   if (config.tab === 'verw') {
     Object.values(setState).forEach((x) => { if (!x.busy) { x.val = null; x.msg = ''; x.dirty = false; } });
     renderHM();
-    Promise.all([loadReg(), loadSched()]).then(() => { renderReg(); renderSched(); });
+    Promise.all([loadReg(), loadSched(), loadTempCharts()]).then(() => { renderReg(); renderSched(); renderTempCharts(); });
   }
   if (config.tab === 'lp') {
     renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {});
@@ -2808,7 +2829,7 @@ async function tickDay() {
     loadSessions().catch(() => {});
     if (!$('devView').hidden && dev.mode !== 'now' && dev.k === 0) { await loadDev(); renderDev(); }
     if (!$('hpView').hidden && hpv.k === 0) { await loadHpHist(); renderHpView(); }
-    if (!$('hpView').hidden) { await loadTempCharts(); renderTempCharts(); }
+    if (!$('tabVerw').hidden) { await loadTempCharts(); renderTempCharts(); }
     if (!$('tabLp').hidden && lpv.k === 0) { await loadLpHist(); renderLpView(); }
     if (!$('tabVerw').hidden) { await loadSched(); renderSched(); }
   } catch (e) { showError(e); }
@@ -2996,11 +3017,33 @@ $('dRows').addEventListener('click', (ev) => {
   renderDev();
 });
 const dw = $('dChartWrap');
-dw.addEventListener('pointermove', (e) => chartPointer($('dchart'), $('dtip'), e));
-dw.addEventListener('pointerdown', (e) => chartPointer($('dchart'), $('dtip'), e));
-dw.addEventListener('pointerleave', () => chartOut($('dchart'), $('dtip')));
+// Gegevens onder de vinger of de muis. Met de muis volgen ze de muis. Op een gsm blijven ze staan na één tik;
+// een tweede tik op dezelfde plaats of naast de grafiek haalt ze weg (scrollen telt niet als tik).
+let pinnedTip = null;  // { wrap, hide, x }
+function bindTip(wrap, show, hide) {
+  let down = null;
+  wrap.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') show(e); });
+  wrap.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hide(); });
+  wrap.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+  wrap.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'mouse' || !down) return;
+    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10, long = Date.now() - down.t > 600;
+    down = null;
+    if (moved || long) return;
+    e.stopPropagation();
+    if (pinnedTip && pinnedTip.wrap === wrap && Math.abs(e.clientX - pinnedTip.x) < 24) { hide(); pinnedTip = null; return; }
+    if (pinnedTip) pinnedTip.hide();
+    show(e);
+    pinnedTip = { wrap, hide, x: e.clientX };
+  });
+}
+document.addEventListener('pointerup', (e) => {
+  if (e.pointerType === 'mouse' || !pinnedTip || pinnedTip.wrap.contains(e.target)) return;
+  pinnedTip.hide(); pinnedTip = null;
+});
+bindTip(dw, (e) => chartPointer($('dchart'), $('dtip'), e), () => chartOut($('dchart'), $('dtip')));
 document.querySelectorAll('#hKind button, #dKind button').forEach((b) => {
-  b.onclick = () => { config.chartKind = b.dataset.k; saveConfig(); renderHist(); renderDev(); };
+  b.onclick = () => { config.chartKind = b.dataset.k; saveConfig(); changeHist(hist.period, hist.k); renderDev(); };
 });
 document.querySelectorAll('#hMode button').forEach((b) => {
   b.onclick = () => { config.histMode = b.dataset.m; saveConfig(); changeHist(hist.period, hist.k); };
@@ -3022,9 +3065,7 @@ $('hpNext').onclick = () => changeHp(hpv.period, hpv.k - 1);
 $('lpPrev').onclick = () => changeLp(lpv.period, lpv.k + 1);
 $('lpNext').onclick = () => changeLp(lpv.period, lpv.k - 1);
 [['hpWrap1', 'hpChart1', 'hpTip1'], ['hpWrap2', 'hpChart2', 'hpTip2'], ['lpWrap', 'lpChart', 'lpTip']].forEach(([w, c, t]) => {
-  $(w).addEventListener('pointermove', (e) => chartPointer($(c), $(t), e));
-  $(w).addEventListener('pointerdown', (e) => chartPointer($(c), $(t), e));
-  $(w).addEventListener('pointerleave', () => chartOut($(c), $(t)));
+  bindTip($(w), (e) => chartPointer($(c), $(t), e), () => chartOut($(c), $(t)));
 });
 document.querySelectorAll('#modeSeg button').forEach((b) => { b.onclick = () => setMode(b.dataset.m); });
 $('addHeat').onclick = () => addPeriod('heat');
@@ -3051,14 +3092,10 @@ $('cancelSettings').onclick = closeSettings;
 $('sheetBg').onclick = closeSettings;
 $('saveSettings').onclick = saveSettings;
 const cw = $('chartWrap');
-cw.addEventListener('pointermove', (e) => chartPointer($('chart'), $('tip'), e));
-cw.addEventListener('pointerdown', (e) => chartPointer($('chart'), $('tip'), e));
-cw.addEventListener('pointerleave', () => chartOut($('chart'), $('tip')));
+bindTip(cw, (e) => chartPointer($('chart'), $('tip'), e), () => chartOut($('chart'), $('tip')));
 window.addEventListener('resize', () => { renderHist(); renderDev(); renderHpView(); renderLpView(); renderTempCharts(); });
 [['tcRoomWrap', 'tcRoom', 'tcRoomTip'], ['tcDhwWrap', 'tcDhw', 'tcDhwTip']].forEach(([w, c, t]) => {
-  $(w).addEventListener('pointermove', (e) => tempPointer($(c), $(t), e));
-  $(w).addEventListener('pointerdown', (e) => tempPointer($(c), $(t), e));
-  $(w).addEventListener('pointerleave', () => tempOut($(c), $(t)));
+  bindTip($(w), (e) => tempPointer($(c), $(t), e), () => tempOut($(c), $(t)));
 });
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
 
