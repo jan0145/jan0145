@@ -450,7 +450,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="tip" id="tip"></div>
     </div>
     <div class="htot" id="hTot"></div>
-    <p class="hint" id="hSignHint" style="margin-top:6px">Negatief = naar het net. Op de rechteras: de laadtoestand van de batterij (%).</p>
+    <p class="hint" id="hSignHint" style="margin-top:6px">Injectie (naar het net) staat onder de nul. Verbruik = het hele huis, met de auto. Op de rechteras: de laadtoestand van de batterij (%).</p>
   </section>
 
   <button class="navcard" id="openDevices">
@@ -1286,7 +1286,8 @@ const seFromEvcc = (n) => !!n && n === seIotName() && seLiveW() !== null;
 const MAIN_SERIES = [
   { key: 'use', name: 'Verbruik', color: 'var(--use)' },
   { key: 'sun', name: 'Zon', color: 'var(--sun)' },
-  { key: 'grid', name: 'Net', color: 'var(--c6)' },
+  { key: 'imp', name: 'Afname', color: 'var(--c6)' },
+  { key: 'exp', name: 'Injectie', color: 'var(--c5)' },
   { key: 'battery', name: 'Batterij', color: 'var(--c2)' },
 ];
 
@@ -1303,11 +1304,12 @@ async function loadHist() {
     hist.buckets = rows.filter((r) => r.use !== null).map((r) => {
       const q = Math.floor(r.t / 900) * 900;
       const g = ev && findSlot(ev.grid, q, 60), bt = ev && findSlot(ev.battery, q, 60), h = ev && findSlot(ev.home, q, 60);
+      const car = carMap ? (carMap[q] ? carMap[q].e * 4000 : 0) : null;
+      // evcc "home" is het huis zonder de laadpaal: de auto erbij tellen voor het totale verbruik
       return { t: r.t, vals: {
-        use: h ? h.e * 4000 : r.use, sun: r.sun,
-        grid: g ? netKwh(g) * 4000 : null, battery: bt ? batKwh(bt) * 4000 : null,
-        soc: bt && typeof bt.soc === 'number' ? bt.soc : null,
-        car: carMap ? (carMap[q] ? carMap[q].e * 4000 : 0) : null,
+        use: h ? h.e * 4000 + (car || 0) : r.use, sun: r.sun,
+        imp: g ? g.e * 4000 : null, exp: g ? -g.r * 4000 : null, battery: bt ? batKwh(bt) * 4000 : null,
+        soc: bt && typeof bt.soc === 'number' ? bt.soc : null, car,
       } };
     });
     if (hist.k === 0 && gw && typeof gw.battery_soc === 'number' && hist.buckets.length) {
@@ -1325,11 +1327,11 @@ async function loadHist() {
       hist.buckets = [];
       for (let t = from; t < end; t += slot) {
         const g = findSlot(ev.grid, t, 60), bt = findSlot(ev.battery, t, 60), h = findSlot(ev.home, t, 60), pv = findSlot(ev.pv, t, 60);
+        const car = carMap ? (carMap[t] ? carMap[t].e * k : 0) : null;
         hist.buckets.push({ t, vals: {
-          use: h ? h.e * k : null, sun: pv ? pv.e * k : null,
-          grid: g ? netKwh(g) * k : null, battery: bt ? batKwh(bt) * k : null,
-          soc: bt && typeof bt.soc === 'number' ? bt.soc : null,
-          car: carMap ? (carMap[t] ? carMap[t].e * k : 0) : null,
+          use: h ? h.e * k + (car || 0) : null, sun: pv ? pv.e * k : null,
+          imp: g ? g.e * k : null, exp: g ? -g.r * k : null, battery: bt ? batKwh(bt) * k : null,
+          soc: bt && typeof bt.soc === 'number' ? bt.soc : null, car,
         } });
       }
       hist.slot = slot; hist.ev = ev; hist.lines = true;
@@ -1345,7 +1347,8 @@ async function loadHist() {
       + evccMeterNames().reduce((a, n) => { const sl = ev && findSlot(ev[n], r.t, 7200); return a + (sl ? sl.e * 1000 : 0); }, 0);
     const sun = suns.reduce((a, n) => a + (sunWh(n, r.v[n]) || 0), 0);
     const g = ev && findSlot(ev.grid, r.t, 7200), bt = ev && findSlot(ev.battery, r.t, 7200), h = ev && findSlot(ev.home, r.t, 7200);
-    return { t: r.t, vals: { use: h ? h.e * 1000 : use, sun, grid: g ? netKwh(g) * 1000 : null, battery: bt ? batKwh(bt) * 1000 : null } };
+    const cm = carHistory(ev), cs = cm && findSlot(cm, r.t, 7200), car = cs ? cs.e * 1000 : 0;
+    return { t: r.t, vals: { use: h ? h.e * 1000 + car : use, sun, imp: g ? g.e * 1000 : null, exp: g ? -g.r * 1000 : null, battery: bt ? batKwh(bt) * 1000 : null } };
   });
   hist.ev = ev;
 }
@@ -1441,14 +1444,15 @@ function renderHist() {
   hist.buckets.forEach((b, i) => {
     const w = f(b, i), v = b.vals;
     use += (v.use || 0) * w; sun += (v.sun || 0) * w;
-    if (typeof v.grid === 'number') { if (v.grid > 0) imp += v.grid * w; else exp -= v.grid * w; }
+    if (typeof v.imp === 'number') imp += v.imp * w;
+    if (typeof v.exp === 'number') exp -= v.exp * w;
     if (typeof v.battery === 'number') { if (v.battery > 0) dis += v.battery * w; else chg -= v.battery * w; }
   });
   const E = (x) => `<b>${txt(fmtEnergy(x))}</b>`;
   $('hTot').innerHTML = `<span>Verbruik ${E(use)}</span><span>Zon ${E(sun)}</span>`
-    + (has('grid') ? `<span>Van net ${E(imp)}</span><span>Naar net ${E(exp)}</span>` : '')
+    + (has('imp') ? `<span>Afname ${E(imp)}</span><span>Injectie ${E(exp)}</span>` : '')
     + (has('battery') ? `<span>Batterij laden ${E(chg)}</span><span>ontladen ${E(dis)}</span>` : '')
-    + (has('grid') ? '' : '<span>(gemeten groepen)</span>');
+    + (has('imp') ? '' : '<span>(gemeten groepen)</span>');
 }
 
 async function changeHist(period, k) {
@@ -1810,7 +1814,7 @@ function chartPointer(svg, tip, ev) {
   const parts = sc.series.filter((s) => typeof b.vals[s.key] === 'number' && (!sc.opt.stacked || b.vals[s.key]))
     .sort((a, c) => Math.abs(b.vals[c.key]) - Math.abs(b.vals[a.key]))
     .map((s) => {
-      const v = b.vals[s.key], h = SIGN_HINT[s.key];
+      const v = s.key === 'exp' ? -b.vals[s.key] : b.vals[s.key], h = SIGN_HINT[s.key];  // injectie: positief tonen
       return `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:4px"></span>${esc(s.name)} <b>${txt(fmt(v))}</b>${h && Math.abs(v) > 1 ? ` <span style="opacity:.7">${v > 0 ? h[0] : h[1]}</span>` : ''}`;
     });
   (Array.isArray(sc.opt.right) ? sc.opt.right : [sc.opt.right]).filter(Boolean).forEach((R) => {
