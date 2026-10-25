@@ -2537,7 +2537,9 @@ async function saveSched() {
 
 const LP_MODE = { off: 'Uit', now: 'Nu laden', minpv: 'Min+Zon', pv: 'Zon', smart: 'Slim' };
 const lpNow = () => (gw && gw.ext ? gw.ext.find((m) => m.lp) : null);
-const lpState = (lp) => (lp.lp.charging && lp.power > 50 ? 'laadt' : lp.lp.connected ? 'auto aangesloten' : 'geen auto');
+// "vol" alleen als de regelaar zeker is: evcc laat laden, er werd geladen, en de auto neemt al 10 min niets meer
+const carIsFull = (lp) => !!(lp && lp.lp.connected && ctl.auto && ctl.auto.full);
+const lpState = (lp) => (lp.lp.charging && lp.power > 50 ? 'laadt' : carIsFull(lp) ? 'auto vol' : lp.lp.connected ? 'auto aangesloten' : 'geen auto');
 function renderLpTile() {
   const lp = lpNow();
   $('tLpTile').hidden = !lp;
@@ -2561,6 +2563,7 @@ function renderLpInfo() {
     ['Fasen', typeof x.phases === 'number' && x.phases > 0 ? String(x.phases) : null],
     ['Laadstroom', typeof x.current === 'number' && x.current > 0 ? nf1.format(x.current) + ' A' : null],
     ['Deze laadbeurt', typeof x.chargedEnergy === 'number' && x.chargedEnergy > 0 ? txt(fmtEnergy(x.chargedEnergy)) : null],
+    ['Batterij auto', carIsFull(lp) ? 'vol' + (ctl.auto.fullSince ? ' (sinds ' + hhmmOf(ctl.auto.fullSince) + ')' : '') : null],
     ['Kwartierpiek-grens', gw && gw.limit ? txt(fmtPower(gw.limit)) : null],
   ]]]);
 }
@@ -2568,6 +2571,7 @@ function renderLpInfo() {
 /* ---------- laden bedienen (evcc-API; wissen via de warmteregelaar, een browser mag geen DELETE naar evcc sturen) ---------- */
 
 const ctl = { kwh: null, time: null, limLp: undefined, busy: false, msg: '', auto: null };
+let lpTick = 0;
 const fEur = (v) => (v === null || v === undefined ? 'uit' : nf2.format(v) + ' €');
 const hhmmOf = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 const validTime = (t) => t && new Date(t).getFullYear() > 2000;
@@ -2754,7 +2758,7 @@ function showTab(t) {
   if (config.tab === 'lp') {
     renderLpInfo(); changeLp(lpv.period, lpv.k); loadSessions().catch(() => {});
     Object.assign(ctl, { kwh: null, time: null, limLp: undefined });
-    loadAutoPlan().then(renderLpCtl); renderLpCtl();
+    loadAutoPlan().then(() => { renderLpCtl(); renderLpTile(); renderLpInfo(); }); renderLpCtl();
   }
 }
 
@@ -2812,7 +2816,10 @@ async function tickLive() {
     renderLpTile();
     renderHpInfo();
     renderLpInfo();
-    if (!$('tabLp').hidden) renderLpCtl();
+    if (!$('tabLp').hidden) {
+      renderLpCtl();
+      if (++lpTick % 6 === 0) loadAutoPlan().then(() => { renderLpTile(); renderLpInfo(); });  // "vol" elke 30 s bijwerken
+    }
     if (!$('hpView').hidden || !$('tabVerw').hidden) loadReg().then(renderReg);
     showOk();
     renderTiles();

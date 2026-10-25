@@ -90,6 +90,9 @@ type State struct {
 	// laadplan voor de auto (zie laden.go)
 	ChargePlan    ChargePlan `json:"chargePlan"`
 	ChargePlanFor time.Time  `json:"chargePlanFor"` // vertrektijd waarvoor het plan al gezet is
+	CarFull       bool       `json:"carFull"`       // auto zeker vol (zie carFull)
+	CarFullAt     time.Time  `json:"carFullAt"`
+	CarIdleSince  time.Time  `json:"carIdleSince"`
 	Status        Status     `json:"-"`
 }
 

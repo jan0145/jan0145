@@ -47,6 +47,10 @@ func nextPlanTime(now time.Time, hhmmStr string) time.Time {
 type evccLoadpoint struct {
 	Title                 string    `json:"title"`
 	Connected             bool      `json:"connected"`
+	Enabled               bool      `json:"enabled"`  // evcc laat laden
+	Charging              bool      `json:"charging"` // de auto neemt stroom
+	ChargePower           float64   `json:"chargePower"`
+	ChargedEnergy         float64   `json:"chargedEnergy"` // Wh in deze laadbeurt
 	ChargerFeatureHeating bool      `json:"chargerFeatureHeating"`
 	PlanEnergy            float64   `json:"planEnergy"`
 	PlanTime              time.Time `json:"planTime"`
@@ -96,7 +100,35 @@ func evccDo(method, path string) ([]byte, int, error) {
 
 // checkChargePlan: auto ingeplugd en nog geen plan → plan zetten, één keer per vertrektijd
 // (wist iemand het plan zelf, dan zet de regelaar het voor die nacht niet opnieuw).
-func checkChargePlan(now time.Time) { setChargePlan(now, false) }
+func checkChargePlan(now time.Time) {
+	if _, lp, err := readCarLoadpoint(); err == nil {
+		mu.Lock()
+		idle, full := carFull(st.CarIdleSince, st.CarFull, now, lp)
+		if full && !st.CarFull {
+			st.CarFullAt = now
+			log.Printf("auto vol: hij neemt al 10 min geen stroom meer terwijl evcc laadt (%.1f kWh geladen)", lp.ChargedEnergy/1000)
+		}
+		st.CarIdleSince, st.CarFull = idle, full
+		mu.Unlock()
+	}
+	setChargePlan(now, false)
+}
+
+// carFull: is de auto zeker vol? evcc laat laden, er werd in deze laadbeurt al geladen (≥ 0,5 kWh), en de auto
+// neemt al 10 minuten geen stroom meer. Een pauze voor de kwartierpiek (evcc laat dan niet laden) of een
+// laadpaal die niet start (niets geladen) telt dus niet. "Vol" blijft tot de auto weer laadt of uitgeplugd wordt.
+func carFull(idleSince time.Time, wasFull bool, now time.Time, lp evccLoadpoint) (time.Time, bool) {
+	switch {
+	case !lp.Connected, lp.ChargePower > 300:
+		return time.Time{}, false
+	case lp.Enabled && lp.ChargedEnergy >= 500 && lp.ChargePower < 100:
+		if idleSince.IsZero() {
+			idleSince = now
+		}
+		return idleSince, wasFull || now.Sub(idleSince) >= 10*time.Minute
+	}
+	return time.Time{}, wasFull
+}
 
 // setChargePlan: force = ook een bestaand plan vervangen (het nachtdoel werd net aangepast)
 func setChargePlan(now time.Time, force bool) {
@@ -165,7 +197,11 @@ func serveCharge(h *http.ServeMux) {
 			go setChargePlan(time.Now(), p.On)
 		}
 		mu.Lock()
-		b, _ := json.Marshal(st.ChargePlan)
+		b, _ := json.Marshal(struct {
+			ChargePlan
+			Full      bool      `json:"full"` // auto zeker vol
+			FullSince time.Time `json:"fullSince,omitzero"`
+		}{st.ChargePlan, st.CarFull, st.CarFullAt})
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(b)

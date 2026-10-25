@@ -363,3 +363,31 @@ func TestDST(t *testing.T) {
 		t.Fatalf("07:00 op de zomertijddag: %v", v)
 	}
 }
+
+func TestCarFull(t *testing.T) {
+	t0 := at(5, 0)
+	lp := evccLoadpoint{Connected: true, Enabled: true, ChargedEnergy: 9800, ChargePower: 0}
+	idle, full := carFull(time.Time{}, false, t0, lp)
+	if full {
+		t.Fatal("meteen vol")
+	}
+	if _, full = carFull(idle, full, t0.Add(11*time.Minute), lp); !full {
+		t.Fatal("na 11 min niet vol")
+	}
+	// pauze voor de kwartierpiek: evcc laat niet laden → niet vol
+	pause := evccLoadpoint{Connected: true, Enabled: false, ChargedEnergy: 9800}
+	if _, f := carFull(time.Time{}, false, t0.Add(30*time.Minute), pause); f {
+		t.Fatal("pauze telt als vol")
+	}
+	// laadpaal start niet (niets geladen) → niet vol
+	if _, f := carFull(t0, false, t0.Add(30*time.Minute), evccLoadpoint{Connected: true, Enabled: true}); f {
+		t.Fatal("niets geladen telt als vol")
+	}
+	// opnieuw laden of uitpluggen → weg
+	if _, f := carFull(idle, true, t0, evccLoadpoint{Connected: true, Enabled: true, ChargePower: 3500}); f {
+		t.Fatal("laadt weer, toch vol")
+	}
+	if _, f := carFull(idle, true, t0, evccLoadpoint{}); f {
+		t.Fatal("uitgeplugd, toch vol")
+	}
+}

@@ -98,6 +98,9 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build -trimpath -ldflags="-s -w" 
 evcc kent zonder voertuig alleen een eenmalig plan ("x kWh tegen hh:mm"). Staat in de Stroom-app (Laadpaal) "elke
 nacht automatisch" aan, dan zet de regelaar dat plan elke keer opnieuw zodra de auto ingeplugd is
 (`GET/POST /laadplan`). Wist je het plan zelf, dan zet hij het voor die ochtend niet opnieuw.
+"Auto vol" toont de app alleen als het zeker is: evcc laat laden, er werd in deze laadbeurt al geladen (≥ 0,5 kWh)
+en de auto neemt al 10 minuten geen stroom meer. Een pauze voor de kwartierpiek telt dus niet. (De laadpaal kent
+de laadtoestand van de auto niet; daarvoor is de Volvo-koppeling van evcc nodig.)
 Opdrachten die een browser niet rechtstreeks naar evcc mag sturen (een plan of prijsgrens wissen), geeft hij door
 via `/evcc?m=DELETE&p=/api/…` (alleen laadpunten en prijsgrenzen).
 
