@@ -434,9 +434,11 @@ func step(now time.Time) {
 	if dhwSet >= dhw+dhwHysteresis && hm["ThreeWay_Valve_State"] != 1 && hm["Heatpump_State"] == 1 {
 		if st.DHWAskSince.IsZero() {
 			st.DHWAskSince = now
-		} else if now.Sub(st.DHWAskSince) > 45*time.Minute {
-			logChange("dhwstuck", fmt.Sprintf("⚠ de boiler staat al %.0f min op %.0f °C (nu %.0f °C) maar de warmtepomp warmt hem niet op (stand %.0f, driewegklep op verwarming)",
-				now.Sub(st.DHWAskSince).Minutes(), dhwSet, dhw, hm["Operating_Mode_State"]))
+		} else if now.Sub(st.DHWAskSince) > 45*time.Minute && lastMsg["dhwstuck"] == "" {
+			// één keer per keer dat het gebeurt (niet elke minuut)
+			lastMsg["dhwstuck"] = "gemeld"
+			log.Printf("⚠ de boiler staat al %.0f min op %.0f °C (nu %.0f °C) maar de warmtepomp warmt hem niet op (stand %.0f, driewegklep op verwarming)",
+				now.Sub(st.DHWAskSince).Minutes(), dhwSet, dhw, hm["Operating_Mode_State"])
 		}
 	} else {
 		st.DHWAskSince = time.Time{}
