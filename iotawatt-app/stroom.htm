@@ -186,6 +186,11 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
   opacity: 0; transition: opacity .1s;
 }
 .tip.on { opacity: 1; }
+/* in- en uitzoomen op de tijdas */
+.zoom { position: absolute; right: 30px; top: -3px; display: flex; gap: 4px; z-index: 2; }
+.zoom button { width: 28px; height: 22px; padding: 0; border: 0; border-radius: 7px; background: var(--card); color: var(--text-2);
+  font: 600 16px/1 system-ui, sans-serif; box-shadow: 0 0 0 1px var(--line) inset; cursor: pointer; }
+.zoom button:disabled { opacity: .35; cursor: default; }
 .tip b { font-weight: 650; }
 
 /* knop naar toestellen */
@@ -451,7 +456,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="tip" id="tip"></div>
     </div>
     <div class="htot" id="hTot"></div>
-    <p class="hint" id="hSignHint" style="margin-top:6px">Injectie (naar het net) staat onder de nul. Verbruik = het hele huis, met de auto. Op de rechteras: de laadtoestand van de batterij (%).</p>
+    <p class="hint" id="hSignHint" style="margin-top:6px">Injectie (naar het net): stippellijn onder de nul. Verbruik = het hele huis, met de auto. Op de rechteras: de laadtoestand van de batterij (%).</p>
   </section>
 
   <button class="navcard" id="openDevices">
@@ -522,7 +527,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
         <div class="tip" id="tcDhwTip"></div>
       </div>
     </section>
-    <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten. Grijs: voorspeld door de warmteregelaar (links van "nu" wat er 24 uur geleden voorspeld werd). Stippellijn: ingestelde temperatuur (oranje gemeten, lichtgrijs gepland, rood zelf ingesteld).</p>
+    <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten (kamer: de Shelly). Grijs: voorspeld (links van "nu" wat er 24 uur geleden voorspeld werd). Stippellijn: ingestelde temperatuur (lichtgrijs = gepland, groen = zelf ingesteld). Met − en + zoom je in; ingezoomd schuif je de grafiek opzij.</p>
     <p class="empty" id="hpEmpty" hidden>Nog geen warmtepomp. Vul bij ⚙︎ het adres van de warmteregelaar of de HeishaMon in.</p>
   </div>
 
@@ -1288,7 +1293,7 @@ const MAIN_SERIES = [
   { key: 'use', name: 'Verbruik', color: 'var(--use)' },
   { key: 'sun', name: 'Zon', color: 'var(--sun)' },
   { key: 'imp', name: 'Afname', color: 'var(--c6)' },
-  { key: 'exp', name: 'Injectie', color: 'var(--c5)' },
+  { key: 'exp', name: 'Injectie', color: 'var(--c6)', dash: '4 3', noLegend: true },
   { key: 'battery', name: 'Batterij', color: 'var(--c2)' },
 ];
 
@@ -1430,11 +1435,13 @@ function renderHist() {
   const pctFmt = (v) => ({ v: nf0.format(v), u: '%' });
   const socSeries = cont && has('soc') ? { key: 'soc', name: 'Batterij', color: 'var(--c2)', max: 100, fmt: pctFmt } : null;
   const rights = [socSeries].filter(Boolean);
-  $('hLegend').innerHTML = [...series, ...rights.map((r) => ({ ...r, name: 'Batterij (%)' }))]
+  $('hLegend').innerHTML = [...series.filter((s) => !s.noLegend), ...rights.map((r) => ({ ...r, name: 'Batterij (%)' }))]
     .map((s) => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
-  const [r0, r1] = unixRange(hist.period, hist.k);
+  // de tijdas loopt over de hele dag (0–24 u) / week / maand, ook als die nog niet om is
+  const [r0] = unixRange(hist.period, hist.k), r1 = new Date(r0 * 1000);
+  if (hist.period === 'day') r1.setDate(r1.getDate() + 1); else if (hist.period === 'week') r1.setDate(r1.getDate() + 7); else r1.setMonth(r1.getMonth() + 1);
   drawChart($('chart'), hist.buckets, series, cont
-    ? { kind: 'lines', unit: 'W', period: hist.period, t0: r0, span: r1 - r0, area: 'use', right: rights }
+    ? { kind: 'lines', unit: 'W', period: hist.period, t0: r0, span: r1.getTime() / 1000 - r0, area: 'use', right: rights }
     : { kind: chartKind(), unit: 'Wh', period: hist.period });
 
   // totalen (kWh); bij de dag: W-punten omrekenen naar energie
@@ -1669,7 +1676,100 @@ function closeDevices() {
 /* Grafiek met staven (gegroepeerd of gestapeld) of lijnen, één y-as, ook negatieve waarden.
    buckets: [{ t, vals: { key: waarde } }]  series: [{ key, name, color }]
    opt: { kind: 'bars'|'lines', stacked, unit: 'Wh'|'W', period, t0 (tijd-as voor één dag), area } */
+// gegevens naast het aangewezen punt (links of rechts ervan), zodat het punt zelf zichtbaar blijft
+function placeTip(tip, width, x) {
+  tip.style.transform = 'none';
+  tip.style.top = '0px'; // binnen de grafiek, zodat de knoppen erboven bereikbaar blijven
+  const w = tip.offsetWidth, gap = 14, l = x > width / 2 ? x - gap - w : x + gap;
+  tip.style.left = Math.max(0, Math.min(width - w, l)) + 'px';
+}
+
+// tijdas: lichtgrijze lijnen per uur (of per dag), getallen zoals "12u" waar er plaats is
+function timeGrid(t0, span, x, xl, xr, y0, y1, H) {
+  const vline = (xx) => `<line x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${y0}" y2="${y1}" stroke="var(--grid)" stroke-width="1"/>`;
+  const lab = (xx, txt) => `<text class="axis num" x="${xx.toFixed(1)}" y="${H - 4}" text-anchor="${xx < xl + 12 ? 'start' : xx > xr - 12 ? 'end' : 'middle'}">${txt}</text>`;
+  const hours = span / 3600, end = t0 + span + 1;
+  let g = '';
+  if (hours <= 48) {
+    const gridEvery = hours <= 30 ? 1 : 3, lblEvery = hours <= 4 ? 1 : hours <= 8 ? 2 : hours <= 14 ? 3 : 6;
+    const d = new Date(t0 * 1000); d.setMinutes(0, 0, 0);
+    if (d.getTime() / 1000 < t0) d.setHours(d.getHours() + 1);
+    for (; d.getTime() / 1000 <= end; d.setHours(d.getHours() + 1)) {
+      const h = d.getHours(), ts = d.getTime() / 1000;
+      if (h % gridEvery === 0) g += vline(x(ts));
+      if (h % lblEvery === 0) g += lab(x(ts), (h === 0 && ts > t0 + span - 60 && ts > t0 ? '24' : String(h).padStart(2, '0')) + 'u');
+    }
+  } else {
+    const days = span / 86400, lblEvery = days > 20 ? 7 : days > 10 ? 3 : 1;
+    const d = new Date(t0 * 1000); d.setHours(0, 0, 0, 0);
+    if (d.getTime() / 1000 < t0) d.setDate(d.getDate() + 1);
+    for (; d.getTime() / 1000 <= end; d.setDate(d.getDate() + 1)) {
+      const ts = d.getTime() / 1000;
+      g += vline(x(ts));
+      if (days <= 10) { if (ts + 43200 < end) g += lab(x(ts + 43200), d.toLocaleDateString('nl-NL', { weekday: 'short' }).replace('.', '')); }
+      else if ((d.getDate() - 1) % lblEvery === 0 && ts < end - 3600) g += lab(x(ts), String(d.getDate()));
+    }
+  }
+  return g;
+}
+
+// in- en uitzoomen (knoppen − en +): z = vergroting, c = midden (0–1 van het hele bereik)
+const zoomSt = {};
+function zoomWin(id) {
+  const s = zoomSt[id];
+  if (!s || s.z <= 1) return [0, 1];
+  const h = 0.5 / s.z;
+  s.c = Math.min(1 - h, Math.max(h, s.c));
+  return [s.c - h, s.c + h];
+}
+function zoomButtons(svg) { if (svg._zoomUpd) svg._zoomUpd(); }
+function addZoom(wrap, svg) {
+  const box = document.createElement('div');
+  box.className = 'zoom';
+  box.innerHTML = '<button type="button" aria-label="Uitzoomen">−</button><button type="button" aria-label="Inzoomen">+</button>';
+  wrap.appendChild(box);
+  const [out, inn] = box.querySelectorAll('button');
+  const zs = () => zoomSt[svg.id] || (zoomSt[svg.id] = { z: 1, c: 0.5 });
+  svg._zoomUpd = () => { const z = zoomSt[svg.id] ? zoomSt[svg.id].z : 1; out.disabled = z <= 1; inn.disabled = z >= 16; };
+  const redraw = () => {
+    const tip = wrap.querySelector('.tip'); if (tip) tip.classList.remove('on'); // staat niet meer op de juiste plaats
+    if (pinnedTip && pinnedTip.wrap === wrap) pinnedTip = null;
+    if (svg._redraw) svg._redraw();
+  };
+  // inzoomen rond het aangewezen punt (anders rond het midden van wat je ziet)
+  inn.onclick = () => { const s = zs(); const tip = wrap.querySelector('.tip.on'); if (tip && svg._focus !== undefined) s.c = svg._focus; s.z = Math.min(16, s.z * 2); redraw(); };
+  out.onclick = () => { const s = zs(); s.z = Math.max(1, s.z / 2); redraw(); };
+  ['pointerdown', 'pointerup'].forEach((ev) => box.addEventListener(ev, (e) => e.stopPropagation()));
+  // ingezoomd: opzij schuiven met de vinger of de muis
+  let drag = null, raf = 0;
+  wrap.addEventListener('pointerdown', (e) => { if (zs().z > 1) drag = { x: e.clientX, c: zs().c, w: svg.clientWidth || 340 }; });
+  wrap.addEventListener('pointermove', (e) => {
+    if (!drag || Math.abs(e.clientX - drag.x) < 8) return;
+    const s = zs(); s.c = drag.c - (e.clientX - drag.x) / drag.w / s.z;
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); });
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => wrap.addEventListener(ev, () => { drag = null; }));
+}
+
 function drawChart(svg, buckets, series, opt) {
+  const args = [buckets, series, opt];
+  svg._redraw = () => drawChart(svg, ...args);
+  // ingezoomd: alleen het zichtbare stuk (met tijdas een tijdvenster, anders een deel van de staven)
+  const full = { t0: opt.t0, span: opt.span || 86400, n: buckets.length, i0: 0 };
+  const zkey = opt.period + '|' + (opt.t0 === undefined ? buckets.length : opt.t0);
+  if (svg._zkey !== zkey) { svg._zkey = zkey; delete zoomSt[svg.id]; } // andere periode: weer alles tonen
+  const [za, zb] = zoomWin(svg.id);
+  if (za > 0 || zb < 1) {
+    if (opt.t0 !== undefined) {
+      const t0 = opt.t0 + za * full.span, span = (zb - za) * full.span;
+      opt = { ...opt, t0, span };
+      buckets = buckets.filter((b) => b.t >= t0 && b.t <= t0 + span);
+    } else {
+      full.i0 = Math.floor(za * buckets.length);
+      buckets = buckets.slice(full.i0, Math.ceil(zb * buckets.length));
+    }
+  }
+  zoomButtons(svg);
   const W = svg.clientWidth || 340, H = 210;
   const m = { l: 42, r: (Array.isArray(opt.right) ? opt.right.length : opt.right) ? 34 : 8, t: 20, b: 22 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
@@ -1704,25 +1804,17 @@ function drawChart(svg, buckets, series, opt) {
     g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${zero ? 'var(--text-3)' : 'var(--grid)'}" stroke-width="1"/>`;
     g += `<text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${lab(v)}</text>`;
   }
+  // extra lichte lijnen per kW (zonder getal)
+  if (opt.unit === 'W' && step > 1000) {
+    for (let v = Math.ceil(yMin / 1000) * 1000; v <= yMax + 1e-9; v += 1000) {
+      if (Math.abs(v / step - Math.round(v / step)) > 1e-9) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1" opacity=".6"/>`;
+    }
+  }
   g += `<text class="axis" x="0" y="10">${opt.axis || (opt.unit === 'W' ? 'W' : 'kWh')}</text>`;
   // x-as met lichtgrijze verticale lijnen op de ticks
   const vline = (x) => `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--grid)" stroke-width="1"/>`;
-  if (timeAxis && span <= 86400) {
-    for (let h = 0; h <= 24; h += 3) {
-      g += vline(xt(opt.t0 + h * 3600));
-      if (h % 6 === 0) g += `<text class="axis num" x="${xt(opt.t0 + h * 3600)}" y="${H - 4}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${String(h).padStart(2, '0')}:00</text>`;
-    }
-  } else if (timeAxis) {
-    // week: elke dag een lijn en een label; maand: elke dag een lijn, om de 7 dagen een label
-    const days = Math.round(span / 86400), lblEvery = days > 10 ? 7 : 1;
-    for (let d = 0; d <= days; d++) {
-      const t = new Date(opt.t0 * 1000); t.setDate(t.getDate() + d); const ts = t.getTime() / 1000;
-      g += vline(xt(ts));
-      if (d < days && d % lblEvery === 0) {
-        const lbl = days > 10 ? String(t.getDate()) : t.toLocaleDateString('nl-NL', { weekday: 'short' }).replace('.', '');
-        g += `<text class="axis num" x="${xt(ts + (days > 10 ? 0 : 43200))}" y="${H - 4}" text-anchor="${days > 10 ? 'start' : 'middle'}">${lbl}</text>`;
-      }
-    }
+  if (timeAxis) {
+    g += timeGrid(opt.t0, span, xt, m.l, W - m.r, m.t, m.t + ih, H);
   } else {
     const every = Math.ceil(n / 8);
     buckets.forEach((b, i) => { if (i % every === 0) g += vline(xc(i)) + `<text class="axis num" x="${xc(i)}" y="${H - 4}" text-anchor="middle">${bucketLabel(opt.period, b.t)}</text>`; });
@@ -1761,7 +1853,7 @@ function drawChart(svg, buckets, series, opt) {
         const pts = buckets.map((b, i) => [i, val(b, s.key)]).filter(([, v]) => v !== null);
         g += `<path d="${d}L${xc(pts[pts.length - 1][0]).toFixed(1)},${y(0)}L${xc(pts[0][0]).toFixed(1)},${y(0)}Z" fill="var(--use-soft)"/>`;
       }
-      g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+      g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" ${s.dash ? `stroke-dasharray="${s.dash}"` : ''} stroke-linejoin="round" stroke-linecap="round"/>`;
     });
   }
   // referentielijnen (bv. kwartierpiek-grens), gestippeld met een label
@@ -1793,7 +1885,7 @@ function drawChart(svg, buckets, series, opt) {
     ? `<rect id="${svg.id}-hl" x="0" y="${m.t}" width="${band}" height="${ih}" fill="var(--text)" opacity=".06" visibility="hidden"/>`
     : `<line id="${svg.id}-hl" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="var(--text-3)" stroke-width="1" visibility="hidden"/>`;
   svg.innerHTML = g;
-  svg._chart = { buckets, series, m, band, opt, xc, y };
+  svg._chart = { buckets, series, m, band, opt, xc, y, full };
 }
 
 const SIGN_HINT = { grid: ['afname', 'teruglevering'], battery: ['ontladen', 'laden'] };
@@ -1804,7 +1896,8 @@ function chartPointer(svg, tip, ev) {
   const px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
   let i = 0, bd = Infinity;
   sc.buckets.forEach((b, j) => { const d = Math.abs(sc.xc(j) - px); if (d < bd) { bd = d; i = j; } });
-  const b = sc.buckets[i], cx = sc.xc(i);
+  const b = sc.buckets[i], cx = sc.xc(i), F = sc.full;
+  svg._focus = sc.opt.t0 !== undefined ? (b.t - F.t0) / F.span : (F.i0 + i + .5) / F.n; // midden bij inzoomen
   const hl = document.getElementById(svg.id + '-hl');
   if (sc.opt.kind === 'bars') hl.setAttribute('x', sc.m.l + i * sc.band); else { hl.setAttribute('x1', cx); hl.setAttribute('x2', cx); }
   hl.setAttribute('visibility', 'visible');
@@ -1826,9 +1919,7 @@ function chartPointer(svg, tip, ev) {
   tip.innerHTML = `<div style="margin-bottom:2px">${title}</div>` + (parts.join('<br>') || 'niets') + (b.note ? `<div style="opacity:.7">${esc(b.note)}</div>` : '');
   tip.style.whiteSpace = 'nowrap';
   tip.classList.add('on');
-  const w = tip.offsetWidth;
-  tip.style.left = Math.min(rect.width - w / 2, Math.max(w / 2, cx)) + 'px';
-  tip.style.top = '0px'; // binnen de grafiek, zodat de knoppen erboven bereikbaar blijven
+  placeTip(tip, rect.width, cx);
 }
 function chartOut(svg, tip) {
   tip.classList.remove('on');
@@ -2019,12 +2110,20 @@ async function loadTempCharts() {
   try { tc = await getJson(b + '/grafiek'); } catch (e) { tc = null; }
 }
 // lijnen: { name, color, pts: [[t, v]], dash, step, w }
-function drawTempChart(svg, tip, t0, t1, lines, unit) {
+function drawTempChart(svg, tip, T0, T1, lines, unit) {
+  svg._redraw = () => drawTempChart(svg, tip, T0, T1, lines, unit);
+  const full = { t0: T0, span: T1 - T0 }, [za, zb] = zoomWin(svg.id);
+  const t0 = T0 + za * full.span, t1 = T0 + zb * full.span;
+  zoomButtons(svg);
   const W = svg.clientWidth || 340, H = 206, m = { l: 34, r: 8, t: 20, b: 22 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   let lo = Infinity, hi = -Infinity;
-  lines.forEach((L) => L.pts.forEach(([, v]) => { if (v !== null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
+  // schaal volgens wat zichtbaar is (ingezoomd), anders alles
+  [true, false].forEach((vis) => {
+    if (isFinite(lo)) return;
+    lines.forEach((L) => L.pts.forEach(([t, v]) => { if (v !== null && (!vis || (t >= t0 && t <= t1))) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
+  });
   if (!isFinite(lo)) { svg.innerHTML = `<text class="axis" x="${W / 2}" y="${H / 2}" text-anchor="middle">Nog geen gegevens</text>`; return; }
   const span = Math.max(2, hi - lo), stepY = span > 16 ? 5 : span > 7 ? 2 : 1;
   lo = Math.floor((lo - 0.5) / stepY) * stepY; hi = Math.ceil((hi + 0.5) / stepY) * stepY;
@@ -2034,11 +2133,7 @@ function drawTempChart(svg, tip, t0, t1, lines, unit) {
     g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text class="axis num" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
   }
   g += `<text class="axis" x="${m.l - 6}" y="8" text-anchor="end">${unit}</text>`;
-  const first = Math.ceil(t0 / 21600) * 21600;
-  for (let t = first; t <= t1; t += 21600) {
-    const hh = new Date(t * 1000).getHours();
-    g += `<line x1="${x(t)}" x2="${x(t)}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--grid)"/><text class="axis num" x="${x(t)}" y="${H - 6}" text-anchor="middle">${String(hh).padStart(2, '0')}u</text>`;
-  }
+  g += timeGrid(t0, t1 - t0, x, m.l, W - m.r, m.t, m.t + ih, H);
   const now = Date.now() / 1000;
   lines.forEach((L) => {
     let d = '', prev = null;
@@ -2056,27 +2151,30 @@ function drawTempChart(svg, tip, t0, t1, lines, unit) {
     + `<text class="axis" x="${x(now) + 3}" y="${m.t - 6}">nu</text>`;
   g += `<line id="${svg.id}-hl" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="var(--text-3)" visibility="hidden"/>`;
   svg.innerHTML = g;
-  svg._tc = { x, t0, t1, m, iw, lines, unit };
+  svg._tc = { x, t0, t1, m, iw, lines, unit, full };
 }
 function tempPointer(svg, tip, ev) {
   const c = svg._tc; if (!c) return;
   const rect = svg.getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
   const t = c.t0 + (px - c.m.l) / c.iw * (c.t1 - c.t0);
   if (t < c.t0 || t > c.t1) return;
-  const parts = [];
+  svg._focus = (t - c.full.t0) / c.full.span;
+  // per naam de dichtste waarde (bv. "Voorspeld" van nu en van 24 u geleden vlak bij "nu")
+  const byName = new Map();
   c.lines.forEach((L) => {
-    let best = null, bd = 1200;
-    L.pts.forEach(([pt, v]) => { const dd = Math.abs(pt - t); if (v !== null && dd < bd) { bd = dd; best = v; } });
-    if (best !== null && !L.noTip) parts.push(`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${L.color};margin-right:4px"></span>${esc(L.name)} <b>${nf1.format(best)} ${c.unit}</b>`);
+    if (L.noTip) return;
+    L.pts.forEach(([pt, v]) => {
+      const dd = Math.abs(pt - t), cur = byName.get(L.name);
+      if (v !== null && dd < 1200 && (!cur || dd < cur.dd)) byName.set(L.name, { dd, v, color: L.color });
+    });
   });
+  const parts = [...byName].map(([name, x]) => `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${x.color};margin-right:4px"></span>${esc(name)} <b>${nf1.format(x.v)} ${c.unit}</b>`);
   const hl = document.getElementById(svg.id + '-hl');
   hl.setAttribute('x1', px); hl.setAttribute('x2', px); hl.setAttribute('visibility', 'visible');
   const d = new Date(t * 1000);
   tip.innerHTML = `<div style="margin-bottom:2px">${d.toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</div>` + (parts.join('<br>') || 'geen gegevens');
   tip.classList.add('on');
-  const w = tip.offsetWidth;
-  tip.style.left = Math.min(rect.width - w / 2, Math.max(w / 2, px)) + 'px';
-  tip.style.top = '0px';
+  placeTip(tip, rect.width, px);
 }
 function tempOut(svg, tip) {
   tip.classList.remove('on');
@@ -2094,22 +2192,25 @@ function renderTempCharts() {
   const grey = 'var(--text-3)';
   // voorspelling: altijd een volle grijze lijn, ook het stuk dat al voorbij is (de voorspelling van 24 u geleden);
   // gemeten in kleur, de ingestelde temperatuur in rood waar ze zelf ingesteld werd
-  const mk = (tempKey, setKey, manKey, cTemp, cSet, nTemp, nSet) => {
-    const pastT = fpts(tc.past, tempKey, true).filter(([t]) => t <= now), curT = fpts(tc.forecast, tempKey, true).filter(([t]) => t >= now - 900);
+  // kamer: gemeten door de Shelly (als die er is); de voorspelling staat op de schaal van de warmtepomp (min het verschil)
+  const mk = (tempKey, setKey, manKey, cTemp, cSet, nTemp, nSet, meas, off = 0) => {
+    const adj = (pts) => pts.map(([t, v]) => [t, Math.round((v - off) * 10) / 10]);
+    const pastT = adj(fpts(tc.past, tempKey, true).filter(([t]) => t <= now)), curT = adj(fpts(tc.forecast, tempKey, true).filter(([t]) => t >= now - 900));
     const curS = fpts(tc.forecast, setKey, false).filter(([t]) => t >= now - 900);
     const setH = H.filter((r) => r[setKey] > 0);
     const man = setH.some((r) => r[manKey]);
     return [
-      { name: 'Ingesteld (gepland)', color: grey, op: 0.55, pts: curS, dash: '5 3', w: 1.5, step: true, legend: 'dash', lo: 5 },
-      { name: 'Voorspeld (24 u geleden)', color: grey, pts: pastT, w: 2 },
+      { name: nSet, color: grey, op: 0.55, pts: curS, dash: '5 3', w: 1.5, step: true },
+      { name: 'Voorspeld', color: grey, pts: pastT, w: 2 },
       { name: 'Voorspeld', color: grey, pts: curT, w: 2, legend: 'line', lo: 4 },
       { name: nSet, color: cSet, pts: setH.map((r) => [ts(r), r[manKey] ? null : r[setKey]]), dash: '5 3', w: 1.5, step: true, legend: 'dash', lo: 2 },
-      { name: 'Zelf ingesteld', color: 'var(--bad)', pts: setH.map((r) => [ts(r), r[manKey] ? r[setKey] : null]), dash: '5 3', w: 2, step: true, legend: man ? 'dash' : '', lo: 3 },
-      { name: nTemp, color: cTemp, pts: H.filter((r) => r[tempKey] > -50).map((r) => [ts(r), r[tempKey]]), w: 2.2, legend: 'line', lo: 1 },
+      { name: 'Zelf ingesteld', color: 'var(--good)', pts: setH.map((r) => [ts(r), r[manKey] ? r[setKey] : null]), dash: '5 3', w: 2, step: true, legend: man ? 'dash' : '', lo: 3 },
+      { name: nTemp, color: cTemp, pts: H.filter((r) => r[tempKey] > -50).map((r) => [ts(r), meas ? meas(r) : r[tempKey]]), w: 2.2, legend: 'line', lo: 1 },
     ];
   };
   const leg = (lines) => lines.filter((L) => L.legend).sort((a, b) => a.lo - b.lo).map((L) => `<span><i class="${L.legend === 'line' ? '' : L.legend}" style="background:${L.color};border-color:${L.color}${L.op ? `;opacity:${L.op}` : ''}"></i>${esc(L.name)}</span>`).join('');
-  const room = mk('room', 'roomSet', 'roomManual', 'var(--c0)', 'var(--sun)', 'Kamer', 'Ingesteld');
+  const room = mk('room', 'roomSet', 'roomManual', 'var(--c0)', 'var(--sun)', 'Kamer', 'Ingesteld',
+    (r) => (r.shelly > 0 ? r.shelly : r.room), typeof tc.offset === 'number' ? tc.offset : 0);
   const dhw = mk('dhw', 'dhwSet', 'dhwManual', 'var(--c6)', 'var(--sun)', 'Boiler', 'Ingesteld');
   $('tcRoomLeg').innerHTML = leg(room); $('tcDhwLeg').innerHTML = leg(dhw);
   drawTempChart($('tcRoom'), $('tcRoomTip'), t0, t1, room, '°C');
@@ -3043,7 +3144,7 @@ const dw = $('dChartWrap');
 let pinnedTip = null;  // { wrap, hide, x }
 function bindTip(wrap, show, hide) {
   let down = null;
-  wrap.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') show(e); });
+  wrap.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && !e.target.closest('.zoom')) show(e); });
   wrap.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hide(); });
   wrap.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
   wrap.addEventListener('pointerup', (e) => {
@@ -3119,6 +3220,7 @@ window.addEventListener('resize', () => { renderHist(); renderDev(); renderHpVie
   bindTip($(w), (e) => tempPointer($(c), $(t), e), () => tempOut($(c), $(t)));
 });
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
+document.querySelectorAll('.chart-wrap').forEach((w) => { const svg = w.querySelector('svg'); if (svg) addZoom(w, svg); });
 
 showTab(config.tab);
 renderHist();

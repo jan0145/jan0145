@@ -162,6 +162,8 @@ type histRow struct {
 	// zelf ingesteld (bediening of app) in plaats van de regelaar
 	RoomManual bool `json:"roomManual,omitempty"`
 	DHWManual  bool `json:"dhwManual,omitempty"`
+	// kamertemperatuur zoals de Shelly ze meet (0 = geen meting)
+	Shelly float64 `json:"shelly,omitempty"`
 }
 
 // geschiedenis uit de maandbestanden warmte-JJJJ-MM.csv (elke 5 min een regel)
@@ -187,6 +189,9 @@ func readHistory(from, to time.Time) []histRow {
 			if len(c) >= 15 { // oudere regels hebben deze kolommen niet
 				row.RoomManual, row.DHWManual = c[13] == "1", c[14] == "1"
 			}
+			if len(c) >= 16 && c[15] != "" {
+				row.Shelly = num(c[15])
+			}
 			rows = append(rows, row)
 		}
 		f.Close()
@@ -210,11 +215,18 @@ func serveForecast(h *http.ServeMux) {
 			c := st.Current
 			cur = &c
 		}
+		// de voorspelde kamertemperatuur staat op de schaal van de warmtepomp: min dit verschil = Shelly
+		var off *float64
+		if _, ok := shellyNow(now); ok {
+			o := math.Round(st.RoomOffset*100) / 100
+			off = &o
+		}
 		b, _ := json.Marshal(struct {
 			History  []histRow `json:"history"`
 			Forecast *Forecast `json:"forecast"`
-			Past     *Forecast `json:"past"` // voorspelling van ±24 u geleden
-		}{hist, cur, old})
+			Past     *Forecast `json:"past"`             // voorspelling van ±24 u geleden
+			Offset   *float64  `json:"offset,omitempty"` // warmtepompsensor − Shelly
+		}{hist, cur, old, off})
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(b)
