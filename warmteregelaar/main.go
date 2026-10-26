@@ -93,7 +93,16 @@ type State struct {
 	CarFull       bool       `json:"carFull"`       // auto zeker vol (zie carFull)
 	CarFullAt     time.Time  `json:"carFullAt"`
 	CarIdleSince  time.Time  `json:"carIdleSince"`
-	Status        Status     `json:"-"`
+	// legionella (zie legionella.go)
+	LegioLast  time.Time `json:"legioLast"` // laatste keer ≥ 59 °C
+	LegioOn    bool      `json:"legioOn"`
+	LegioStart time.Time `json:"legioStart"`
+	LegioFail  time.Time `json:"legioFail"`
+	LegioWhy   string    `json:"legioWhy"`
+	// Shelly-thermometer: verschil met de sensor van de warmtepomp (zie shelly.go)
+	RoomOffset  float64 `json:"roomOffset"`
+	RoomOffsetN int     `json:"roomOffsetN"`
+	Status      Status  `json:"-"`
 }
 
 type preheatRun struct {
@@ -135,10 +144,14 @@ type Status struct {
 		PreheatStart         time.Time
 		LeadMinutes          float64
 		Override             time.Time
+		HPTin                float64     // sensor van de warmtepomp (hele graden)
+		Shelly               *shellyData // wifi-thermometer (nil = geen verse meting)
+		Offset               float64     // geleerd verschil warmtepomp − Shelly
 	} `json:"heat"`
-	Learned Learned   `json:"learned"`
-	Battery battState `json:"battery"`
-	Error   string    `json:"error,omitempty"`
+	Legionella legioStatus `json:"legionella"`
+	Learned    Learned     `json:"learned"`
+	Battery    battState   `json:"battery"`
+	Error      string      `json:"error,omitempty"`
 }
 
 var (
@@ -373,6 +386,18 @@ func step(now time.Time) {
 	if tin < -50 { // geen kamersensor: dan de kamerthermostaat
 		tin = hm["Room_Thermostat_Temp"]
 	}
+	// Shelly-thermometer: nauwkeuriger (0,1 °C), op de schaal van de warmtepomp
+	s.Heat.HPTin, s.Heat.Shelly = tin, nil
+	shTin, shHum := math.NaN(), math.NaN()
+	if m, ok := shellyNow(now); ok {
+		if tin > -50 {
+			st.RoomOffset = roomOffset(st.RoomOffset, st.RoomOffsetN, tin, m.Temp)
+			st.RoomOffsetN++
+		}
+		shTin, shHum = m.Temp, m.Hum
+		s.Heat.Shelly, s.Heat.Offset = &m, math.Round(st.RoomOffset*100)/100
+		tin = round1(m.Temp + st.RoomOffset)
+	}
 
 	learnDHW(now, dhw, dhwHeating)
 	learnDHWUse(now, dhw, dhwHeating)
@@ -402,6 +427,10 @@ func step(now time.Time) {
 			want, why = sc.DHWBase, fmt.Sprintf("opwarmen uitgesteld: het huis neemt nu al %.0f W af (kwartierpiek)", -exp)
 			st.PrevDHW = 0
 		}
+	}
+	// legionella: wekelijks ≥ 60 °C (gaat voor op het plan; een manuele aanpassing gaat nog altijd voor)
+	if on, lw := legionella(now, dhw, dhwSet, prices, solar); on {
+		want, why = legioTemp, lw
 	}
 	s.DHW.ForecastStart, s.DHW.Forecast, s.DHW.Next = now.Truncate(quarter), make([]float64, len(dp.Forecast)), time.Time{}
 	for i, v := range dp.Forecast {
@@ -498,7 +527,7 @@ func step(now time.Time) {
 
 	if now.Sub(st.LastLog) >= 5*time.Minute {
 		p, _ := priceAt(prices, now)
-		writeCSV(now, hm, tin, want, plan.Target, p, now.Before(st.Override), now.Before(st.DHWOverride))
+		writeCSV(now, hm, tin, want, plan.Target, p, now.Before(st.Override), now.Before(st.DHWOverride), shTin, shHum)
 		st.LastLog = now
 	}
 	saveState()
@@ -705,7 +734,7 @@ func learnPreheat(now time.Time, tin, tout float64, p HeatPlan, set, eco float64
 
 // ---------- logboek (CSV, per maand) ----------
 
-func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64, roomManual, dhwManual bool) {
+func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64, roomManual, dhwManual bool, shTin, shHum float64) {
 	fn := filepath.Join(dataDir, "warmte-"+now.Format("2006-01")+".csv")
 	_, err := os.Stat(fn)
 	f, e2 := os.OpenFile(fn, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -714,7 +743,7 @@ func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64, r
 	}
 	defer f.Close()
 	if os.IsNotExist(err) {
-		fmt.Fprintln(f, "tijd;buiten;kamer;kamer_doel;kamer_regelaar;boiler;boiler_doel;boiler_regelaar;driewegklep;compressor_hz;warmte_w;elektrisch_w;prijs;kamer_manueel;boiler_manueel")
+		fmt.Fprintln(f, "tijd;buiten;kamer;kamer_doel;kamer_regelaar;boiler;boiler_doel;boiler_regelaar;driewegklep;compressor_hz;warmte_w;elektrisch_w;prijs;kamer_manueel;boiler_manueel;shelly;vocht")
 	}
 	b01 := func(b bool) int {
 		if b {
@@ -722,11 +751,17 @@ func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64, r
 		}
 		return 0
 	}
-	fmt.Fprintf(f, "%s;%.1f;%.1f;%.0f;%.0f;%.1f;%.0f;%.0f;%.0f;%.0f;%.0f;%.0f;%.4f;%d;%d\n", now.Format("2006-01-02 15:04"),
+	opt := func(v float64) string {
+		if math.IsNaN(v) {
+			return ""
+		}
+		return strconv.FormatFloat(v, 'f', 1, 64)
+	}
+	fmt.Fprintf(f, "%s;%.1f;%.1f;%.0f;%.0f;%.1f;%.0f;%.0f;%.0f;%.0f;%.0f;%.0f;%.4f;%d;%d;%s;%s\n", now.Format("2006-01-02 15:04"),
 		hm["Outside_Temp"], tin, hm["Z1_Heat_Request_Temp"], heatWant, hm["DHW_Temp"], hm["DHW_Target_Temp"], dhwWant,
 		hm["ThreeWay_Valve_State"], hm["Compressor_Freq"],
 		hm["Heat_Power_Production"]+hm["DHW_Power_Production"], hm["Heat_Power_Consumption"]+hm["DHW_Power_Consumption"], price,
-		b01(roomManual), b01(dhwManual))
+		b01(roomManual), b01(dhwManual), opt(shTin), opt(shHum))
 }
 
 // ---------- HTTP: voor evcc (boiler bij zonne-overschot) en de Stroom-app ----------
@@ -847,6 +882,7 @@ func serve() {
 	})
 	serveCharge(h)
 	serveForecast(h)
+	serveShelly(h)
 	h.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		st.Status.Battery = batt
@@ -872,6 +908,7 @@ func main() {
 		log.Fatal(err)
 	}
 	loadState()
+	initLegionella(time.Now())
 	log.Printf("start: HeishaMon %s, evcc %s, %s", hmURL, evccURL, map[bool]string{true: "STUURT", false: "PROEF (alleen loggen)"}[act])
 	sc := schedule()
 	log.Printf("stand %s · boiler gewoon %.0f °C, zonne-overschot %.0f °C (veel: %.0f °C) · kamer eco %.0f °C, vakantie %.0f °C (weekschema: /schedule)",
@@ -879,6 +916,7 @@ func main() {
 	log.Printf("thuisbatterij: volgt het advies van de evcc-optimizer, %s", map[bool]string{true: "STUURT (BATT=1)", false: "PROEF (BATT=0, alleen loggen)"}[battAct])
 	go pollHM()
 	go battLoop()
+	go shellyLoop()
 	go serve()
 	time.Sleep(3 * time.Second) // eerste HeishaMon-gegevens afwachten
 	for {

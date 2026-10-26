@@ -251,7 +251,8 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .dico.lp { background: var(--c2); }
 .dtitle { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
 .dstate { font-size: 13px; color: var(--text-2); }
-.hpline { display: flex; gap: 24px; margin: 6px 0 8px; }
+.hpline { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 6px 0 8px; }
+.hpline .v small { font-size: 13px; font-weight: 500; color: var(--text-2); }
 .hpline .k, .hptab th { font-size: 12px; color: var(--text-2); font-weight: 500; }
 .hpline .v { font-size: 19px; font-weight: 650; }
 .hpline .v.on { color: var(--good); }
@@ -1925,9 +1926,12 @@ function hpGridHtml() {
   const what = !on ? 'uit' : hv('Defrosting_State') === 1 ? 'ontdooit' : !run ? 'stand-by'
     : hv('ThreeWay_Valve_State') === 1 ? 'boiler aan' : 'verwarming aan';
   const z1set = hv('Z1_Heat_Request_Temp');
+  // kamertemperatuur van de Shelly-thermometer (via de warmteregelaar), op 0,1 °C
+  const sh = reg && reg.heat && reg.heat.Shelly;
   return `<div class="hpline">
       <div><div class="k">Warmtepomp</div><div class="v${run ? ' on' : ''}">${what}</div></div>
       <div><div class="k">Buiten</div><div class="v">${T('Outside_Temp')}</div></div>
+      ${sh ? `<div><div class="k">Kamer (Shelly)</div><div class="v">${nf1.format(sh.temp)} °C${sh.hum ? ` <small>${nf0.format(sh.hum)} %</small>` : ''}</div></div>` : ''}
     </div>
     <table class="hptab num">
       <tr><th></th><th>Gevraagd</th><th>Huidig</th></tr>
@@ -2126,7 +2130,10 @@ async function loadReg() {
   if (!b) { reg = null; return; }
   try { reg = await getJson(b + '/status'); } catch (e) { reg = null; }
 }
+// tegel en details opnieuw: de kamertemperatuur van de Shelly komt uit de status van de regelaar
+function renderHpGrid() { if (hm && hm.v) { $('tHpGrid').innerHTML = hpGridHtml(); if (!$('hpView').hidden) renderHpInfo(); } }
 function renderReg() {
+  renderHpGrid();
   const card = $('regCard');
   card.hidden = !reg || $('hpView').hidden;
   renderSched(); renderHpSet();
@@ -2141,6 +2148,9 @@ function renderReg() {
       ['Stand', reg.mode ? { normaal: 'weekschema', vakantie: 'vakantie (schema uit)', zomer: 'zomer (verwarming uit)' }[reg.mode] || reg.mode : null],
       ['Boiler', reg.dhw ? T(reg.dhw.Want) + ' · ' + reg.dhw.Why : null],
       ['Verwarming', reg.heat ? T(reg.heat.Want) + ' · ' + reg.heat.Why : null],
+      ['Legionella', reg.legionella && new Date(reg.legionella.last).getFullYear() > 2000
+        ? (reg.legionella.on ? 'bezig: ' : '') + 'laatst ≥ 60 °C op ' + new Date(reg.legionella.last).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'numeric' }) + ' · ' + reg.legionella.why : null],
+      ['Kamerthermometer', reg.heat && reg.heat.Shelly ? 'Shelly ' + nf1.format(reg.heat.Shelly.temp) + ' °C' + (reg.heat.Shelly.hum ? ', ' + nf0.format(reg.heat.Shelly.hum) + ' % vocht' : '') + (reg.heat.Shelly.batt ? ', batterij ' + nf0.format(reg.heat.Shelly.batt) + ' %' : '') + ' · sensor warmtepomp ' + (reg.heat.Offset < 0 ? '−' : '+') + nf1.format(Math.abs(reg.heat.Offset)) + ' °C' : 'geen Shelly (de sensor van de warmtepomp, hele graden)'],
       ['Voorverwarmen vanaf', reg.heat && hm(reg.heat.PreheatStart) && new Date(reg.heat.PreheatStart) > new Date() ? hm(reg.heat.PreheatStart) + ' (±' + nf0.format(reg.heat.LeadMinutes) + ' min)' : null],
     ]],
     ['Geleerd', [

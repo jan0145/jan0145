@@ -228,6 +228,8 @@ tariffs:
 #    host: 192.168.0.GGG
 #    port: 502
 #    id: 247
+#    delay: 200ms            # wachten voor elke Modbus-vraag (tegen "transaction id does not match")
+#    timeout: 10s
 #    maxacpower: 8000        # GW8K-BT: 8 kW
 #    capacity: 10            # kWh  <-- capaciteit van je batterij nakijken
 #    maxchargepower: 3500    # W, laden uit het net: + huis blijft onder de kwartierpiekgrens van 5 kW

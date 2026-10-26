@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -389,5 +390,87 @@ func TestCarFull(t *testing.T) {
 	}
 	if _, f := carFull(idle, true, t0, evccLoadpoint{}); f {
 		t.Fatal("uitgeplugd, toch vol")
+	}
+}
+
+func TestLegioStart(t *testing.T) {
+	now := at(3, 0)
+	day := 24 * time.Hour
+	pr := prices(map[time.Time]float64{at(4, 0): 0.10})
+	if ok, _ := legioStart(now, now.Add(-6*day), pr, nil, 500, 50); ok {
+		t.Fatal("na 6 dagen al een beurt")
+	}
+	// 7 dagen, nacht, geen zon, batterij half: wachten
+	if ok, why := legioStart(now, now.Add(-7*day-time.Hour), pr, nil, 500, 50); ok {
+		t.Fatal("7 dagen 's nachts zonder zon begonnen: " + why)
+	}
+	// 7 dagen, middag met zon
+	sun := []Rate{{at(12, 0), at(13, 0), 4200}}
+	if ok, why := legioStart(at(12, 15), now.Add(-7*day), pr, sun, 500, 50); !ok {
+		t.Fatal("zon, toch niet begonnen: " + why)
+	}
+	// 7 dagen, overdag, volle batterij
+	if ok, _ := legioStart(at(11, 0), now.Add(-7*day), pr, nil, 500, 90); !ok {
+		t.Fatal("volle batterij overdag, toch niet begonnen")
+	}
+	// 8 dagen: goedkoopste kwartier (04:00), niet om 03:00
+	old := now.Add(-8*day - time.Hour)
+	if ok, _ := legioStart(now, old, pr, nil, 500, 20); ok {
+		t.Fatal("8 dagen: begonnen voor het goedkoopste kwartier")
+	}
+	if ok, why := legioStart(at(4, 0), old, pr, nil, 500, 20); !ok {
+		t.Fatal("8 dagen: goedkoopste kwartier niet gebruikt: " + why)
+	}
+	// 9 dagen: meteen, behalve bij een hoge afname
+	if ok, _ := legioStart(now, now.Add(-9*day), pr, nil, 500, 20); !ok {
+		t.Fatal("9 dagen: niet begonnen")
+	}
+	if ok, _ := legioStart(now, now.Add(-9*day), pr, nil, 4000, 20); ok {
+		t.Fatal("begonnen terwijl het huis 4 kW afneemt")
+	}
+}
+
+func TestRoomOffset(t *testing.T) {
+	// warmtepomp toont hele graden (afgerond), Shelly 20,0 → 21,0 °C: gemiddeld verschil ±0
+	off, n := 0.0, 0
+	for i := 0; i < 600; i++ {
+		sh := 20 + float64(i%100)/100
+		off = roomOffset(off, n, math.Round(sh), sh)
+		n++
+	}
+	if math.Abs(off) > 0.15 {
+		t.Fatalf("verschil %.2f, verwacht ±0", off)
+	}
+	// warmtepompsensor zit 1 °C hoger
+	for i := 0; i < 600; i++ {
+		sh := 20 + float64(i%100)/100
+		off = roomOffset(off, n, math.Round(sh+1), sh)
+		n++
+	}
+	if math.Abs(off-1) > 0.15 {
+		t.Fatalf("verschil %.2f, verwacht 1", off)
+	}
+}
+
+func TestLegionellaRun(t *testing.T) {
+	evccURL = "http://127.0.0.1:1" // geen evcc
+	now := at(3, 0)
+	st = State{LegioLast: now.Add(-9*24*time.Hour - time.Hour)}
+	if on, _ := legionella(now, 45, 40, nil, nil); !on {
+		t.Fatal("niet begonnen")
+	}
+	if on, _ := legionella(now.Add(time.Hour), 59, 60, nil, nil); on || !st.LegioLast.Equal(now.Add(time.Hour)) {
+		t.Fatal("niet gestopt bij 59 °C")
+	}
+	// lukt niet binnen 3 uur: stoppen en pas 12 uur later opnieuw
+	st = State{LegioLast: now.Add(-10 * 24 * time.Hour), LegioOn: true, LegioStart: now}
+	if on, _ := legionella(now.Add(3*time.Hour+time.Minute), 55, 60, nil, nil); on {
+		t.Fatal("na 3 uur niet gestopt")
+	}
+	if on, _ := legionella(now.Add(5*time.Hour), 50, 40, nil, nil); on {
+		t.Fatal("te snel opnieuw")
+	}
+	if on, _ := legionella(now.Add(16*time.Hour), 50, 40, nil, nil); !on {
+		t.Fatal("niet opnieuw geprobeerd")
 	}
 }

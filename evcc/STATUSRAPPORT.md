@@ -9,9 +9,10 @@ kijk ik na of het plan werkt en wat er beter kan.
 | Wat | Waar | Doet | Stand | Logboek |
 |---|---|---|---|---|
 | **evcc** 0.316.2 | Synology, poort 7070 | laadpaal (Slim, laadplan, prijsgrens), boiler bij zonne-overschot, batterij (GoodWe), kwartierpiek-grens 5 kW, Bolt-tarief (formule, echt vanaf 1/11), zonneprognose, SolarEdge via Modbus, Solis via de IoTaWatt | stuurt | `evcc.log` |
-| **warmteregelaar** | Synology, poort 7080 | weekschema verwarming (voorverwarmen, geleerde opwarmtijd), plan sanitair warm water (voorspelling, goedkoopste kwartieren), zonne-overschot 55/60 °C, laadplan elke nacht, advies van de evcc-optimizer voor de batterij, enige lezer van de HeishaMon | stuurt (`ACT=1`), batterij proef (`BATT=0`) | `warmteregelaar.log`, `warmte-JJJJ-MM.csv` (elke 5 min), `warmteregelaar-state.json` (wat hij geleerd heeft) |
+| **warmteregelaar** | Synology, poort 7080 | weekschema verwarming (voorverwarmen, geleerde opwarmtijd), plan sanitair warm water (voorspelling, goedkoopste kwartieren), zonne-overschot 55/60 °C, wekelijkse legionellabeurt, laadplan elke nacht, advies van de evcc-optimizer voor de batterij, enige lezer van de HeishaMon | stuurt (`ACT=1`), batterij proef (`BATT=0`) | `warmteregelaar.log`, `warmte-JJJJ-MM.csv` (elke 5 min), `warmteregelaar-state.json` (wat hij geleerd heeft) |
 | **piekbewaker** | Synology | warmtepomp stil/uit als het kwartier toch boven 5 kW dreigt | proef (`ACT=0`) | `piekbewaker.log` |
 | **HeishaMon** | warmtepomp (CN-NMODE) | uitlezen en commando's | – | – |
+| **Shelly H&T** | woonkamer, 192.168.0.247 | kamertemperatuur 0,1 °C en vocht (via de regelaar) | – | kolommen `shelly`, `vocht` in de CSV |
 | **IoTaWatt** | groepenkast | groepen, Solis (PV2), Stroom-app | – | – |
 | **Stroom-app** | IoTaWatt (`stroom.htm`) | Elektriciteit, Verwarming (manueel, weekschema, grafieken), Laadpaal (bediening) | – | – |
 
@@ -42,7 +43,9 @@ Alles staat op de Synology in `/volume1/homes/docker/evcc/` (File Station → ho
 ## Openstaand
 
 - [ ] Optimizer aanzetten in evcc (herinnering 23/10 17:00), daarna batterij-proef bekijken → `BATT=1`
-- [ ] GoodWe-brug checken: tweede programma op de GoodWe? (herinnering 24/10 09:00)
+- [x] GoodWe-brug verwijderd (24/10); Modbus-fouten bleven → `delay: 200ms`, `timeout: 10s` in evcc.yaml (26/10): fouten nog tellen
+- [x] Legionella-programma van de warmtepomp uit (26/10); de regelaar doet nu zelf de wekelijkse beurt (zon/batterij)
+- [ ] Shelly-thermometer (192.168.0.247): bereikbaar? ("Shelly bereikbaar" in `warmteregelaar.log`), verschil met de warmtepomp
 - [ ] Piekbewaker van proef naar `ACT=1`
 - [ ] Raedian: OCPP-profiel / autorisatie (installateur)
 - [ ] 3×230V: evcc rekent 6 A × 3 fasen als ±4,1 kW (te hoog); laadvermogen bij 16 A nakijken

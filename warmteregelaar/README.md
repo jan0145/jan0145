@@ -22,6 +22,16 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
 - Een begonnen beurt loopt door tot de boiler warm is (geen aan/uit-gependel).
 - Vóór er iets geleerd is, rekent hij met een voorzichtig profiel: 's ochtends 2 °C, 's avonds 5 °C (weekend 8 °C).
 
+**Legionella** (zie `legionella.go`; het legionellaprogramma van de warmtepomp zelf moet **uit** staan)
+- Minstens één keer per week ≥ 60 °C. Gaat de boiler bij veel zonne-overschot vanzelf tot 60 °C, dan telt dat.
+- Na 7 dagen kiest hij een moment met veel zon (prognose ≥ 3 kW) of overdag (10–17 u) met een thuisbatterij
+  ≥ 80 %: van 55 naar 60 °C werkt de elektrische bijverwarming (±6 kW), die komt dan uit zon of batterij en niet
+  uit het net (kwartierpiek). Na 8 dagen: het goedkoopste kwartier van de komende 24 uur. Na 9 dagen: meteen.
+- Nooit beginnen als het huis al meer dan 3,5 kW afneemt. De beurt loopt tot ≥ 59 °C (hoogstens 3 uur; lukt het
+  niet, dan 12 uur later opnieuw). Een manuele aanpassing van de boiler gaat voor.
+- Warmt de warmtepomp de boiler zelf tot 60 °C op zonder dat iemand het vroeg, dan staat dat in het logboek
+  (⚠ … "staat zijn eigen legionellaprogramma nog aan?").
+
 **Verwarming**
 - In de periodes van het weekschema de temperatuur van die periode; daarbuiten eco (**20 °C**).
   Standaard: weekdagen **06:00–07:30** en **16:00–22:00** 22 °C, weekend **07:00–22:00** 22 °C.
@@ -39,6 +49,17 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
 - Zet iemand zelf de boiler anders (bv. hoger voor een bad), dan volgt de regelaar dat tot de boiler warm is,
   hoogstens 3 uur. Na een eigen commando wacht de regelaar 2 minuten voor hij een afwijking als "zelf ingesteld"
   beschouwt (de HeishaMon toont een nieuwe waarde pas na 10–60 s).
+
+**Kamerthermometer** (Shelly H&T, zie `shelly.go`, `SHELLY=http://192.168.0.247`, leeg = niet gebruiken)
+- De regelaar vraagt elke minuut de temperatuur (0,1 °C) en vochtigheid. De warmtepomp regelt op zijn eigen
+  sensor (hele graden); de regelaar leert het verschil tussen beide en rekent met "Shelly + verschil": even
+  nauwkeurig, op dezelfde schaal als de warmtepomp. Zo leert hij de opwarmtijd en het warmteverlies van het huis
+  veel beter. Geen verse meting (30 min) → de sensor van de warmtepomp.
+- In de app: tegel Warmtepomp ("Kamer (Shelly)"); in `warmte-JJJJ-MM.csv` de kolommen `shelly` en `vocht`.
+- Op batterij slaapt de Shelly (antwoordt niet). Dan in de Shelly-app bij de thermometer een actie (Actions →
+  bij elke meting) met de URL
+  `http://<synology>:7080/shelly?temp=${status["temperature:0"].tC}&hum=${status["humidity:0"].rh}`.
+  Met USB-voeding blijft hij wakker en is dat niet nodig.
 
 **Stand** (knoppen in de app)
 - **Normaal**: het weekschema.
