@@ -15,13 +15,16 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 var shellyURL = env("SHELLY", "http://192.168.0.247")
 
-const shellyMaxAge = 30 * time.Minute
+// Op batterij stuurt de Shelly alleen een meting als de temperatuur genoeg verandert (of om de paar uur):
+// een oudere meting is dan nog altijd juist.
+const shellyMaxAge = 4 * time.Hour
 
 type shellyData struct {
 	Temp float64   `json:"temp"`
@@ -86,6 +89,9 @@ func shellyLoop() {
 		msg := "Shelly bereikbaar"
 		if err != nil {
 			msg = "Shelly niet bereikbaar (slaapt hij? dan een actie instellen, zie README)"
+			if !sh.Time.IsZero() {
+				msg = "Shelly slaapt: de regelaar gebruikt de metingen die hij zelf stuurt"
+			}
 		}
 		shMu.Unlock()
 		mu.Lock()
@@ -116,19 +122,42 @@ func roomOffset(off float64, n int, hpTemp, shTemp float64) float64 {
 	return clamp(off+a*(d-off), -3, 3)
 }
 
-// /shelly?temp=21.3&hum=55: meting die de Shelly zelf stuurt (actie in de Shelly-app)
+// /shelly?temp=21.3&hum=55: meting die de Shelly zelf stuurt (actie in de Shelly-app). Temperatuur en
+// vochtigheid mogen ook apart komen (twee acties: ?temp=${ev.tC} en ?hum=${ev.rh}).
 func serveShelly(h *http.ServeMux) {
 	h.HandleFunc("/shelly", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		q := r.URL.Query()
-		if t, err := strconv.ParseFloat(q.Get("temp"), 64); err == nil && t > -40 && t < 60 {
-			hum, _ := strconv.ParseFloat(q.Get("hum"), 64)
+		num := func(k string) (float64, bool) {
+			v, err := strconv.ParseFloat(strings.Replace(strings.TrimSpace(q.Get(k)), ",", ".", 1), 64)
+			return v, err == nil
+		}
+		t, okT := num("temp")
+		hum, okH := num("hum")
+		okT = okT && t > -40 && t < 60
+		okH = okH && hum >= 0 && hum <= 100
+		if r.URL.RawQuery != "" {
 			shMu.Lock()
-			if sh.Time.IsZero() {
-				log.Printf("Shelly stuurt zelf zijn meting: %.1f °C", t)
+			first := sh.Time.IsZero()
+			if okT {
+				sh.Temp, sh.Time = t, time.Now()
 			}
-			sh = shellyData{Temp: t, Hum: hum, Batt: sh.Batt, Time: time.Now()}
+			if okH {
+				sh.Hum = hum
+			}
+			cur := sh
 			shMu.Unlock()
+			mu.Lock()
+			switch {
+			case !okT && !okH: // bv. ${…} niet ingevuld door de Shelly: tonen wat er binnenkwam
+				if lastMsg["shellyq"] != r.URL.RawQuery {
+					lastMsg["shellyq"] = r.URL.RawQuery
+					log.Printf("⚠ /shelly: geen temperatuur of vochtigheid in %q (van %s): klopt de URL van de actie?", r.URL.RawQuery, r.RemoteAddr)
+				}
+			case okT && first:
+				log.Printf("Shelly stuurt zelf zijn meting: %.1f °C", cur.Temp)
+			}
+			mu.Unlock()
 		}
 		shMu.Lock()
 		b, _ := json.Marshal(sh)

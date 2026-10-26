@@ -54,12 +54,14 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
 - De regelaar vraagt elke minuut de temperatuur (0,1 °C) en vochtigheid. De warmtepomp regelt op zijn eigen
   sensor (hele graden); de regelaar leert het verschil tussen beide en rekent met "Shelly + verschil": even
   nauwkeurig, op dezelfde schaal als de warmtepomp. Zo leert hij de opwarmtijd en het warmteverlies van het huis
-  veel beter. Geen verse meting (30 min) → de sensor van de warmtepomp.
+  veel beter. Geen meting in de laatste 4 uur → de sensor van de warmtepomp.
 - In de app: tegel Warmtepomp ("Kamer (Shelly)"); in `warmte-JJJJ-MM.csv` de kolommen `shelly` en `vocht`.
-- Op batterij slaapt de Shelly (antwoordt niet). Dan in de Shelly-app bij de thermometer een actie (Actions →
-  bij elke meting) met de URL
-  `http://<synology>:7080/shelly?temp=${status["temperature:0"].tC}&hum=${status["humidity:0"].rh}`.
-  Met USB-voeding blijft hij wakker en is dat niet nodig.
+- Op batterij slaapt de Shelly (antwoordt niet) en stuurt hij alleen een meting als de temperatuur genoeg
+  verandert. Dan in de Shelly-app twee acties (Actions):
+  - "Temperatuur verandert" → `http://<synology>:7080/shelly?temp=${ev.tC}`
+  - "Vochtigheid verandert" → `http://<synology>:7080/shelly?hum=${ev.rh}`
+  Controle: `http://<synology>:7080/shelly` in de browser toont de laatste meting; komt er iets binnen dat geen
+  getal is, dan staat dat in het logboek ("⚠ /shelly: …"). Met USB-voeding blijft hij wakker en is dat niet nodig.
 
 **Stand** (knoppen in de app)
 - **Normaal**: het weekschema.

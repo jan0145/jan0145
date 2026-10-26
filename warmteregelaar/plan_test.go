@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -472,5 +474,21 @@ func TestLegionellaRun(t *testing.T) {
 	}
 	if on, _ := legionella(now.Add(16*time.Hour), 50, 40, nil, nil); !on {
 		t.Fatal("niet opnieuw geprobeerd")
+	}
+}
+
+func TestShellyPush(t *testing.T) {
+	sh = shellyData{}
+	h := http.NewServeMux()
+	serveShelly(h)
+	for _, u := range []string{"/shelly?temp=${ev.tC}", "/shelly?hum=55.5", "/shelly?temp=20,7"} {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", u, nil))
+	}
+	m, ok := shellyNow(time.Now().Add(3 * time.Hour))
+	if !ok || m.Temp != 20.7 || m.Hum != 55.5 {
+		t.Fatalf("meting %+v ok=%v", m, ok)
+	}
+	if _, ok := shellyNow(time.Now().Add(5 * time.Hour)); ok {
+		t.Fatal("meting van 5 uur oud nog gebruikt")
 	}
 }
