@@ -490,6 +490,12 @@ func step(now time.Time) {
 	if plan.Target == 0 {
 		// zomer: verwarming uit, kamertemperatuur niet sturen
 	} else if z1 >= 10 {
+		// manuele instelling voorbij: die waarde geldt nu als "gekend", anders ziet de regelaar ze meteen
+		// opnieuw als een nieuwe manuele aanpassing (en blijft de kamer de hele nacht op die temperatuur)
+		if !st.Override.IsZero() && !now.Before(st.Override) {
+			log.Printf("einde van de zelf ingestelde %.0f °C: terug naar het programma (%.0f °C)", z1, plan.Target)
+			st.Override, st.SentZ1 = time.Time{}, z1
+		}
 		// iemand heeft zelf de thermostaat aangepast: respecteren tot het volgende omslagpunt
 		if act && st.SentZ1 != 0 && now.Sub(st.SentZ1At) > graceAfterSend && math.Round(z1) == math.Round(st.SeenZ1) && math.Round(z1) != math.Round(st.SentZ1) && math.Round(z1) != math.Round(plan.Target) && now.After(st.Override) {
 			st.Override = nextBoundary(now, plan)

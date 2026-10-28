@@ -14,13 +14,19 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-var shellyURL = env("SHELLY", "http://192.168.0.247")
+var shellyURL = func() string { // SHELLY= (leeg) zet hem uit
+	if v, ok := os.LookupEnv("SHELLY"); ok {
+		return v
+	}
+	return "http://192.168.0.247"
+}()
 
 // Op batterij stuurt de Shelly alleen een meting als de temperatuur genoeg verandert (of om de paar uur):
 // een oudere meting is dan nog altijd juist.
