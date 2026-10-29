@@ -330,20 +330,25 @@ func TestForecastRoom(t *testing.T) {
 
 func TestBattDecide(t *testing.T) {
 	for _, c := range []struct {
-		advice string
-		grid   float64
-		mode   string
+		advice    string
+		grid, bat float64
+		car       float64
+		mode      string
 	}{
-		{"charge", 1200, "charge"},
-		{"charge", 4800, "hold"}, // kwartierpiek: niet nog extra laden
-		{"hold", 300, "hold"},
-		{"holdcharge", -2000, "holdcharge"},
-		{"discharge", -500, ""},
-		{"normal", 0, ""},
-		{"", 0, ""},
+		{"charge", 800, 0, 0, "charge"},
+		{"charge", 3000, 0, 0, "hold"},       // huis 3 kW + 3,5 kW laden: te veel
+		{"charge", -2500, 3500, 0, "charge"}, // batterij ontlaadt nu 3,5 kW: het huis zelf neemt maar 1 kW
+		{"charge", 4800, 0, 0, ""},           // kwartierpiek: de batterij mag helpen
+		{"hold", 300, 0, 0, "hold"},
+		{"hold", 2000, 3000, 3600, ""}, // huis + auto 5 kW: piek afvlakken
+		{"holdcharge", -2000, 0, 0, "holdcharge"},
+		{"discharge", -500, 0, 0, ""},
+		{"normal", 0, 0, 0, ""},
+		{"normal", 300, 3500, 3700, "hold"}, // auto laadt uit de batterij: vasthouden
+		{"", 0, 0, 0, ""},
 	} {
-		if m, _ := battDecide(c.advice, c.grid); m != c.mode {
-			t.Fatalf("%s bij %v W: %q", c.advice, c.grid, m)
+		if m, why := battDecide(c.advice, battHouse{Grid: c.grid, Batt: c.bat, Car: c.car}); m != c.mode {
+			t.Fatalf("%s bij net %v, batterij %v, auto %v W: %q (%s)", c.advice, c.grid, c.bat, c.car, m, why)
 		}
 	}
 }

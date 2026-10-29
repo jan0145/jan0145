@@ -21,6 +21,19 @@ var battAct = env("BATT", "0") == "1"
 // bij zoveel afname nooit extra uit het net laden (kwartierpiek-grens 5 kW, met marge)
 const battMaxImport = 4500
 
+// laadvermogen van de batterij uit het net (maxchargepower in evcc.yaml)
+var battChargeW = envFloat("BATT_CHARGE", 3500)
+
+// toestand in huis voor de beslissing (W)
+type battHouse struct {
+	Grid float64 // afname (+) / injectie (−)
+	Batt float64 // batterij: ontladen (+) / laden (−)
+	Car  float64 // laadvermogen van de auto
+}
+
+// verbruik zonder de batterij: wat het net zou leveren als de batterij niets doet
+func (h battHouse) base() float64 { return h.Grid + h.Batt }
+
 type battState struct {
 	Advice  string    `json:"advice"`  // advies van de optimizer: normal, charge, hold, holdcharge, discharge ("" = geen)
 	Applied string    `json:"applied"` // wat de regelaar nu in evcc zet ("" = niets, evcc beslist zelf)
@@ -41,13 +54,18 @@ type evccBatt struct {
 	} `json:"devs"`
 	Grid  *float64 `json:"grid"`
 	GridP *float64 `json:"gridPower"`
+	Batt  *float64 `json:"batt"`
+	BattP *float64 `json:"battPower"`
+	Car   *float64 `json:"car"`
 }
 
-func readBattAdvice() (string, float64, error) {
-	q := "{devs: [.battery.devices[]? | {name, controllable, suggestion}], grid: .grid.power, gridPower: .gridPower}"
+func readBattAdvice() (string, battHouse, error) {
+	var h battHouse
+	q := "{devs: [.battery.devices[]? | {name, controllable, suggestion}], grid: .grid.power, gridPower: .gridPower, batt: .battery.power, battPower: .batteryPower, " +
+		"car: ([.loadpoints[]? | select(.chargerFeatureHeating | not) | .chargePower // 0] | add)}"
 	resp, err := client.Get(evccURL + "/api/state?jq=" + url.QueryEscape(q))
 	if err != nil {
-		return "", 0, err
+		return "", h, err
 	}
 	defer resp.Body.Close()
 	var d struct {
@@ -55,55 +73,78 @@ func readBattAdvice() (string, float64, error) {
 		Result evccBatt `json:"result"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
-		return "", 0, err
+		return "", h, err
 	}
 	b := d.evccBatt
-	if len(b.Devs) == 0 {
+	if len(b.Devs) == 0 && b.Grid == nil && b.GridP == nil {
 		b = d.Result
 	}
-	grid := 0.0
-	if b.Grid != nil {
-		grid = *b.Grid
-	} else if b.GridP != nil {
-		grid = *b.GridP
+	first := func(vs ...*float64) float64 {
+		for _, v := range vs {
+			if v != nil {
+				return *v
+			}
+		}
+		return 0
 	}
+	h = battHouse{Grid: first(b.Grid, b.GridP), Batt: first(b.Batt, b.BattP), Car: first(b.Car)}
 	for _, dv := range b.Devs {
 		if dv.Controllable && dv.Suggestion != nil {
-			return dv.Suggestion.Action, grid, nil
+			return dv.Suggestion.Action, h, nil
 		}
 	}
-	return "", grid, nil
+	return "", h, nil
 }
 
-// battDecide: welke modus de regelaar zet ("" = niets, evcc werkt gewoon)
-func battDecide(advice string, grid float64) (string, string) {
+// battDecide: welke modus de regelaar zet ("" = niets, evcc werkt gewoon). Gerekend met het verbruik zonder de
+// batterij (h.base), zodat de beslissing niet heen en weer springt door wat de batterij zelf doet:
+//   - laden uit het net alleen als huis + auto + laden onder 4,5 kW blijft (kwartierpiek);
+//   - zit het huis zelf al boven 4,5 kW, dan gewone werking: de batterij mag de piek afvlakken;
+//   - laadt de auto, dan de batterij niet naar de auto laten ontladen (tenzij voor de piek).
+func battDecide(advice string, h battHouse) (string, string) {
+	base := h.base()
+	peak := base > battMaxImport
+	var mode, why string
 	switch advice {
 	case "charge":
-		if grid > battMaxImport {
-			return "hold", fmt.Sprintf("optimizer: laden uit het net, maar de afname is al %.0f W (kwartierpiek): even vasthouden", grid)
+		switch {
+		case peak:
+			mode, why = "", fmt.Sprintf("optimizer: laden uit het net, maar het huis neemt al %.0f W (kwartierpiek): gewone werking", base)
+		case base+battChargeW > battMaxImport:
+			mode, why = "hold", fmt.Sprintf("optimizer: laden uit het net, maar huis + laden zou %.0f W zijn (kwartierpiek): vasthouden", base+battChargeW)
+		default:
+			mode, why = "charge", "optimizer: laden uit het net (goedkoop nu, later duurder of geen zon)"
 		}
-		return "charge", "optimizer: laden uit het net (goedkoop nu, later duurder of geen zon)"
 	case "hold":
-		return "hold", "optimizer: niet ontladen (de lading is later meer waard)"
+		if peak {
+			mode, why = "", fmt.Sprintf("optimizer: niet ontladen, maar het huis neemt %.0f W (kwartierpiek): gewone werking", base)
+		} else {
+			mode, why = "hold", "optimizer: niet ontladen (de lading is later meer waard)"
+		}
 	case "holdcharge":
-		return "holdcharge", "optimizer: niet laden (zonnestroom nu beter teruggeleverd of later gebruikt)"
+		mode, why = "holdcharge", "optimizer: niet laden (zonnestroom nu beter teruggeleverd of later gebruikt)"
 	case "discharge":
-		return "", "optimizer: ontladen naar het net (niet toegelaten): gewone werking"
+		why = "optimizer: ontladen naar het net (niet toegelaten): gewone werking"
 	case "normal":
-		return "", "optimizer: gewone werking"
+		why = "optimizer: gewone werking"
+	default:
+		why = "geen advies van de optimizer (staat hij aan in evcc?)"
 	}
-	return "", "geen advies van de optimizer (staat hij aan in evcc?)"
+	if mode == "" && h.Car > 1000 && !peak {
+		mode, why = "hold", fmt.Sprintf("de auto laadt (%.1f kW): niet uit de thuisbatterij", h.Car/1000)
+	}
+	return mode, why
 }
 
 func battLoop() {
 	for {
-		advice, grid, err := readBattAdvice()
+		advice, house, err := readBattAdvice()
 		now := time.Now()
 		var mode, why string
 		if err != nil {
 			mode, why = "", "evcc niet bereikbaar: "+err.Error()
 		} else {
-			mode, why = battDecide(advice, grid)
+			mode, why = battDecide(advice, house)
 		}
 		prev := batt.Applied
 		if battAct {

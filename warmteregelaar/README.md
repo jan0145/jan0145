@@ -22,6 +22,14 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
 - Een begonnen beurt loopt door tot de boiler warm is (geen aan/uit-gependel).
 - Vóór er iets geleerd is, rekent hij met een voorzichtig profiel: 's ochtends 2 °C, 's avonds 5 °C (weekend 8 °C).
 
+**Boiler forceren** (zie `forcedhw.go`, `FORCE_DHW=1` standaard)
+- De Panasonic reageert niet op een hogere gevraagde boilertemperatuur: hij begint pas als de boiler zelf genoeg
+  afkoelt. Vraagt de regelaar opwarmen en doet de warmtepomp na 10 minuten niets, dan stuurt hij
+  `SetForceDHW=1`, en `SetForceDHW=0` zodra de boiler warm is, het doel zakt, of na 2 uur. Nooit bij meer dan
+  3,5 kW afname. Alles wat de warmtepomp dan doet, staat in het logboek ("forceren: …").
+- Gaat de elektrische bijverwarming aan terwijl de warmtepomp het zelf kan (≤ 55 °C), dan stopt hij en
+  forceert hij niet meer ("forceBad" in `warmteregelaar-state.json`).
+
 **Legionella** (zie `legionella.go`; het legionellaprogramma van de warmtepomp zelf moet **uit** staan)
 - Minstens één keer per week ≥ 60 °C. Gaat de boiler bij veel zonne-overschot vanzelf tot 60 °C, dan telt dat.
 - Na 7 dagen kiest hij een moment met veel zon (prognose ≥ 3 kW) of overdag (10–17 u) met een thuisbatterij
@@ -144,6 +152,10 @@ dat nog alleen een advies. De regelaar volgt het (`batterij.go`):
 - `BATT=0` (standaard): proef, in het logboek staat wat hij zou doen ("batterij (proef): …");
 - `BATT=1`: hij zet de batterijmodus van evcc (`/api/batterymode/…`) en herhaalt dat elke 30 s. evcc zet een
   extern gezette modus na 1 minuut zelf terug naar normaal: valt de regelaar weg, dan werkt de batterij gewoon.
-- Nooit uit het net laden als de afname al boven 4,5 kW zit (kwartierpiek); ontladen naar het net doet hij niet.
+- Hij rekent met het verbruik zonder de batterij (net + batterij): laden uit het net alleen als huis + auto +
+  laden (3,5 kW, `BATT_CHARGE`) onder 4,5 kW blijft, anders vasthouden. Neemt het huis zelf al meer dan 4,5 kW,
+  dan gewone werking: de batterij mag de kwartierpiek afvlakken. Ontladen naar het net doet hij niet.
+- Laadt de auto (> 1 kW), dan houdt hij de batterij vast: de auto laadt niet uit de thuisbatterij (behalve om
+  de kwartierpiek af te vlakken).
 
 Voorwaarde: in evcc menu → Instellingen → "Experimentele functies" aan, daarna menu → Configuratie → "Optimizer" aan.

@@ -93,6 +93,10 @@ type State struct {
 	CarFull       bool       `json:"carFull"`       // auto zeker vol (zie carFull)
 	CarFullAt     time.Time  `json:"carFullAt"`
 	CarIdleSince  time.Time  `json:"carIdleSince"`
+	// sanitair water forceren (zie forcedhw.go)
+	ForceOn  bool      `json:"forceOn"`
+	ForceAt  time.Time `json:"forceAt"`
+	ForceBad bool      `json:"forceBad"` // de bijverwarming ging aan bij forceren: niet meer doen
 	// legionella (zie legionella.go)
 	LegioLast  time.Time `json:"legioLast"` // laatste keer ≥ 59 °C
 	LegioOn    bool      `json:"legioOn"`
@@ -472,6 +476,9 @@ func step(now time.Time) {
 	} else {
 		st.DHWAskSince = time.Time{}
 		lastMsg["dhwstuck"] = ""
+	}
+	if f := forceDHW(now, hm, dhw, dhwSet, want); f != "" {
+		s.DHW.Why += " (" + f + ")"
 	}
 	if fresh {
 		// net zelf aangepast: eerst kijken of het blijft staan (dan geldt het als eigen keuze), niet overschrijven
