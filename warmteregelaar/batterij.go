@@ -136,6 +136,25 @@ func battDecide(advice string, h battHouse) (string, string) {
 	return mode, why
 }
 
+// geen heen-en-weer rond een grens: pas weer laden uit het net als de vorige modus al 5 min geldt, en vasthouden
+// niet meteen loslaten. Stoppen met laden of ingrijpen voor de kwartierpiek gebeurt wel meteen.
+const battMinHold = 5 * time.Minute
+
+func battSmooth(prev string, prevAt time.Time, mode string, now time.Time, peak bool) string {
+	if mode == prev || peak || now.Sub(prevAt) >= battMinHold {
+		return mode
+	}
+	if mode == "charge" || (prev == "hold" && mode == "") {
+		return prev
+	}
+	return mode
+}
+
+var (
+	battPrev   string
+	battPrevAt time.Time
+)
+
 func battLoop() {
 	for {
 		advice, house, err := readBattAdvice()
@@ -145,6 +164,12 @@ func battLoop() {
 			mode, why = "", "evcc niet bereikbaar: "+err.Error()
 		} else {
 			mode, why = battDecide(advice, house)
+			if m := battSmooth(battPrev, battPrevAt, mode, now, house.base() > battMaxImport); m != mode {
+				mode, why = m, why+fmt.Sprintf(" (nog %s: niet heen en weer)", map[bool]string{true: "modus " + m, false: "gewone werking"}[m != ""])
+			}
+		}
+		if mode != battPrev {
+			battPrev, battPrevAt = mode, now
 		}
 		prev := batt.Applied
 		if battAct {

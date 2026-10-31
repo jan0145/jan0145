@@ -166,6 +166,44 @@ type histRow struct {
 	Shelly float64 `json:"shelly,omitempty"`
 }
 
+// aggregateHistory: gemiddelde per tijdstap (gemeten temperaturen); de ingestelde temperatuur is de hoogste in die stap
+// (zo blijven de opwarmperiodes zichtbaar), "zelf ingesteld" als dat er ergens in de stap was
+func aggregateHistory(rows []histRow, step time.Duration) []histRow {
+	var out []histRow
+	var acc histRow
+	var n, nSh int
+	flush := func() {
+		if n == 0 {
+			return
+		}
+		f := float64(n)
+		acc.Tout, acc.Room, acc.DHW = round1(acc.Tout/f), round1(acc.Room/f), round1(acc.DHW/f)
+		if nSh > 0 {
+			acc.Shelly = round1(acc.Shelly / float64(nSh))
+		}
+		out = append(out, acc)
+	}
+	for _, r := range rows {
+		b := r.T.Truncate(step)
+		if n == 0 || !b.Equal(acc.T) {
+			flush()
+			acc, n, nSh = histRow{T: b}, 0, 0
+		}
+		n++
+		acc.Tout += r.Tout
+		acc.Room += r.Room
+		acc.DHW += r.DHW
+		if r.Shelly > 0 {
+			acc.Shelly += r.Shelly
+			nSh++
+		}
+		acc.RoomSet, acc.DHWSet = math.Max(acc.RoomSet, r.RoomSet), math.Max(acc.DHWSet, r.DHWSet)
+		acc.RoomManual, acc.DHWManual = acc.RoomManual || r.RoomManual, acc.DHWManual || r.DHWManual
+	}
+	flush()
+	return out
+}
+
 // geschiedenis uit de maandbestanden warmte-JJJJ-MM.csv (elke 5 min een regel)
 func readHistory(from, to time.Time) []histRow {
 	var rows []histRow
@@ -200,14 +238,36 @@ func readHistory(from, to time.Time) []histRow {
 }
 
 func serveForecast(h *http.ServeMux) {
-	// /grafiek: geschiedenis (24 u), de huidige voorspelling (24 u) en de voorspelling van 24 u geleden
+	// /grafiek: geschiedenis (24 u), de huidige voorspelling (24 u) en de voorspelling van 24 u geleden.
+	// /grafiek?from=…&to=…&step=… (unix-seconden): geschiedenis van een periode, gemiddeld per step seconden
+	// (dag, week, maand in de app); de voorspelling alleen als de periode nog niet voorbij is.
 	h.HandleFunc("/grafiek", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		now := time.Now()
-		hist := readHistory(now.Add(-24*time.Hour), now)
+		from, to := now.Add(-24*time.Hour), now
+		q := r.URL.Query()
+		period := q.Get("from") != ""
+		if period {
+			f, _ := strconv.ParseInt(q.Get("from"), 10, 64)
+			t, _ := strconv.ParseInt(q.Get("to"), 10, 64)
+			from, to = time.Unix(f, 0), time.Unix(t, 0)
+			if !to.After(from) || to.Sub(from) > 45*24*time.Hour {
+				http.Error(w, "ongeldige periode", http.StatusBadRequest)
+				return
+			}
+		}
+		hist := readHistory(from, to)
+		if step, _ := strconv.Atoi(q.Get("step")); step > 300 {
+			hist = aggregateHistory(hist, time.Duration(step)*time.Second)
+		}
 		mu.Lock()
 		var cur, old *Forecast
-		if n := len(st.Forecasts); n > 0 {
+		if period {
+			if to.After(now) && st.Current.Start.After(now.Add(-time.Hour)) {
+				c := st.Current
+				cur = &c
+			}
+		} else if n := len(st.Forecasts); n > 0 {
 			c := st.Current
 			cur = &c
 			old = forecastFrom(now.Add(-24 * time.Hour))

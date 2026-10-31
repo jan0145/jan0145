@@ -497,3 +497,37 @@ func TestShellyPush(t *testing.T) {
 		t.Fatal("meting van 5 uur oud nog gebruikt")
 	}
 }
+
+func TestAggregateHistory(t *testing.T) {
+	var rows []histRow
+	for i := 0; i < 12; i++ { // 1 uur, elke 5 min
+		r := histRow{T: at(10, 0).Add(time.Duration(i) * 5 * time.Minute), Room: 20 + float64(i%2), RoomSet: 20, DHW: 50}
+		if i == 7 {
+			r.RoomSet, r.RoomManual = 22, true
+		}
+		rows = append(rows, r)
+	}
+	a := aggregateHistory(rows, 30*time.Minute)
+	if len(a) != 2 || a[0].Room != 20.5 || a[1].RoomSet != 22 || !a[1].RoomManual || a[0].RoomManual || a[0].Shelly != 0 {
+		t.Fatalf("%+v", a)
+	}
+}
+
+func TestBattSmooth(t *testing.T) {
+	t0 := at(12, 0)
+	if m := battSmooth("hold", t0, "charge", t0.Add(time.Minute), false); m != "hold" {
+		t.Fatal("meteen weer laden na vasthouden")
+	}
+	if m := battSmooth("hold", t0, "charge", t0.Add(6*time.Minute), false); m != "charge" {
+		t.Fatal("na 6 min nog niet laden")
+	}
+	if m := battSmooth("charge", t0, "hold", t0.Add(time.Minute), false); m != "hold" {
+		t.Fatal("laden niet meteen gestopt")
+	}
+	if m := battSmooth("hold", t0, "", t0.Add(time.Minute), false); m != "hold" {
+		t.Fatal("vasthouden meteen losgelaten")
+	}
+	if m := battSmooth("hold", t0, "", t0.Add(time.Minute), true); m != "" {
+		t.Fatal("bij de kwartierpiek niet meteen gewone werking")
+	}
+}

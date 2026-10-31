@@ -511,6 +511,19 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
         <p class="hint" id="setDHWHint"></p>
       </div>
     </section>
+    <section class="card" id="tcNav" hidden>
+      <div class="seg wide" role="group" aria-label="Periode van de temperatuurgrafieken" id="tcSeg">
+        <button data-p="now" aria-pressed="true">Nu</button>
+        <button data-p="day" aria-pressed="false">Dag</button>
+        <button data-p="week" aria-pressed="false">Week</button>
+        <button data-p="month" aria-pressed="false">Maand</button>
+      </div>
+      <div class="pnav" id="tcPnav" hidden style="margin:10px 0 0">
+        <button id="tcPrev" aria-label="Vorige periode">‹</button>
+        <span id="tcLabel">Vandaag</span>
+        <button id="tcNext" aria-label="Volgende periode">›</button>
+      </div>
+    </section>
     <section class="card" id="tcRoomCard" hidden>
       <div class="card-head"><h2>Temperatuur in huis</h2></div>
       <div class="legend tlegend" id="tcRoomLeg"></div>
@@ -2104,10 +2117,33 @@ function renderHpInfo() {
 /* ---------- temperatuurgrafieken: gemeten (kleur) en voorspeld (grijs), 24 u terug en 24 u vooruit ---------- */
 
 let tc = null;  // antwoord van /grafiek
+// periode: "nu" = 24 u terug en 24 u vooruit; dag / week / maand = geschiedenis (k = zoveel periodes terug)
+const tcv = { period: 'now', k: 0 };
+// [begin, einde, tijdstap van de gemiddelden in s (0 = elke 5 min)]
+function tcRange() {
+  if (tcv.period === 'now') { const n = Date.now() / 1000; return [n - 86400, n + 86400, 0]; }
+  const [r0] = unixRange(tcv.period, tcv.k), e = new Date(r0 * 1000);
+  if (tcv.period === 'day') e.setDate(e.getDate() + 1); else if (tcv.period === 'week') e.setDate(e.getDate() + 7); else e.setMonth(e.getMonth() + 1);
+  return [r0, e.getTime() / 1000, { day: 0, week: 1800, month: 7200 }[tcv.period]];
+}
 async function loadTempCharts() {
   const b = regBase();
   if (!b) { tc = null; return; }
-  try { tc = await getJson(b + '/grafiek'); } catch (e) { tc = null; }
+  const [t0, t1, step] = tcRange();
+  const q = tcv.period === 'now' ? '' : `?from=${Math.floor(t0)}&to=${Math.floor(t1)}&step=${step}`;
+  try { tc = await getJson(b + '/grafiek' + q); } catch (e) { tc = null; }
+}
+async function changeTc(period, k) {
+  if (period !== tcv.period) { delete zoomSt.tcRoom; delete zoomSt.tcDhw; }
+  tcv.period = period; tcv.k = Math.max(0, k);
+  renderTcNav();
+  await loadTempCharts(); renderTempCharts();
+}
+function renderTcNav() {
+  document.querySelectorAll('#tcSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === tcv.period));
+  $('tcPnav').hidden = tcv.period === 'now';
+  $('tcLabel').textContent = periodLabel(tcv.period === 'now' ? 'day' : tcv.period, tcv.k);
+  $('tcNext').disabled = tcv.k === 0;
 }
 // lijnen: { name, color, pts: [[t, v]], dash, step, w }
 function drawTempChart(svg, tip, T0, T1, lines, unit) {
@@ -2139,7 +2175,7 @@ function drawTempChart(svg, tip, T0, T1, lines, unit) {
     let d = '', prev = null;
     L.pts.forEach(([t, v]) => {
       if (t < t0 || t > t1 || v === null) { prev = null; return; }
-      if (prev && t - prev[0] > 1500) prev = null; // gat in de gegevens
+      if (prev && t - prev[0] > (L.gap || 1500)) prev = null; // gat in de gegevens
       if (!prev) d += `M${x(t).toFixed(1)},${y(v).toFixed(1)}`;
       else if (L.step) d += `H${x(t).toFixed(1)}V${y(v).toFixed(1)}`;
       else d += `L${x(t).toFixed(1)},${y(v).toFixed(1)}`;
@@ -2165,14 +2201,15 @@ function tempPointer(svg, tip, ev) {
     if (L.noTip) return;
     L.pts.forEach(([pt, v]) => {
       const dd = Math.abs(pt - t), cur = byName.get(L.name);
-      if (v !== null && dd < 1200 && (!cur || dd < cur.dd)) byName.set(L.name, { dd, v, color: L.color });
+      if (v !== null && dd < (L.near || 1200) && (!cur || dd < cur.dd)) byName.set(L.name, { dd, v, color: L.color });
     });
   });
   const parts = [...byName].map(([name, x]) => `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${x.color};margin-right:4px"></span>${esc(name)} <b>${nf1.format(x.v)} ${c.unit}</b>`);
   const hl = document.getElementById(svg.id + '-hl');
   hl.setAttribute('x1', px); hl.setAttribute('x2', px); hl.setAttribute('visibility', 'visible');
   const d = new Date(t * 1000);
-  tip.innerHTML = `<div style="margin-bottom:2px">${d.toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</div>` + (parts.join('<br>') || 'geen gegevens');
+  const long = c.full.span > 2 * 86400;  // week, maand: ook de datum
+  tip.innerHTML = `<div style="margin-bottom:2px">${d.toLocaleString('nl-NL', long ? { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</div>` + (parts.join('<br>') || 'geen gegevens');
   tip.classList.add('on');
   placeTip(tip, rect.width, px);
 }
@@ -2182,10 +2219,13 @@ function tempOut(svg, tip) {
 }
 function renderTempCharts() {
   if ($('tabVerw').hidden) return;
-  const ok = !!(tc && (tc.history && tc.history.length || tc.forecast));
+  const live = tcv.period === 'now';
+  const ok = !!(tc && (tc.history && tc.history.length || tc.forecast)) || (!!tc && !live);
+  $('tcNav').hidden = !regBase();
   $('tcRoomCard').hidden = $('tcDhwCard').hidden = $('tcHint').hidden = !ok;
   if (!ok) return;
-  const now = Date.now() / 1000, t0 = now - 86400, t1 = now + 86400;
+  const now = Date.now() / 1000, [t0, t1, step] = tcRange();
+  const gap = Math.max(1500, step * 2.5), near = Math.max(1200, step);
   const H = tc.history || [], ts = (r) => new Date(r.t).getTime() / 1000;
   // voorspelling: temperatuur aan het einde van elk kwartier, ingesteld vanaf het begin
   const fpts = (f, key, end) => (f && f[key] ? f[key].map((v, i) => [new Date(f.start).getTime() / 1000 + (i + (end ? 1 : 0)) * 900, v]).filter(([, v]) => v > 0) : []);
@@ -2195,17 +2235,18 @@ function renderTempCharts() {
   // kamer: gemeten door de Shelly (als die er is); de voorspelling staat op de schaal van de warmtepomp (min het verschil)
   const mk = (tempKey, setKey, manKey, cTemp, cSet, nTemp, nSet, meas, off = 0) => {
     const adj = (pts) => pts.map(([t, v]) => [t, Math.round((v - off) * 10) / 10]);
-    const pastT = adj(fpts(tc.past, tempKey, true).filter(([t]) => t <= now)), curT = adj(fpts(tc.forecast, tempKey, true).filter(([t]) => t >= now - 900));
-    const curS = fpts(tc.forecast, setKey, false).filter(([t]) => t >= now - 900);
+    const pastT = live ? adj(fpts(tc.past, tempKey, true).filter(([t]) => t <= now)) : [];
+    const curT = adj(fpts(tc.forecast, tempKey, true).filter(([t]) => t >= now - 900 && t <= t1));
+    const curS = fpts(tc.forecast, setKey, false).filter(([t]) => t >= now - 900 && t <= t1);
     const setH = H.filter((r) => r[setKey] > 0);
     const man = setH.some((r) => r[manKey]);
     return [
       { name: nSet, color: grey, op: 0.55, pts: curS, dash: '5 3', w: 1.5, step: true },
       { name: 'Voorspeld', color: grey, pts: pastT, w: 2 },
-      { name: 'Voorspeld', color: grey, pts: curT, w: 2, legend: 'line', lo: 4 },
-      { name: nSet, color: cSet, pts: setH.map((r) => [ts(r), r[manKey] ? null : r[setKey]]), dash: '5 3', w: 1.5, step: true, legend: 'dash', lo: 2 },
-      { name: 'Zelf ingesteld', color: 'var(--good)', pts: setH.map((r) => [ts(r), r[manKey] ? r[setKey] : null]), dash: '5 3', w: 2, step: true, legend: man ? 'dash' : '', lo: 3 },
-      { name: nTemp, color: cTemp, pts: H.filter((r) => r[tempKey] > -50).map((r) => [ts(r), meas ? meas(r) : r[tempKey]]), w: 2.2, legend: 'line', lo: 1 },
+      { name: 'Voorspeld', color: grey, pts: curT, w: 2, legend: curT.length ? 'line' : '', lo: 4 },
+      { name: nSet, color: cSet, pts: setH.map((r) => [ts(r), r[manKey] ? null : r[setKey]]), dash: '5 3', w: 1.5, step: true, legend: 'dash', lo: 2, gap, near },
+      { name: 'Zelf ingesteld', color: 'var(--good)', pts: setH.map((r) => [ts(r), r[manKey] ? r[setKey] : null]), dash: '5 3', w: 2, step: true, legend: man ? 'dash' : '', lo: 3, gap, near },
+      { name: nTemp, color: cTemp, pts: H.filter((r) => r[tempKey] > -50).map((r) => [ts(r), meas ? meas(r) : r[tempKey]]), w: 2.2, legend: 'line', lo: 1, gap, near },
     ];
   };
   const leg = (lines) => lines.filter((L) => L.legend).sort((a, b) => a.lo - b.lo).map((L) => `<span><i class="${L.legend === 'line' ? '' : L.legend}" style="background:${L.color};border-color:${L.color}${L.op ? `;opacity:${L.op}` : ''}"></i>${esc(L.name)}</span>`).join('');
@@ -2951,7 +2992,7 @@ async function tickDay() {
     loadSessions().catch(() => {});
     if (!$('devView').hidden && dev.mode !== 'now' && dev.k === 0) { await loadDev(); renderDev(); }
     if (!$('hpView').hidden && hpv.k === 0) { await loadHpHist(); renderHpView(); }
-    if (!$('tabVerw').hidden) { await loadTempCharts(); renderTempCharts(); }
+    if (!$('tabVerw').hidden && tcv.k === 0) { await loadTempCharts(); renderTempCharts(); } // een vorige periode verandert niet
     if (!$('tabLp').hidden && lpv.k === 0) { await loadLpHist(); renderLpView(); }
     if (!$('tabVerw').hidden) { await loadSched(); renderSched(); }
   } catch (e) { showError(e); }
@@ -3220,6 +3261,9 @@ window.addEventListener('resize', () => { renderHist(); renderDev(); renderHpVie
   bindTip($(w), (e) => tempPointer($(c), $(t), e), () => tempOut($(c), $(t)));
 });
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
+document.querySelectorAll('#tcSeg button').forEach((b) => { b.onclick = () => changeTc(b.dataset.p, 0); });
+$('tcPrev').onclick = () => changeTc(tcv.period, tcv.k + 1);
+$('tcNext').onclick = () => changeTc(tcv.period, tcv.k - 1);
 document.querySelectorAll('.chart-wrap').forEach((w) => { const svg = w.querySelector('svg'); if (svg) addZoom(w, svg); });
 
 showTab(config.tab);
