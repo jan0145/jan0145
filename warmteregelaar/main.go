@@ -93,6 +93,11 @@ type State struct {
 	CarFull       bool       `json:"carFull"`       // auto zeker vol (zie carFull)
 	CarFullAt     time.Time  `json:"carFullAt"`
 	CarIdleSince  time.Time  `json:"carIdleSince"`
+	// vaatwasser (zie vaatwasser.go)
+	Dish         DishSettings       `json:"dish"`
+	DishDur      map[string]float64 `json:"dishDur,omitempty"` // geleerde duur per programma (min)
+	DishRunStart time.Time          `json:"dishRunStart"`
+	DishRunProg  string             `json:"dishRunProg"`
 	// sanitair water forceren (zie forcedhw.go)
 	ForceOn  bool      `json:"forceOn"`
 	ForceAt  time.Time `json:"forceAt"`
@@ -178,6 +183,7 @@ func statePath() string { return filepath.Join(dataDir, "warmteregelaar-state.js
 func loadState() {
 	st.Learned = defaultLearned()
 	st.ChargePlan = defaultChargePlan()
+	st.Dish = defaultDishSettings()
 	if b, err := os.ReadFile(statePath()); err == nil {
 		_ = json.Unmarshal(b, &st)
 	}
@@ -896,6 +902,7 @@ func serve() {
 	serveCharge(h)
 	serveForecast(h)
 	serveShelly(h)
+	serveDish(h)
 	h.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		st.Status.Battery = batt
@@ -930,6 +937,7 @@ func main() {
 	go pollHM()
 	go battLoop()
 	go shellyLoop()
+	go dishLoop()
 	go serve()
 	time.Sleep(3 * time.Second) // eerste HeishaMon-gegevens afwachten
 	for {

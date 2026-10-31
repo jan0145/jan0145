@@ -531,3 +531,31 @@ func TestBattSmooth(t *testing.T) {
 		t.Fatal("bij de kwartierpiek niet meteen gewone werking")
 	}
 }
+
+func TestDishPlan(t *testing.T) {
+	dur := 3 * time.Hour
+	// 's avonds ingeladen, nacht 02:00–05:00 goedkoop: daar starten (klaar tegen 07:00)
+	night := map[time.Time]float64{}
+	for q := at(2, 0); q.Before(at(5, 0)); q = q.Add(quarter) {
+		night[q] = 0.10
+	}
+	pr := prices(night)
+	s, why := dishPlan(at(0, 30), dur, "07:00", pr, nil, nil)
+	if !s.Equal(at(2, 0)) {
+		t.Fatalf("start %s (%s), verwacht 02:00", s.Format("15:04"), why)
+	}
+	// te laat voor 07:00: meteen
+	if s, _ := dishPlan(at(5, 0), dur, "07:00", pr, nil, nil); !s.Equal(at(5, 0)) {
+		t.Fatalf("start %s, verwacht meteen", s.Format("15:04"))
+	}
+	// met zon 12:00–15:00 en een lage terugleverprijs: dan starten (klaar tegen 18:00)
+	sun := []Rate{{at(12, 0), at(15, 0), 4000}}
+	fi := []Rate{{at(0, 0), at(23, 59), 0.02}}
+	if s, why := dishPlan(at(8, 0), dur, "18:00", prices(nil), fi, sun); !s.Equal(at(12, 0)) {
+		t.Fatalf("start %s (%s), verwacht 12:00 (zon)", s.Format("15:04"), why)
+	}
+	// zonder prijzen: meteen
+	if s, _ := dishPlan(at(8, 0), dur, "18:00", nil, nil, nil); !s.Equal(at(8, 0)) {
+		t.Fatal("zonder prijzen niet meteen")
+	}
+}

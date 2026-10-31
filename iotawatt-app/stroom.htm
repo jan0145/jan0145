@@ -254,6 +254,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .dico svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .dico.hp { background: var(--sun); }
 .dico.lp { background: var(--c2); }
+.dico.dw { background: var(--c0); }
 .dtitle { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
 .dstate { font-size: 13px; color: var(--text-2); }
 .hpline { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 6px 0 8px; }
@@ -420,6 +421,25 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="val num" id="tPeak">–</div>
       <div class="sub" id="tPeakSub">&nbsp;</div>
       <div class="bar" id="tPeakBar" style="margin-top:8px"><i></i></div>
+    </div>
+  </section>
+
+  <!-- vaatwasser (Siemens, Home Connect, via de warmteregelaar) -->
+  <section class="card" id="dwCard" hidden>
+    <div class="dhead"><span class="dico dw"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2.5" width="16" height="19" rx="2.5"/><path d="M4 7h16"/><circle cx="12" cy="14" r="4"/><path d="M7 4.8h1M10 4.8h1"/></svg></span><div><div class="dtitle">Vaatwasser</div><div class="dstate" id="dwState">–</div></div></div>
+    <p class="hint" id="dwWhy" style="margin:8px 0 0"></p>
+    <div id="dwLink" hidden style="margin-top:10px">
+      <p class="hint" id="dwLinkTxt">Nog niet gekoppeld met Home Connect.</p>
+      <button class="btn small primary" id="dwLinkBtn">Koppelen met Home Connect</button>
+    </div>
+    <div id="dwCtl" hidden style="margin-top:10px">
+      <label class="tog" style="margin:0 0 10px"><input type="checkbox" id="dwAuto"> Slim starten: bij zon of in de goedkoopste uren</label>
+      <div class="setrow">
+        <span class="setlbl">Klaar om</span>
+        <select class="ctlsel" id="dwReady" aria-label="Ten laatste klaar om"></select>
+        <button class="btn small primary" id="dwStart" style="margin-left:auto">Nu starten</button>
+      </div>
+      <p class="hint" style="margin-top:8px">Vaatwasser vullen, programma kiezen en op de vaatwasser <b>Fernstart</b> aanzetten: de regelaar start hem dan op het beste moment.</p>
     </div>
   </section>
 
@@ -2272,6 +2292,57 @@ async function loadReg() {
   if (!b) { reg = null; return; }
   try { reg = await getJson(b + '/status'); } catch (e) { reg = null; }
 }
+/* ---------- vaatwasser (warmteregelaar /vaatwasser) ---------- */
+
+let dwSt = null, dwTick = 0;
+async function loadDw() {
+  const b = regBase();
+  if (!b) { dwSt = null; return; }
+  try { dwSt = await getJson(b + '/vaatwasser'); } catch (e) { dwSt = null; }
+}
+const DW_OP = { Ready: 'klaar om te starten', Run: 'bezig', DelayedStart: 'start later', Pause: 'gepauzeerd', ActionRequired: 'vraagt aandacht',
+  Finished: 'klaar', Inactive: 'uit', Offline: 'niet verbonden', Error: '⚠ fout', Aborting: 'stopt' };
+// "Dishcare.Dishwasher.Program.Eco50" → "Eco 50°"
+const dwProg = (k) => { const n = (k || '').split('.').pop(); return n.replace(/^([A-Za-z]+?)(\d{2})$/, '$1 $2°').replace(/^([A-Za-z]+?)(\d)$/, '$1 $2'); };
+function renderDw() {
+  const card = $('dwCard');
+  card.hidden = !dwSt || !dwSt.enabled;
+  if (card.hidden) return;
+  const hm = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  const ok = (t) => t && new Date(t).getFullYear() > 2000;
+  let state = !dwSt.linked ? 'niet gekoppeld' : DW_OP[dwSt.op] || dwSt.op || '–';
+  if (dwSt.program && ['Ready', 'Run', 'DelayedStart'].includes(dwSt.op)) state += ' · ' + dwProg(dwSt.program);
+  if (dwSt.op === 'Run' && dwSt.remaining > 0) state += ' · klaar om ' + hm(Date.now() + dwSt.remaining * 60000);
+  if (dwSt.op === 'Ready' && ok(dwSt.planStart)) state = `start om ${hm(dwSt.planStart)}, klaar ±${hm(dwSt.planEnd)} · ${dwProg(dwSt.program)}`;
+  $('dwState').textContent = state;
+  $('dwWhy').textContent = dwSt.error ? '⚠ ' + dwSt.error : dwSt.why || '';
+  $('dwLink').hidden = dwSt.linked;
+  $('dwLinkTxt').innerHTML = dwSt.linkCode
+    ? `Open <a href="${esc(dwSt.linkUrl)}" target="_blank" rel="noopener">deze link</a>, meld je aan met je Home Connect-account en bevestig code <b>${esc(dwSt.linkCode)}</b>.`
+    : 'Nog niet gekoppeld met Home Connect.';
+  $('dwLinkBtn').hidden = !!dwSt.linkCode;
+  $('dwCtl').hidden = !dwSt.linked;
+  if (!$('dwReady').options.length) {
+    let o = ''; for (let m = 0; m < 1440; m += 30) { const v = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); o += `<option>${v}</option>`; }
+    $('dwReady').innerHTML = o;
+  }
+  const set = dwSt.settings || { auto: true, ready: '07:00' };
+  $('dwAuto').checked = set.auto;
+  if (document.activeElement !== $('dwReady')) $('dwReady').value = set.ready;
+  $('dwStart').disabled = !(dwSt.op === 'Ready' && dwSt.remote);
+}
+async function postDw(body) {
+  const b = regBase(); if (!b) return;
+  try {
+    const r = await fetch(b + '/vaatwasser', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await r.text());
+    dwSt = await r.json();
+  } catch (e) { if (dwSt) dwSt.error = String(e.message || e); }
+  renderDw();
+  setTimeout(() => loadDw().then(renderDw), 3000);
+}
+const dwSettings = () => ({ auto: $('dwAuto').checked, ready: $('dwReady').value });
+
 // tegel en details opnieuw: de kamertemperatuur van de Shelly komt uit de status van de regelaar
 function renderHpGrid() { if (hm && hm.v) { $('tHpGrid').innerHTML = hpGridHtml(); if (!$('hpView').hidden) renderHpInfo(); } }
 function renderReg() {
@@ -2905,7 +2976,7 @@ function showTab(t) {
   config.tab = TABS[t] ? t : 'elek';
   Object.entries(TABS).forEach(([k, id]) => { $(id).hidden = config.tab !== k; });
   document.querySelectorAll('#tabSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.t === config.tab));
-  if (config.tab === 'elek') renderHist();
+  if (config.tab === 'elek') { renderHist(); loadDw().then(renderDw); }
   if (config.tab === 'verw') {
     Object.values(setState).forEach((x) => { if (!x.busy) { x.val = null; x.msg = ''; x.dirty = false; } });
     renderHM();
@@ -2964,6 +3035,7 @@ function renderPeak() {
 }
 
 async function tickLive() {
+  if (!$('tabElek').hidden && dwTick++ % 6 === 0) loadDw().then(renderDw);  // vaatwasser: elke 30 s
   try {
     if (!seriesNames.length) await loadSeries();
     await Promise.all([loadLive(), loadGoodWe(), loadP1(), loadHM()]);
@@ -3262,6 +3334,10 @@ window.addEventListener('resize', () => { renderHist(); renderDev(); renderHpVie
 });
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
 document.querySelectorAll('#tcSeg button').forEach((b) => { b.onclick = () => changeTc(b.dataset.p, 0); });
+$('dwLinkBtn').onclick = () => postDw({ action: 'link' });
+$('dwStart').onclick = () => postDw({ action: 'start' });
+$('dwAuto').onchange = () => postDw({ settings: dwSettings() });
+$('dwReady').onchange = () => postDw({ settings: dwSettings() });
 $('tcPrev').onclick = () => changeTc(tcv.period, tcv.k + 1);
 $('tcNext').onclick = () => changeTc(tcv.period, tcv.k - 1);
 document.querySelectorAll('.chart-wrap').forEach((w) => { const svg = w.querySelector('svg'); if (svg) addZoom(w, svg); });

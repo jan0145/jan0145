@@ -143,6 +143,26 @@ uit de maandbestanden), de voorspelling voor de komende 24 uur en de voorspellin
 De kamervoorspelling: ingestelde temperatuur volgens het schema (met voorverwarmen), opwarmen met de geleerde
 snelheid, afkoelen naar buiten toe met een geleerde afkoeling (uit de eco-uren).
 
+## Vaatwasser (Siemens, Home Connect)
+
+Zie `vaatwasser.go`. Vaatwasser vullen, programma kiezen en op de vaatwasser **Fernstart** aanzetten; de regelaar
+start hem dan:
+- meteen bij zonne-overschot (≥ 1,5 kW naar het net en thuisbatterij ≥ 90 %);
+- anders in het goedkoopste blok (met verwachte zon telt de terugleverprijs), zodat hij klaar is tegen het gekozen
+  uur (standaard 07:00; haalt hij dat niet meer, dan meteen);
+- nooit als het huis al meer dan 3 kW afneemt (verwarmen ±2 kW, kwartierpiek): even wachten.
+De duur per programma leert hij (eerst 3 uur). In de Stroom-app (Elektriciteit): toestand, gepland start- en
+eindtijdstip, slim starten aan/uit, klaar om, "nu starten". Dit staat los van `ACT`: hij start alleen als Fernstart aan
+staat.
+
+Instellen (eenmalig):
+1. Op https://developer.home-connect.com een account maken (zelfde e-mail als de Home Connect-app), dan
+   Applications → Register Application: OAuth Flow **Device Flow**, naam bv. "warmteregelaar". Noteer de Client ID.
+2. In de taak: `HC_CLIENT_ID=<client id>` (en `HC_CLIENT_SECRET=…` als de site er een gaf), Run.
+3. In de app (Elektriciteit → Vaatwasser) op "Koppelen met Home Connect", link openen, aanmelden, code bevestigen.
+De sleutels staan in `homeconnect-token.json` (niet delen). Home Connect laat ±1000 vragen per dag toe; de regelaar
+gebruikt er ±300–500 (logboek: "vaatwasser: … vragen aan Home Connect gisteren").
+
 ## Thuisbatterij volgens de optimizer van evcc
 
 De optimizer van evcc (experimenteel, met sponsor-token) rekent met prijzen, zonneprognose, verwacht verbruik en de

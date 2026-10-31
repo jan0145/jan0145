@@ -46,7 +46,9 @@ Alles staat op de Synology in `/volume1/homes/docker/evcc/` (File Station → ho
 - [x] GoodWe-brug verwijderd (24/10); Modbus-fouten bleven → `delay: 200ms`, `timeout: 10s` in evcc.yaml (26/10): fouten nog tellen
 - [x] Legionella-programma van de warmtepomp uit (26/10); de regelaar doet nu zelf de wekelijkse beurt (zon/batterij)
 - [ ] Shelly-thermometer (192.168.0.247): bereikbaar? ("Shelly bereikbaar" in `warmteregelaar.log`), verschil met de warmtepomp
-- [ ] Piekbewaker van proef naar `ACT=1`
+- [x] Piekbewaker van proef naar `ACT=1` (29/10)
+- [ ] Vaatwasser koppelen: `HC_CLIENT_ID` in de taak, dan "Koppelen met Home Connect" in de app
+- [ ] 1/11: Bolt echt → batterij `BATT=1`
 - [ ] Raedian: OCPP-profiel / autorisatie (installateur)
 - [ ] 3×230V: evcc rekent 6 A × 3 fasen als ±4,1 kW (te hoog); laadvermogen bij 16 A nakijken
 - [ ] Injectie afregelen bij negatieve terugleverprijs (SolarEdge, regel 7)
