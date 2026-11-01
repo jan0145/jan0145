@@ -546,7 +546,7 @@ func step(now time.Time) {
 
 	if now.Sub(st.LastLog) >= 5*time.Minute {
 		p, _ := priceAt(prices, now)
-		writeCSV(now, hm, tin, want, plan.Target, p, now.Before(st.Override), now.Before(st.DHWOverride), shTin, shHum)
+		writeCSV(now, hm, tin, want, plan.Target, p, now.Before(st.Override), now.Before(st.DHWOverride), shTin, shHum, s.Heat.HPTin)
 		st.LastLog = now
 	}
 	saveState()
@@ -753,7 +753,7 @@ func learnPreheat(now time.Time, tin, tout float64, p HeatPlan, set, eco float64
 
 // ---------- logboek (CSV, per maand) ----------
 
-func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64, roomManual, dhwManual bool, shTin, shHum float64) {
+func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64, roomManual, dhwManual bool, shTin, shHum, hpTin float64) {
 	fn := filepath.Join(dataDir, "warmte-"+now.Format("2006-01")+".csv")
 	_, err := os.Stat(fn)
 	f, e2 := os.OpenFile(fn, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -762,7 +762,7 @@ func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64, r
 	}
 	defer f.Close()
 	if os.IsNotExist(err) {
-		fmt.Fprintln(f, "tijd;buiten;kamer;kamer_doel;kamer_regelaar;boiler;boiler_doel;boiler_regelaar;driewegklep;compressor_hz;warmte_w;elektrisch_w;prijs;kamer_manueel;boiler_manueel;shelly;vocht")
+		fmt.Fprintln(f, "tijd;buiten;kamer;kamer_doel;kamer_regelaar;boiler;boiler_doel;boiler_regelaar;driewegklep;compressor_hz;warmte_w;elektrisch_w;prijs;kamer_manueel;boiler_manueel;shelly;vocht;kamer_wp")
 	}
 	b01 := func(b bool) int {
 		if b {
@@ -776,11 +776,11 @@ func writeCSV(now time.Time, hm hmData, tin, dhwWant, heatWant, price float64, r
 		}
 		return strconv.FormatFloat(v, 'f', 1, 64)
 	}
-	fmt.Fprintf(f, "%s;%.1f;%.1f;%.0f;%.0f;%.1f;%.0f;%.0f;%.0f;%.0f;%.0f;%.0f;%.4f;%d;%d;%s;%s\n", now.Format("2006-01-02 15:04"),
+	fmt.Fprintf(f, "%s;%.1f;%.1f;%.0f;%.0f;%.1f;%.0f;%.0f;%.0f;%.0f;%.0f;%.0f;%.4f;%d;%d;%s;%s;%.1f\n", now.Format("2006-01-02 15:04"),
 		hm["Outside_Temp"], tin, hm["Z1_Heat_Request_Temp"], heatWant, hm["DHW_Temp"], hm["DHW_Target_Temp"], dhwWant,
 		hm["ThreeWay_Valve_State"], hm["Compressor_Freq"],
 		hm["Heat_Power_Production"]+hm["DHW_Power_Production"], hm["Heat_Power_Consumption"]+hm["DHW_Power_Consumption"], price,
-		b01(roomManual), b01(dhwManual), opt(shTin), opt(shHum))
+		b01(roomManual), b01(dhwManual), opt(shTin), opt(shHum), hpTin)
 }
 
 // ---------- HTTP: voor evcc (boiler bij zonne-overschot) en de Stroom-app ----------

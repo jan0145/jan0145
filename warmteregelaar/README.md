@@ -63,7 +63,8 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
   sensor (hele graden); de regelaar leert het verschil tussen beide en rekent met "Shelly + verschil": even
   nauwkeurig, op dezelfde schaal als de warmtepomp. Zo leert hij de opwarmtijd en het warmteverlies van het huis
   veel beter. Geen meting in de laatste 4 uur → de sensor van de warmtepomp.
-- In de app: tegel Warmtepomp ("Kamer (Shelly)"); in `warmte-JJJJ-MM.csv` de kolommen `shelly` en `vocht`.
+- In de app: tegel Warmtepomp ("Kamer (Shelly)"); in `warmte-JJJJ-MM.csv` de kolommen `shelly`, `vocht` en
+  `kamer_wp` (de eigen sensor van de warmtepomp, waarop hij regelt).
 - Op batterij slaapt de Shelly (antwoordt niet) en stuurt hij alleen een meting als de temperatuur genoeg
   verandert. Dan in de Shelly-app twee acties (Actions):
   - "Temperatuur verandert" → `http://<synology>:7080/shelly?temp=${ev.tC}`

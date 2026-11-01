@@ -235,7 +235,8 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 
 /* tabbladen en detailschermen */
 .tabs { margin: 4px 0 8px; }
-.tabs button { font-size: 15px; padding: 7px 12px; }
+.tabs button { font-size: 15px; padding: 7px 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 420px) { .tabs button { font-size: 13.5px; padding: 7px 2px; } }
 #tabElek[hidden], #tabVerw[hidden], #tabLp[hidden] { display: none; }
 .tile.tap { position: relative; cursor: pointer; padding-right: 34px; }
 .tile.tap:active { opacity: .7; }
@@ -388,6 +389,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <button data-t="elek" aria-pressed="true">Elektriciteit</button>
     <button data-t="verw" aria-pressed="false">Verwarming</button>
     <button data-t="lp" aria-pressed="false">Laadpaal</button>
+    <button data-t="vw" aria-pressed="false">Vaatwasser</button>
   </div>
 
   <div id="tabElek">
@@ -424,24 +426,6 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     </div>
   </section>
 
-  <!-- vaatwasser (Siemens, Home Connect, via de warmteregelaar) -->
-  <section class="card" id="dwCard" hidden>
-    <div class="dhead"><span class="dico dw"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2.5" width="16" height="19" rx="2.5"/><path d="M4 7h16"/><circle cx="12" cy="14" r="4"/><path d="M7 4.8h1M10 4.8h1"/></svg></span><div><div class="dtitle">Vaatwasser</div><div class="dstate" id="dwState">–</div></div></div>
-    <p class="hint" id="dwWhy" style="margin:8px 0 0"></p>
-    <div id="dwLink" hidden style="margin-top:10px">
-      <p class="hint" id="dwLinkTxt">Nog niet gekoppeld met Home Connect.</p>
-      <button class="btn small primary" id="dwLinkBtn">Koppelen met Home Connect</button>
-    </div>
-    <div id="dwCtl" hidden style="margin-top:10px">
-      <label class="tog" style="margin:0 0 10px"><input type="checkbox" id="dwAuto"> Slim starten: bij zon of in de goedkoopste uren</label>
-      <div class="setrow">
-        <span class="setlbl">Klaar om</span>
-        <select class="ctlsel" id="dwReady" aria-label="Ten laatste klaar om"></select>
-        <button class="btn small primary" id="dwStart" style="margin-left:auto">Nu starten</button>
-      </div>
-      <p class="hint" style="margin-top:8px">Vaatwasser vullen, programma kiezen en op de vaatwasser <b>Fernstart</b> aanzetten: de regelaar start hem dan op het beste moment.</p>
-    </div>
-  </section>
 
   <section class="card">
     <div class="card-head">
@@ -562,6 +546,28 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     </section>
     <p class="hint" id="tcHint" hidden style="margin:-8px 2px 16px">Gekleurd: gemeten (kamer: de Shelly). Grijs: voorspeld (links van "nu" wat er 24 uur geleden voorspeld werd). Stippellijn: ingestelde temperatuur (lichtgrijs = gepland, groen = zelf ingesteld). Met − en + zoom je in; ingezoomd schuif je de grafiek opzij.</p>
     <p class="empty" id="hpEmpty" hidden>Nog geen warmtepomp. Vul bij ⚙︎ het adres van de warmteregelaar of de HeishaMon in.</p>
+  </div>
+
+  <div id="tabVw" hidden>
+    <!-- vaatwasser (Siemens, Home Connect, via de warmteregelaar) -->
+    <section class="card" id="dwCard">
+      <div class="dhead"><span class="dico dw"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2.5" width="16" height="19" rx="2.5"/><path d="M4 7h16"/><circle cx="12" cy="14" r="4"/><path d="M7 4.8h1M10 4.8h1"/></svg></span><div><div class="dtitle">Vaatwasser</div><div class="dstate" id="dwState">–</div></div></div>
+      <p class="hint" id="dwWhy" style="margin:8px 0 0"></p>
+      <div id="dwSetup" hidden style="margin-top:10px"></div>
+      <div id="dwLink" hidden style="margin-top:10px">
+        <p class="hint" id="dwLinkTxt">Nog niet gekoppeld met Home Connect.</p>
+        <button class="btn small primary" id="dwLinkBtn">Koppelen met Home Connect</button>
+      </div>
+      <div id="dwCtl" hidden style="margin-top:10px">
+        <label class="tog" style="margin:0 0 10px"><input type="checkbox" id="dwAuto"> Slim starten: bij zon of in de goedkoopste uren</label>
+        <div class="setrow">
+          <span class="setlbl">Klaar om</span>
+          <select class="ctlsel" id="dwReady" aria-label="Ten laatste klaar om"></select>
+          <button class="btn small primary" id="dwStart" style="margin-left:auto">Nu starten</button>
+        </div>
+        <p class="hint" style="margin-top:8px">Vaatwasser vullen, programma kiezen en op de vaatwasser <b>Fernstart</b> aanzetten: de regelaar start hem dan op het beste moment.</p>
+      </div>
+    </section>
   </div>
 
   <div id="tabLp" hidden>
@@ -2305,9 +2311,16 @@ const DW_OP = { Ready: 'klaar om te starten', Run: 'bezig', DelayedStart: 'start
 // "Dishcare.Dishwasher.Program.Eco50" → "Eco 50°"
 const dwProg = (k) => { const n = (k || '').split('.').pop(); return n.replace(/^([A-Za-z]+?)(\d{2})$/, '$1 $2°').replace(/^([A-Za-z]+?)(\d)$/, '$1 $2'); };
 function renderDw() {
-  const card = $('dwCard');
-  card.hidden = !dwSt || !dwSt.enabled;
-  if (card.hidden) return;
+  // niet ingesteld: uitleg in plaats van de bediening
+  const setup = !dwSt ? (regBase() ? 'De warmteregelaar antwoordt niet op /vaatwasser: staat de nieuwste versie op de Synology?' : 'Vul bij ⚙︎ het adres van de warmteregelaar in (HeishaMon via de regelaar, poort 7080).')
+    : !dwSt.enabled ? 'Nog niet ingesteld. Eenmalig: maak op <a href="https://developer.home-connect.com" target="_blank" rel="noopener">developer.home-connect.com</a> een account (zelfde e-mail als de Home Connect-app), registreer een applicatie met <b>Device Flow</b>, en zet de Client ID in de taak van de warmteregelaar: <code>HC_CLIENT_ID=…</code> (en Run). Daarna verschijnt hier "Koppelen met Home Connect".'
+    : '';
+  $('dwSetup').innerHTML = setup; $('dwSetup').hidden = !setup;
+  if (setup) {
+    $('dwState').textContent = !dwSt ? 'niet bereikbaar' : 'niet ingesteld';
+    $('dwWhy').textContent = ''; $('dwLink').hidden = $('dwCtl').hidden = true;
+    return;
+  }
   const hm = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
   const ok = (t) => t && new Date(t).getFullYear() > 2000;
   let state = !dwSt.linked ? 'niet gekoppeld' : DW_OP[dwSt.op] || dwSt.op || '–';
@@ -2970,13 +2983,14 @@ function openView(id) { $(id).hidden = false; document.body.style.overflow = 'hi
 function closeView(id) { $(id).hidden = true; document.body.style.overflow = ''; }
 function openHp() { openView('hpView'); renderHpInfo(); changeHp(hpv.period, hpv.k); loadReg().then(renderReg); loadSched().then(renderSched); }
 
-const TABS = { elek: 'tabElek', verw: 'tabVerw', lp: 'tabLp' };
+const TABS = { elek: 'tabElek', verw: 'tabVerw', lp: 'tabLp', vw: 'tabVw' };
 function showTab(t) {
   t = { status: 'elek', details: 'verw' }[t] || t;  // oude namen
   config.tab = TABS[t] ? t : 'elek';
   Object.entries(TABS).forEach(([k, id]) => { $(id).hidden = config.tab !== k; });
   document.querySelectorAll('#tabSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.t === config.tab));
-  if (config.tab === 'elek') { renderHist(); loadDw().then(renderDw); }
+  if (config.tab === 'elek') renderHist();
+  if (config.tab === 'vw') loadDw().then(renderDw);
   if (config.tab === 'verw') {
     Object.values(setState).forEach((x) => { if (!x.busy) { x.val = null; x.msg = ''; x.dirty = false; } });
     renderHM();
@@ -3035,7 +3049,7 @@ function renderPeak() {
 }
 
 async function tickLive() {
-  if (!$('tabElek').hidden && dwTick++ % 6 === 0) loadDw().then(renderDw);  // vaatwasser: elke 30 s
+  if (!$('tabVw').hidden && dwTick++ % 6 === 0) loadDw().then(renderDw);  // vaatwasser: elke 30 s
   try {
     if (!seriesNames.length) await loadSeries();
     await Promise.all([loadLive(), loadGoodWe(), loadP1(), loadHM()]);
