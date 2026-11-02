@@ -210,13 +210,23 @@ func TestScheduleModes(t *testing.T) {
 	if p := DHWTarget(c, s, l, DHWInput{Now: at(7, 0), Temp: 46}); p.Target < 48 {
 		t.Fatalf("eigen boilerperiode (07–08 u ≥ 50 °C, nu 46): %v %s", p.Target, p.Why)
 	}
-	// vakantie: 16 °C, boiler gewoon, ook 's avonds en 's nachts
-	s.Mode = ModeVacation
+	// uit: 16 °C, geen warm water (geen opwarming gepland)
+	s.Mode = ModeOff
 	if p := HeatTarget(c, s, l, HeatInput{Now: at(18, 0), Tin: 21, Tout: 5}); p.Target != 16 {
-		t.Fatalf("vakantie: %+v", p)
+		t.Fatalf("uit: %+v", p)
 	}
-	if p := DHWTarget(c, s, l, DHWInput{Now: at(1, 30), Temp: 50}); p.Target != 40 || len(p.Heat) != 0 {
-		t.Fatalf("vakantie: %v %s", p.Heat, p.Why)
+	if p := DHWTarget(c, s, l, DHWInput{Now: at(17, 30), Temp: 35, PVBoost: false}); p.Planned != 0 || len(p.Heat) != 0 {
+		t.Fatalf("uit: %v %s", p.Heat, p.Why)
+	}
+	// permanent: elke dag het weekend-schema (maandag 10 u: 22 °C, waar normaal eco geldt)
+	s.Mode = ModePerm
+	if p := HeatTarget(c, s.Active(), l, HeatInput{Now: at(10, 0), Tin: 21, Tout: 5}); p.Target != 22 {
+		t.Fatalf("permanent: %+v", p)
+	}
+	// oude stand vakantie wordt uit
+	s.Mode = "vakantie"
+	if err := s.Validate(); err != nil || s.Mode != ModeOff {
+		t.Fatalf("vakantie → uit: %v %s", err, s.Mode)
 	}
 	// zomer: verwarming uit, boiler volgens het schema
 	s.Mode = ModeSummer

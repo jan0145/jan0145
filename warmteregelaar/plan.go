@@ -131,6 +131,9 @@ type DHWInput struct {
 // DHWTarget: het plan (sww.go), plus een begonnen beurt die doorloopt en het zonne-overschot van evcc.
 // Planned = opwarmdoel van het plan (0 als het plan nu niet opwarmt), voor de volgende ronde.
 func DHWTarget(c Config, s Schedule, l Learned, in DHWInput) DHWPlan {
+	if s.Mode == ModeOff { // geen warm water: de warmtepomp staat op alleen verwarmen
+		return DHWPlan{Target: s.DHWBase, Start: in.Now.Truncate(quarter), Why: "stand uit: geen warm water"}
+	}
 	p := PlanDHW(c, s, l, in)
 	if p.Target > s.DHWBase {
 		p.Planned = p.Target
@@ -176,8 +179,8 @@ func HeatTarget(c Config, s Schedule, l Learned, in HeatInput) HeatPlan {
 	switch s.Mode {
 	case ModeSummer:
 		return HeatPlan{Why: "zomer: verwarming uit"}
-	case ModeVacation:
-		return HeatPlan{Target: s.Away, Why: fmt.Sprintf("vakantie: %.0f °C", s.Away)}
+	case ModeOff:
+		return HeatPlan{Target: s.Away, Why: fmt.Sprintf("stand uit: %.0f °C", s.Away)}
 	}
 	if p, ok := periodAt(s.Heat, now); ok {
 		return HeatPlan{Target: p.Temp, Why: fmt.Sprintf("schema tot %s: %.0f °C", hhmm(p.To), p.Temp)}

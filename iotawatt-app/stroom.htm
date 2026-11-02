@@ -249,6 +249,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 .chart-wrap .ref { font-size: 10px; }
 .tlegend { flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
 .tlegend i.dash { background: none !important; border-top: 2px dashed; height: 0; }
+.legend i.dash { background: none !important; border-top: 2px dashed; height: 0; border-radius: 0; }
 .tlegend i.dot { background: none !important; border-top: 2px dotted; height: 0; }
 .dhead { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
 .dico { width: 40px; height: 40px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; color: #fff; }
@@ -428,13 +429,13 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
 
 
   <section class="card">
-    <div class="card-head">
-      <h2>Geschiedenis</h2>
-      <div class="seg" role="group" aria-label="Periode" id="histSeg">
-        <button data-p="day" aria-pressed="true">Dag</button>
-        <button data-p="week" aria-pressed="false">Week</button>
-        <button data-p="month" aria-pressed="false">Maand</button>
-      </div>
+    <div class="card-head"><h2>Geschiedenis</h2></div>
+    <div class="seg wide" role="group" aria-label="Periode" id="histSeg" style="margin:0 0 8px">
+      <button data-p="day" aria-pressed="true">Dag</button>
+      <button data-p="week" aria-pressed="false">Week</button>
+      <button data-p="month" aria-pressed="false">Maand</button>
+      <button data-p="year" aria-pressed="false">Jaar</button>
+      <button data-p="y5" aria-pressed="false">5 jaar</button>
     </div>
     <div class="seg wide" role="group" aria-label="Wat tonen" id="hMode" style="margin:0 0 8px">
       <button data-m="kwh" aria-pressed="true">kWh</button>
@@ -654,8 +655,9 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
       <div class="card-head"><h2>Weekschema</h2></div>
       <div class="seg wide" role="group" aria-label="Stand" id="modeSeg" style="margin:0 0 6px">
         <button data-m="normaal" aria-pressed="true">Normaal</button>
-        <button data-m="vakantie" aria-pressed="false">Vakantie</button>
+        <button data-m="permanent" aria-pressed="false">Permanent</button>
         <button data-m="zomer" aria-pressed="false">Zomer</button>
+        <button data-m="uit" aria-pressed="false">Uit</button>
       </div>
       <p class="hint" id="modeHint"></p>
       <div id="schedWeek"></div>
@@ -794,7 +796,7 @@ header h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.02em
     <div class="sgrid">
       <span>Kamer (eco)</span><input type="number" inputmode="numeric" id="edEco" min="10" max="25" step="1"><span class="u">°C</span>
       <span>Boiler</span><input type="number" inputmode="numeric" id="edBase" min="30" max="60" step="1"><span class="u">°C</span>
-      <span>Kamer tijdens vakantie</span><input type="number" inputmode="numeric" id="edAway" min="5" max="25" step="1"><span class="u">°C</span>
+      <span>Kamer in de stand uit</span><input type="number" inputmode="numeric" id="edAway" min="5" max="25" step="1"><span class="u">°C</span>
     </div>
     <p class="help" style="font-size:13px;color:var(--text-3)">De regelaar warmt zelf op tijd voor (geleerde opwarmtijd, in de goedkoopste kwartieren) en doet 's nachts een boilerbeurt van 55 °C in de goedkoopste kwartieren.</p>
     <p class="hint warn" id="schedErr"></p>
@@ -1179,9 +1181,10 @@ function renderTiles() {
 /* ---------- geschiedenis (uit de IoTaWatt, die alles op zijn SD-kaart bewaart) ---------- */
 
 const PALETTE_N = 8;            // 8 vaste toestelkleuren; meer tegelijk is niet leesbaar
-const GROUP = { day: '1h', week: '1d', month: '1d' };
+const GROUP = { day: '1h', week: '1d', month: '1d', year: '1M', y5: '1y' };
+const LONG = (p) => p === 'year' || p === 'y5';  // jaar: per maand, 5 jaar: per jaar (alleen kWh)
 const hist = { period: 'day', k: 0, buckets: [], ev: null, note: '' };
-const histMode = () => config.histMode === 'peak' ? 'peak' : 'kwh';
+const histMode = () => config.histMode === 'peak' && !LONG(hist.period) ? 'peak' : 'kwh';
 const hhmm = (t) => new Date(t * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 
 // Einde van een periode (lokale tijd), ook als die nog niet voorbij is.
@@ -1189,6 +1192,8 @@ function periodEnd(period, k) {
   const d = new Date(unixRange(period, k)[0] * 1000);
   if (period === 'day') d.setDate(d.getDate() + 1);
   else if (period === 'week') d.setDate(d.getDate() + 7);
+  else if (period === 'year') d.setFullYear(d.getFullYear() + 1);
+  else if (period === 'y5') d.setFullYear(d.getFullYear() + 5);
   else d.setMonth(d.getMonth() + 1);
   return d.getTime() / 1000;
 }
@@ -1217,6 +1222,8 @@ const rel = (u, n) => n <= 0 ? u : `${u}-${n}${u}`;
 function range(period, k) {
   if (period === 'day') return { begin: rel('d', k), end: k === 0 ? 's' : rel('d', k - 1) };
   if (period === 'week') return { begin: rel('d', 6 + 7 * k), end: k === 0 ? 's' : rel('d', 7 * k - 1) };
+  if (period === 'year') return { begin: rel('y', k), end: k === 0 ? 's' : rel('y', k - 1) };
+  if (period === 'y5') return { begin: rel('y', 4 + 5 * k), end: k === 0 ? 's' : rel('y', 5 * k - 1) };
   return { begin: rel('M', k), end: k === 0 ? 's' : rel('M', k - 1) };
 }
 
@@ -1225,8 +1232,10 @@ function periodLabel(period, k) {
   const f = (x, o) => x.toLocaleDateString('nl-NL', o);
   if (period === 'day') {
     d.setDate(d.getDate() - k);
-    return k === 0 ? 'Vandaag' : k === 1 ? 'Gisteren' : f(d, { weekday: 'short', day: 'numeric', month: 'short' });
+    return k === 0 ? 'Vandaag' : k === 1 ? 'Gisteren' : k === -1 ? 'Morgen (verwacht)' : f(d, { weekday: 'short', day: 'numeric', month: 'short' });
   }
+  if (period === 'year') return String(d.getFullYear() - k);
+  if (period === 'y5') return `${d.getFullYear() - 4 - 5 * k}–${d.getFullYear() - 5 * k}`;
   if (period === 'week') {
     d.setDate(d.getDate() - 7 * k);
     const b = new Date(d); b.setDate(b.getDate() - 6);
@@ -1240,12 +1249,16 @@ function bucketLabel(period, t) {
   const d = new Date(t * 1000);
   if (period === 'day' || period === 'quarter') return String(d.getHours()).padStart(2, '0') + 'u';
   if (period === 'week') return d.toLocaleDateString('nl-NL', { weekday: 'short' }).replace('.', '');
+  if (period === 'year') return d.toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '');
+  if (period === 'y5') return String(d.getFullYear());
   return String(d.getDate());
 }
 function bucketTitle(period, t) {
   const d = new Date(t * 1000);
   if (period === 'day') { const h = d.getHours(); return `${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00`; }
   if (period === 'quarter') return hhmm(t) + '–' + hhmm(t + 900);
+  if (period === 'year') return d.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' });
+  if (period === 'y5') return String(d.getFullYear());
   return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
@@ -1268,8 +1281,11 @@ function unixRange(period, k) {
   let from, to;
   if (period === 'day') { d.setDate(d.getDate() - k); from = new Date(d); to = new Date(d); to.setDate(to.getDate() + 1); }
   else if (period === 'week') { d.setDate(d.getDate() - 7 * k - 6); from = new Date(d); to = new Date(d); to.setDate(to.getDate() + 7); }
-  else { d.setDate(1); d.setMonth(d.getMonth() - k); from = new Date(d); to = new Date(d); to.setMonth(to.getMonth() + 1); }
-  return [from.getTime() / 1000, Math.min(to.getTime() / 1000, Date.now() / 1000)];
+  else if (LONG(period)) {
+    d.setMonth(0, 1); d.setFullYear(d.getFullYear() - (period === 'year' ? k : 4 + 5 * k));
+    from = new Date(d); to = new Date(d); to.setFullYear(to.getFullYear() + (period === 'year' ? 1 : 5));
+  } else { d.setDate(1); d.setMonth(d.getMonth() - k); from = new Date(d); to = new Date(d); to.setMonth(to.getMonth() + 1); }
+  return [from.getTime() / 1000, k < 0 ? to.getTime() / 1000 : Math.min(to.getTime() / 1000, Date.now() / 1000)];
 }
 const isoZ = (u) => new Date(u * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
 
@@ -1336,9 +1352,28 @@ const MAIN_SERIES = [
   { key: 'battery', name: 'Batterij', color: 'var(--c2)' },
 ];
 
+// zonneprognose van evcc (open-meteo, W per uur of kwartier), vanaf nu tot ±2 dagen vooruit
+async function solarForecast() {
+  const b = evccBase();
+  if (!b) return [];
+  try {
+    let r = await getJson(b + '/api/tariff/solar');
+    if (r && r.result) r = r.result;
+    return (r && r.rates || []).map((x) => ({ s: Date.parse(x.start) / 1000, e: Date.parse(x.end) / 1000, v: typeof x.value === 'number' ? x.value : x.price }));
+  } catch (e) { return []; }
+}
+const fcAt = (fc, t) => { const r = fc.find((x) => t >= x.s && t < x.e); return r && typeof r.v === 'number' ? r.v : null; };
+
 async function loadHist() {
   if (histMode() === 'peak') return loadPeakHist();
   const [from, to] = unixRange(hist.period, hist.k);
+  if (hist.period === 'day' && hist.k < 0) {
+    // morgen: alleen de verwachte zonneopbrengst (om bv. de was te plannen)
+    const fc = await solarForecast();
+    hist.buckets = quarterTimes(from, periodEnd('day', hist.k)).map((t) => ({ t, vals: { sunfc: fcAt(fc, t) } }));
+    hist.ev = null; hist.lines = true; hist.slot = 900;
+    return;
+  }
   if (hist.period === 'day') {
     let rows;
     if (hist.k === 0) rows = dayRows;
@@ -1361,9 +1396,21 @@ async function loadHist() {
       hist.buckets[hist.buckets.length - 1].vals.soc = gw.battery_soc;
     }
     hist.ev = ev; hist.lines = true; hist.slot = 300;
+    if (hist.k === 0) {
+      // vandaag: vanaf nu de verwachte zonneopbrengst (stippellijn)
+      const fc = await solarForecast(), nowS = Date.now() / 1000, end = periodEnd('day', 0);
+      const v0 = fcAt(fc, nowS);
+      if (v0 !== null) {
+        const last = hist.buckets[hist.buckets.length - 1];
+        if (last) last.vals.sunfc = last.vals.sun;  // aansluiten op wat nu gemeten wordt
+        for (let t = Math.ceil(nowS / 900) * 900; t < end; t += 900) {
+          if (!last || t > last.t) hist.buckets.push({ t, vals: { sunfc: fcAt(fc, t) } });
+        }
+      }
+    }
     return;
   }
-  if (chartKind() === 'lines') {
+  if (chartKind() === 'lines' && !LONG(hist.period)) {
     // doorlopende lijn: week per kwartier, maand per uur, uit evcc (gemiddeld vermogen per tijdslot)
     const agg = hist.period === 'week' ? '15m' : 'hour', slot = agg === '15m' ? 900 : 3600, k = 3600 / slot * 1000;
     const ev = await evccHistory(from, to, agg);
@@ -1385,8 +1432,8 @@ async function loadHist() {
   }
   hist.lines = false;
   const loads = loadNames(), suns = solarNames();
-  const rows = await queryWh(hist.period, hist.k, '1d', [...loads, ...suns]);
-  const ev = await evccHistory(from, to, 'day');
+  const rows = await queryWh(hist.period, hist.k, LONG(hist.period) ? GROUP[hist.period] : '1d', [...loads, ...suns]);
+  const ev = await evccHistory(from, to, { year: 'month', y5: 'year' }[hist.period] || 'day');
   hist.buckets = rows.map((r) => {
     const use = loads.reduce((a, n) => a + (loadWh(n, r.v[n]) || 0), 0)
       + evccMeterNames().reduce((a, n) => { const sl = ev && findSlot(ev[n], r.t, 7200); return a + (sl ? sl.e * 1000 : 0); }, 0);
@@ -1464,18 +1511,21 @@ function renderHist() {
   document.querySelectorAll('#hKind button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.k === chartKind()));
   $('hKind').hidden = hist.period === 'day';
   $('hLabel').textContent = periodLabel(hist.period, hist.k);
-  $('hNext').disabled = hist.k === 0;
+  $('hNext').disabled = hist.k <= minK();
+  $('hMode').hidden = LONG(hist.period);
   const day = hist.period === 'day', cont = day || hist.lines;  // doorlopende tijdas
   const has = (k) => hist.buckets.some((b) => typeof b.vals[k] === 'number');
   const hasCar = hist.buckets.some((b) => b.vals.car > 50);
   // de batterij staat in de grafiek als laadtoestand (%) op de rechteras, niet als vermogen
-  const series = MAIN_SERIES.filter((s) => s.key !== 'battery' && (s.key === 'use' || s.key === 'sun' || has(s.key)));
+  const future = day && hist.k < 0;
+  const series = MAIN_SERIES.filter((s) => s.key !== 'battery' && (((s.key === 'use' || s.key === 'sun') && !future) || has(s.key)));
   if (cont && hasCar) series.push({ key: 'car', name: 'Auto', color: 'var(--c4)' });
+  if (day && has('sunfc')) series.push({ key: 'sunfc', name: 'Zon verwacht', color: 'var(--sun)', dash: '2 4' });
   const pctFmt = (v) => ({ v: nf0.format(v), u: '%' });
   const socSeries = cont && has('soc') ? { key: 'soc', name: 'Batterij', color: 'var(--c2)', max: 100, fmt: pctFmt } : null;
   const rights = [socSeries].filter(Boolean);
   $('hLegend').innerHTML = [...series.filter((s) => !s.noLegend), ...rights.map((r) => ({ ...r, name: 'Batterij (%)' }))]
-    .map((s) => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
+    .map((s) => s.dash ? `<span><i class="dash" style="border-color:${s.color}"></i>${s.name}</span>` : `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
   // de tijdas loopt over de hele dag (0–24 u) / week / maand, ook als die nog niet om is
   const [r0] = unixRange(hist.period, hist.k), r1 = new Date(r0 * 1000);
   if (hist.period === 'day') r1.setDate(r1.getDate() + 1); else if (hist.period === 'week') r1.setDate(r1.getDate() + 7); else r1.setMonth(r1.getMonth() + 1);
@@ -1496,14 +1546,19 @@ function renderHist() {
     if (typeof v.battery === 'number') { if (v.battery > 0) dis += v.battery * w; else chg -= v.battery * w; }
   });
   const E = (x) => `<b>${txt(fmtEnergy(x))}</b>`;
-  $('hTot').innerHTML = `<span>Verbruik ${E(use)}</span><span>Zon ${E(sun)}</span>`
+  // verwachte zon: van nu tot het einde van de dag (kwartierwaarden in W)
+  const fcWh = hist.buckets.reduce((a, b) => a + (typeof b.vals.sunfc === 'number' && b.vals.use === undefined ? b.vals.sunfc / 4 : 0), 0);
+  if (future) { $('hTot').innerHTML = has('sunfc') ? `<span>Zon verwacht ${E(fcWh)}</span>` : '<span>Geen zonneprognose (evcc).</span>'; return; }
+  $('hTot').innerHTML = `<span>Verbruik ${E(use)}</span><span>Zon ${E(sun)}</span>` + (fcWh > 0 ? `<span>Nog verwacht ${E(fcWh)}</span>` : '')
     + (has('imp') ? `<span>Afname ${E(imp)}</span><span>Injectie ${E(exp)}</span>` : '')
     + (has('battery') ? `<span>Batterij laden ${E(chg)}</span><span>ontladen ${E(dis)}</span>` : '')
     + (has('imp') ? '' : '<span>(gemeten groepen)</span>');
 }
 
+// dag: ook morgen (k = −1, alleen de zonneprognose)
+const minK = () => (hist.period === 'day' && histMode() === 'kwh' ? -1 : 0);
 async function changeHist(period, k) {
-  hist.period = period; hist.k = Math.max(0, k);
+  hist.period = period; hist.k = Math.max(minK(), k);
   $('hLabel').textContent = periodLabel(hist.period, hist.k);
   try { await loadHist(); } catch (e) { showError(e); }
   renderHist();
@@ -1582,24 +1637,36 @@ const devNames = () => [...loadNames(), ...evccMeterNames()];
 async function loadDev() {
   if (dev.mode === 'now') return;
   const names = devNames(), loads = loadNames(), evNames = evccMeterNames();
-  const rows = await queryWh(dev.mode, dev.k, GROUP[dev.mode], loads);
+  const day = dev.mode === 'day';
+  // dag: per kwartier (0–24 u, in W), week en maand: per dag (kWh)
+  const rows = await queryWh(dev.mode, dev.k, day ? '15m' : GROUP[dev.mode], loads);
   const [from, to] = unixRange(dev.mode, dev.k);
   const hpN = hpIotName();
-  const ev = evNames.length || hpN ? await evccHistory(from, to, dev.mode === 'day' ? 'hour' : 'day') : null;
+  const ev = evNames.length || hpN ? await evccHistory(from, to, day ? '15m' : 'day') : null;
   const hpEv = hpN && ev && ev['evcc:wp_elektrisch'];
-  const tol = dev.mode === 'day' ? 600 : 7200;
+  const tol = day ? 300 : 7200;
   dev.hpHm = false;
-  dev.buckets = rows.map((r) => {
+  const whOf = (t, r) => {
     const vals = {};
-    loads.forEach((n) => { vals[n] = loadWh(n, r.v[n]); });
+    loads.forEach((n) => { vals[n] = r ? loadWh(n, r.v[n]) : null; });
     // warmtepomp: wat de HeishaMon meldde (bewaard door evcc); waar evcc niets heeft, blijft de IoTaWatt
-    const sl = hpEv && findSlot(hpEv, r.t, tol);
+    const sl = hpEv && findSlot(hpEv, t, tol);
     if (sl) { vals[hpN] = sl.e * 1000; dev.hpHm = true; }
-    evNames.forEach((n) => { const x = ev && findSlot(ev[n], r.t, tol); vals[n] = x ? x.e * 1000 : (ev ? 0 : null); });
-    return { t: r.t, vals };
-  });
+    evNames.forEach((n) => { const x = ev && findSlot(ev[n], t, tol); vals[n] = x ? x.e * 1000 : (ev && r ? 0 : null); });
+    return vals;
+  };
+  let whRows;
+  if (day) {
+    const byQ = {}; rows.forEach((r) => { byQ[Math.round(r.t / 900) * 900] = r; });
+    whRows = quarterTimes(from, periodEnd('day', dev.k)).map((t) => ({ t, vals: whOf(t, byQ[t]) }));
+    // in de grafiek: gemiddeld vermogen per kwartier (W = Wh × 4)
+    dev.buckets = whRows.map((b) => ({ t: b.t, vals: Object.fromEntries(Object.entries(b.vals).map(([n, v]) => [n, v === null ? null : v * 4])) }));
+  } else {
+    whRows = rows.map((r) => ({ t: r.t, vals: whOf(r.t, r) }));
+    dev.buckets = whRows;
+  }
   dev.totals = {};
-  names.forEach((n) => { dev.totals[n] = dev.buckets.reduce((a, b) => a + (b.vals[n] || 0), 0); });
+  names.forEach((n) => { dev.totals[n] = whRows.reduce((a, b) => a + (b.vals[n] || 0), 0); });
   // eerste keer: de 5 grootste verbruikers tonen
   if (!config.visible || !Object.keys(config.visible).length) {
     [...names].sort((a, b) => dev.totals[b] - dev.totals[a]).slice(0, 5).forEach((n) => setVisible(n, true));
@@ -1658,7 +1725,7 @@ function renderDev() {
   $('dHint').hidden = now;
   $('dHint').className = 'hint' + (dev.warn ? ' warn' : '');
   $('dHint').textContent = dev.warn || 'Vink een toestel aan om het in de grafiek te tonen (max. 8 tegelijk).';
-  $('dKind').hidden = now;
+  $('dKind').hidden = now || dev.mode === 'day';  // dag: altijd gestapelde staven per kwartier
   const ul = $('dRows');
 
   if (now) {
@@ -1692,7 +1759,9 @@ function renderDev() {
 
   const series = names.filter(isVisible).map((n) => ({ key: n, name: labelOf(n), color: `var(--c${slotOf(n)})` }));
   document.querySelectorAll('#dKind button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.k === chartKind()));
-  drawChart($('dchart'), dev.buckets, series, { kind: chartKind(), stacked: true, unit: 'Wh', period: dev.mode });
+  drawChart($('dchart'), dev.buckets, series, dev.mode === 'day'
+    ? { kind: 'bars', stacked: true, unit: 'W', period: 'quarter' }
+    : { kind: chartKind(), stacked: true, unit: 'Wh', period: dev.mode });
 }
 
 async function changeDev(mode, k) {
@@ -1864,12 +1933,13 @@ function drawChart(svg, buckets, series, opt) {
       const x0 = m.l + i * band, inner = Math.max(2, band * .72), pad = (band - inner) / 2;
       if (stacked) {
         let up = 0, down = 0;
+        const gp = band < 6 ? 0 : 1.5;  // smalle staven (kwartieren): geen tussenruimte tussen de delen
         series.forEach((s) => {
           const v = val(b, s.key) || 0; if (!v) return;
           const a = v > 0 ? up : down, z = a + v;
           if (v > 0) up = z; else down = z;
-          const y1 = Math.min(y(a), y(z)), h = Math.max(0, Math.abs(y(a) - y(z)) - 1.5);
-          g += `<rect x="${(x0 + pad).toFixed(1)}" y="${(v > 0 ? y1 + 1.5 : y1).toFixed(1)}" width="${inner.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${s.color}"/>`;
+          const y1 = Math.min(y(a), y(z)), h = Math.max(0, Math.abs(y(a) - y(z)) - gp);
+          g += `<rect x="${(x0 + pad).toFixed(1)}" y="${(v > 0 ? y1 + gp : y1).toFixed(1)}" width="${inner.toFixed(1)}" height="${h.toFixed(1)}" rx="${gp ? 1.5 : 0}" fill="${s.color}"/>`;
         });
       } else {
         const w = Math.max(1, (inner - 2 * (series.length - 1)) / series.length);
@@ -2371,7 +2441,7 @@ function renderReg() {
   $('regInfo').innerHTML = (reg.error ? `<p class="hint warn">${esc(reg.error)}</p>` : '') + kvHtml([
     ['Nu', [
       ['Modus', reg.act ? 'stuurt de warmtepomp' : 'proef: beslist, maar stuurt niets'],
-      ['Stand', reg.mode ? { normaal: 'weekschema', vakantie: 'vakantie (schema uit)', zomer: 'zomer (verwarming uit)' }[reg.mode] || reg.mode : null],
+      ['Stand', reg.mode ? { normaal: 'weekschema', permanent: 'permanent (eigen weekschema)', zomer: 'zomer (verwarming uit)', uit: 'uit (geen warm water, kamer laag)' }[reg.mode] || reg.mode : null],
       ['Boiler', reg.dhw ? T(reg.dhw.Want) + ' · ' + reg.dhw.Why : null],
       ['Verwarming', reg.heat ? T(reg.heat.Want) + ' · ' + reg.heat.Why : null],
       ['Legionella', reg.legionella && new Date(reg.legionella.last).getFullYear() > 2000
@@ -2571,7 +2641,9 @@ async function changeHp(period, k) {
 
 /* ---------- weekschema (warmteregelaar: GET/POST /schedule, /mode?set=…) ---------- */
 
-let sched = null;            // { mode, eco, dhwBase, away, heat: [7][{from,to,temp}], dhw: [7][…] }
+let sched = null;            // { mode, eco, dhwBase, away, heat: [7][{from,to,temp}], dhw: [7][…], permHeat, permDHW }
+// welk weekschema getoond en bewerkt wordt: bij "permanent" het eigen schema van die stand
+const permView = () => !!sched && sched.mode === 'permanent' && !!sched.permHeat;
 const DAYS = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
 const toMin = (s) => { const [h, m] = String(s).split(':').map(Number); return h * 60 + (m || 0); };
 const fromMin = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
@@ -2594,20 +2666,22 @@ function renderSched() {
   if (!sched) return;
   const mode = sched.mode || 'normaal';
   document.querySelectorAll('#modeSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.m === mode));
-  $('modeHint').textContent = {
+  $('modeHint').textContent = ({
     normaal: `Het weekschema is actief. Buiten de periodes: kamer ${fT(sched.eco)}, boiler ${fT(sched.dhwBase)}.`,
-    vakantie: `Vakantie: het schema staat uit. Kamer ${fT(sched.away)}, boiler ${fT(sched.dhwBase)}, geen nachtbeurt.`,
-    zomer: 'Zomer: de verwarming staat uit (warmtepomp alleen sanitair water). De boiler volgt het schema.',
-  }[mode] + (reg && reg.act === false ? ' Proefmodus: de regelaar stuurt nog niets.' : '');
+    permanent: `Permanent: een eigen weekschema (zoals het weekend), aan te passen per dag. Buiten de periodes: kamer ${fT(sched.eco)}, boiler ${fT(sched.dhwBase)}.`,
+    zomer: 'Zomer: de verwarming staat uit (warmtepomp alleen sanitair water). De boiler volgt het weekschema van normaal.',
+    uit: `Uit: geen warm water (warmtepomp alleen verwarmen), kamer ${fT(sched.away)}.`,
+  }[mode] || '') + (reg && reg.act === false ? ' Proefmodus: de regelaar stuurt nog niets.' : '');
   const now = new Date(), nowPct = (now.getHours() * 60 + now.getMinutes()) / 14.4, td = dayIdx(now);
-  const offHeat = mode !== 'normaal' ? ' off' : '', offDhw = mode === 'vakantie' ? ' off' : '';
+  const offHeat = mode === 'zomer' || mode === 'uit' ? ' off' : '', offDhw = mode === 'uit' ? ' off' : '';
+  const H = permView() ? sched.permHeat : sched.heat, D = permView() ? sched.permDHW : sched.dhw;
   let h = `<div class="wk-leg"><span class="${offHeat.trim()}"><i style="background:var(--sun)"></i>Verwarming (anders ${fT(sched.eco)})</span>`
     + `<span class="${offDhw.trim()}"><i style="background:var(--use)"></i>Boiler (anders ${fT(sched.dhwBase)})</span></div>`;
   h += '<div class="wk-axis">' + [0, 6, 12, 18, 24].map((x) => `<span style="left:${x / .24}%">${x}</span>`).join('') + '</div>';
   DAYS.forEach((name, d) => {
     h += `<button class="wk-day${d === td ? ' today' : ''}" data-d="${d}" aria-label="${name} aanpassen"><span class="wk-name">${name.slice(0, 2)}</span><span class="wk-bars">`
-      + `<span class="wk-bar heat${offHeat}">${barHtml(sched.heat[d])}</span>`
-      + `<span class="wk-bar dhw${offDhw}">${barHtml(sched.dhw[d])}</span>`
+      + `<span class="wk-bar heat${offHeat}">${barHtml(H[d])}</span>`
+      + `<span class="wk-bar dhw${offDhw}">${barHtml(D[d])}</span>`
       + (d === td ? `<b class="wk-now" style="left:${nowPct.toFixed(2)}%"></b>` : '') + '</span></button>';
   });
   $('schedWeek').innerHTML = h;
@@ -2617,9 +2691,10 @@ async function setMode(m) {
   const b = regBase();
   if (!sched || !b || m === (sched.mode || 'normaal')) return;
   const q = {
-    vakantie: `Vakantie aanzetten? Het weekschema gaat uit: kamer ${fT(sched.away)}, boiler ${fT(sched.dhwBase)}, geen nachtbeurt.`,
-    zomer: 'Zomerstand aanzetten? De verwarming gaat uit: de warmtepomp maakt enkel nog sanitair warm water, volgens het schema.',
-    normaal: 'Terug naar het weekschema?' + (sched.mode === 'zomer' ? ' De verwarming gaat weer aan.' : ''),
+    permanent: 'Stand permanent? Elke dag het eigen weekschema van permanent (standaard zoals het weekend), met warm water.',
+    zomer: 'Zomerstand aanzetten? De verwarming gaat uit: de warmtepomp maakt enkel nog sanitair warm water, volgens het weekschema.',
+    uit: `Stand uit? Geen warm water meer (warmtepomp alleen verwarmen) en de kamer op ${fT(sched.away)}.`,
+    normaal: 'Terug naar het weekschema?' + (sched.mode === 'zomer' ? ' De verwarming gaat weer aan.' : sched.mode === 'uit' ? ' Er wordt weer warm water gemaakt.' : ''),
   }[m];
   if (!confirm(q)) return;
   try {
@@ -2633,10 +2708,14 @@ async function setMode(m) {
 }
 
 // bewerken: een kopie van het schema, per dag
-let ed = null, edDay = 0;
+let ed = null, edDay = 0, edPerm = false;
+// bij permanent het eigen schema bewerken: in de kopie even van plaats wisselen (en bij bewaren terug)
+const swapPerm = (x) => { [x.heat, x.permHeat] = [x.permHeat, x.heat]; [x.dhw, x.permDHW] = [x.permDHW, x.dhw]; };
 function openSched(d) {
   if (!sched) return;
   ed = JSON.parse(JSON.stringify(sched));
+  edPerm = permView();
+  if (edPerm) swapPerm(ed);
   edDay = d; cp = null;
   $('edEco').value = ed.eco; $('edBase').value = ed.dhwBase; $('edAway').value = ed.away;
   $('schedErr').textContent = ''; $('copyHint').textContent = '';
@@ -2678,7 +2757,7 @@ function quarterOpts(sel, lo, hi) {
   return o;
 }
 function renderEd() {
-  $('schedTitle').textContent = 'Weekschema · ' + DAYS[edDay];
+  $('schedTitle').textContent = (edPerm ? 'Permanent · ' : 'Weekschema · ') + DAYS[edDay];
   $('schedDays').innerHTML = DAYS.map((n, d) => `<button data-d="${d}" aria-pressed="${d === edDay}">${n.slice(0, 2)}</button>`).join('');
   $('schedDays').querySelectorAll('button').forEach((b) => { b.onclick = () => { edDay = Number(b.dataset.d); cp = null; $('copyHint').textContent = ''; renderEd(); }; });
   Object.entries(ED).forEach(([k, E]) => {
@@ -2758,9 +2837,11 @@ async function saveSched() {
   if (err) { $('schedErr').textContent = err; return; }
   const btn = $('schedSave');
   btn.disabled = true;
+  const out = JSON.parse(JSON.stringify(ed));
+  if (edPerm) swapPerm(out);
   try {
     // text/plain: geen voorafgaande CORS-vraag nodig
-    const r = await fetch(regBase() + '/schedule', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(ed) });
+    const r = await fetch(regBase() + '/schedule', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(out) });
     const t = await r.text();
     if (!r.ok) throw new Error(t.trim());
     sched = JSON.parse(t);
@@ -3159,24 +3240,29 @@ const Demo = (() => {
     }
     return 0;
   }
-  // IoTaWatt-tijden zoals 's', 's-30s', 'd', 'd-6d', 'M', 'M-1M' omzetten naar unix-seconden.
+  // IoTaWatt-tijden zoals 's', 's-30s', 'd', 'd-6d', 'M', 'M-1M', 'y-4y' omzetten naar unix-seconden.
   function parseT(spec, now) {
-    const m = /^([sdM])(?:-(\d+)([sdM]))?$/.exec(spec || 's');
+    const m = /^([sdMy])(?:-(\d+)([sdMy]))?$/.exec(spec || 's');
     if (!m) return now;
     const b = m[1] === 's' ? new Date(now * 1000) : new Date();
     if (m[1] !== 's') b.setHours(0, 0, 0, 0);
     if (m[1] === 'M') b.setDate(1);
+    if (m[1] === 'y') b.setMonth(0, 1);
     if (m[2]) {
       const n = +m[2];
       if (m[3] === 's') b.setTime(b.getTime() - n * 1000);
       else if (m[3] === 'd') b.setDate(b.getDate() - n);
+      else if (m[3] === 'y') b.setFullYear(b.getFullYear() - n);
       else b.setMonth(b.getMonth() - n);
     }
     return Math.floor(b.getTime() / 1000);
   }
   function next(t, group) {
-    if (group === '1d') { const d = new Date(t * 1000); d.setDate(d.getDate() + 1); return d.getTime() / 1000; }
-    return t + ({ '5s': 5, '5m': 300, '1h': 3600 }[group] || 300);
+    const d = new Date(t * 1000);
+    if (group === '1d') { d.setDate(d.getDate() + 1); return d.getTime() / 1000; }
+    if (group === '1M') { d.setMonth(d.getMonth() + 1); return d.getTime() / 1000; }
+    if (group === '1y') { d.setFullYear(d.getFullYear() + 1); return d.getTime() / 1000; }
+    return t + ({ '5s': 5, '5m': 300, '15m': 900, '1h': 3600 }[group] || 300);
   }
   // gemiddeld vermogen over [a, b) en energie in Wh
   function avg(name, a, b) {

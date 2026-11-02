@@ -72,13 +72,17 @@ zonneprognose van evcc, en met wat hij gaandeweg leert over de boiler en het hui
   Controle: `http://<synology>:7080/shelly` in de browser toont de laatste meting; komt er iets binnen dat geen
   getal is, dan staat dat in het logboek ("⚠ /shelly: …"). Met USB-voeding blijft hij wakker en is dat niet nodig.
 
-**Stand** (knoppen in de app)
+**Stand** (knoppen in de app: normaal, permanent, zomer, uit)
 - **Normaal**: het weekschema.
-- **Vakantie**: het schema staat uit: kamer op de vakantietemperatuur (standaard 16 °C), boiler gewoon (40 °C),
-  geen nachtbeurt en geen bijwarmen. Zonne-overschot mag de boiler nog opwarmen (gratis).
+- **Permanent**: een eigen weekschema, standaard elke dag zoals de zaterdag van normaal (07–22 u 22 °C, boiler
+  17–22 u 48 °C). In de app aan te passen zoals het gewone schema (zolang permanent aan staat, toont en bewerkt
+  de kaart Weekschema dit schema).
 - **Zomer**: de verwarming gaat uit: de regelaar zet de warmtepomp op "alleen sanitair water"
-  (`SetOperationMode=3`). De boiler volgt het schema. Terug naar normaal: de warmtepomp gaat terug naar de stand
-  van daarvoor (meestal verwarmen + sanitair water).
+  (`SetOperationMode=3`). De boiler volgt het weekschema van normaal.
+- **Uit**: geen warm water: de warmtepomp op "alleen verwarmen" (`SetOperationMode=0`), kamer op 16 °C (instelbaar).
+  Geen boilerbeurten, geen legionellabeurt, geen zonne-overschot naar de boiler.
+- Terug naar normaal of permanent: de warmtepomp gaat terug naar de stand van daarvoor (meestal verwarmen +
+  sanitair water). De vroegere stand "vakantie" wordt "uit".
 - Bij een andere stand vervallen de manuele aanpassingen.
 
 **Leren** (bewaard in `warmteregelaar-state.json`): hoe snel de boiler opwarmt, het warmteverlies van het vat,

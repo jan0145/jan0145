@@ -5,9 +5,10 @@ package main
 // of de gewone boilertemperatuur.
 //
 // Stand:
-//   normaal  – het schema
-//   vakantie – schema uit: kamer op de vakantietemperatuur, boiler gewoon, geen nachtbeurt
-//   zomer    – verwarming uit (warmtepomp op "alleen sanitair water"), boiler volgens het schema
+//   normaal   – het weekschema
+//   permanent – een eigen weekschema (standaard elke dag zoals het weekend van normaal), apart aan te passen
+//   zomer     – verwarming uit (warmtepomp op "alleen sanitair water"), boiler volgens het weekschema
+//   uit       – geen warm water (warmtepomp op "alleen verwarmen"), kamer op de uit-temperatuur (16 °C)
 
 import (
 	"encoding/json"
@@ -25,15 +26,20 @@ type Schedule struct {
 	Mode    string      `json:"mode"`
 	Eco     float64     `json:"eco"`     // kamer buiten de periodes
 	DHWBase float64     `json:"dhwBase"` // boiler buiten de periodes
-	Away    float64     `json:"away"`    // kamer tijdens vakantie
+	Away    float64     `json:"away"`    // kamer in de stand uit
 	Heat    [7][]Period `json:"heat"`
 	DHW     [7][]Period `json:"dhw"`
+	// weekschema van de stand permanent
+	PermHeat [7][]Period `json:"permHeat"`
+	PermDHW  [7][]Period `json:"permDHW"`
 }
 
 const (
 	ModeNormal   = "normaal"
-	ModeVacation = "vakantie"
+	ModePerm     = "permanent"
 	ModeSummer   = "zomer"
+	ModeOff      = "uit"
+	modeVacation = "vakantie" // vroegere stand: wordt "uit"
 )
 
 // standaard: het schema van de strategie (weekdag 06–07:30 en 16–22 u, weekend 07–22 u; boiler 17–22 u ≥ 48 °C)
@@ -46,6 +52,28 @@ func defaultSchedule(comfort, eco, base, evening float64) Schedule {
 			s.Heat[d] = []Period{{7 * 60, 22 * 60, comfort}}
 		}
 		s.DHW[d] = []Period{{17 * 60, 22 * 60, evening}}
+	}
+	s.fillPerm()
+	return s
+}
+
+// fillPerm: nog geen schema voor permanent → elke dag zoals de zaterdag van normaal
+func (s *Schedule) fillPerm() {
+	for d := 0; d < 7; d++ {
+		if len(s.PermHeat[d]) > 0 || len(s.PermDHW[d]) > 0 {
+			return
+		}
+	}
+	for d := 0; d < 7; d++ {
+		s.PermHeat[d] = append([]Period(nil), s.Heat[5]...)
+		s.PermDHW[d] = append([]Period(nil), s.DHW[5]...)
+	}
+}
+
+// Active: het schema dat nu geldt (bij permanent het eigen weekschema)
+func (s Schedule) Active() Schedule {
+	if s.Mode == ModePerm {
+		s.Heat, s.DHW = s.PermHeat, s.PermDHW
 	}
 	return s
 }
@@ -92,14 +120,16 @@ func (p *Period) UnmarshalJSON(b []byte) error {
 // Validate: zinnige temperaturen, periodes gesorteerd en zonder overlap.
 func (s *Schedule) Validate() error {
 	switch s.Mode {
-	case ModeNormal, ModeVacation, ModeSummer:
+	case ModeNormal, ModePerm, ModeSummer, ModeOff:
+	case modeVacation:
+		s.Mode = ModeOff
 	case "":
 		s.Mode = ModeNormal
 	default:
 		return fmt.Errorf("onbekende stand %q", s.Mode)
 	}
 	if s.Eco < 10 || s.Eco > 25 || s.Away < 5 || s.Away > 25 || s.DHWBase < 30 || s.DHWBase > 60 {
-		return fmt.Errorf("eco 10–25 °C, vakantie 5–25 °C, boiler 30–60 °C")
+		return fmt.Errorf("eco 10–25 °C, uit 5–25 °C, boiler 30–60 °C")
 	}
 	check := func(name string, days *[7][]Period, lo, hi float64) error {
 		for d := range days {
@@ -122,10 +152,17 @@ func (s *Schedule) Validate() error {
 		}
 		return nil
 	}
-	if err := check("verwarming", &s.Heat, 10, 26); err != nil {
-		return err
+	s.fillPerm()
+	for _, c := range []struct {
+		name   string
+		days   *[7][]Period
+		lo, hi float64
+	}{{"verwarming", &s.Heat, 10, 26}, {"boiler", &s.DHW, 30, 60}, {"permanent: verwarming", &s.PermHeat, 10, 26}, {"permanent: boiler", &s.PermDHW, 30, 60}} {
+		if err := check(c.name, c.days, c.lo, c.hi); err != nil {
+			return err
+		}
 	}
-	return check("boiler", &s.DHW, 30, 60)
+	return nil
 }
 
 // periode waarin t valt (ok=false: geen)

@@ -78,10 +78,8 @@ type DHWPlan struct {
 
 // eis per kwartier: in een periode de temperatuur van de periode (min de marge), anders de gewone temperatuur
 func dhwRequirement(s Schedule, t time.Time) (float64, bool) {
-	if s.Mode != ModeVacation {
-		if p, ok := periodAt(s.DHW, t); ok {
-			return p.Temp - dhwHysteresis, true
-		}
+	if p, ok := periodAt(s.DHW, t); ok {
+		return p.Temp - dhwHysteresis, true
 	}
 	return s.DHWBase, false // buiten de periodes altijd minstens de gewone temperatuur (40 °C)
 }
@@ -123,9 +121,6 @@ func simulateDHW(l Learned, use [7][96]float64, start time.Time, t0 float64, hea
 func PlanDHW(c Config, s Schedule, l Learned, in DHWInput) DHWPlan {
 	start := in.Now.Truncate(quarter)
 	use := l.use()
-	if s.Mode == ModeVacation {
-		use = [7][96]float64{} // niemand thuis
-	}
 	heat := make([]bool, dhwHorizon)
 	var fc []float64
 	accept := -1 // tekorten tot en met dit kwartier zijn niet op te lossen (bv. een groot bad): aanvaarden
@@ -219,9 +214,6 @@ func PlanDHW(c Config, s Schedule, l Learned, in DHWInput) DHWPlan {
 		}
 	} else {
 		plan.Why = fmt.Sprintf("gewoon %.0f °C; geen opwarming nodig (laagst verwacht %.0f °C)", s.DHWBase, tmin)
-	}
-	if s.Mode == ModeVacation {
-		plan.Why = "vakantie: " + plan.Why
 	}
 	return plan
 }
